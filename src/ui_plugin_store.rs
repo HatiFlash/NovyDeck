@@ -50,7 +50,7 @@ impl App {
     if !format!("{} {}",plugin.display_name(),plugin.uuid).to_lowercase().contains(search) && !plugin.actions.iter().any(|a|a.name.to_lowercase().contains(search)){continue;}
     let ty=match plugin.runtime{Runtime::Exe(_)|Runtime::Node(_)=>crate::i18n::tr("programme"),Runtime::Html(_)=>crate::i18n::tr("web"),Runtime::Protected=>crate::i18n::tr("protégé"),Runtime::Unsupported=>crate::i18n::tr("indisponible")};
     let expanded_id=egui::Id::new("installed_plugin_expanded").with(&plugin.uuid);
-    let expanded=ui.ctx().data(|d|d.get_persisted::<bool>(expanded_id)).unwrap_or(false);
+    let expanded=ui.ctx().data(|d|d.get_temp::<bool>(expanded_id)).unwrap_or(false);
     ui.group(|ui|{
      ui.horizontal(|ui|{
       if let Some(icon)=plugin.icon.as_ref().and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())){ui.image((icon.id(),egui::vec2(24.0,24.0)));}
