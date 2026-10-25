@@ -129,7 +129,48 @@ fn local_fixture(h: &Harness) -> crate::plugins::Plugin {
 }
 
 #[test]
-fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages() {
+fn management_successful_update_refreshes_disk_inventory_and_disables_button() {
+    let _reset = ManagementMarketReset;
+    let mut h = Harness::new();
+    crate::i18n::set_language("fr");
+    let local = local_fixture(&h);
+    let root = h.dir.path().join("plugins");
+    std::fs::create_dir_all(&root).unwrap();
+    let installed = fixture(&root, "local.sdPlugin", "test.a", "1.0");
+    let incoming = fixture(&h.dir.path().join("stage"), "local.sdPlugin", "test.a", "2.0");
+    let registry = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme/registry.json");
+    let mut entry = crate::community_plugins::parse(&std::fs::read(registry).unwrap()).unwrap().remove(0);
+    entry.uuid = Some(local.uuid.clone());
+    entry.version = "2.0".into();
+    entry.compatible = true;
+    entry.name = "Plugin de test du magasin".into();
+    entry.icon = None;
+    entry.screenshots.clear();
+    let (_tx, rx) = std::sync::mpsc::channel();
+    h.app.plugin_management.working = Some(rx);
+    let backup = plugin_management_ui::disk_operation(&root, "test.a", Operation::Update {source:incoming, protected:vec![]}).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    h.app.plugin_management.working = Some(rx);
+    tx.send(plugin_management_ui::JobResult::Resume {result:Ok(()),disk:Ok(backup),remove:false}).unwrap();
+    h.app.management_poll(&h.ctx);
+    let on_disk = crate::plugin_import::inventory(&root);
+    assert_eq!(on_disk.iter().find(|plugin|plugin.uuid=="test.a").unwrap().version,"2.0");
+    h.app.plugin_inventory = Some(std::sync::Arc::new(super::plugin_store_ui::Inventory {installed:on_disk,..Default::default()}));
+    let mut state = super::plugin_store_ui::community_state().lock().unwrap();
+    *state = Default::default();
+    state.consent = true;
+    state.entries = vec![entry.clone()];
+    drop(state);
+    super::plugin_market_ui::test_view(Some(&entry.id));
+    let output = h.warm(vec2(1600.0,1000.0));
+    assert!(text_position(&output.shapes, crate::i18n::tr("À jour")).is_some());
+    assert!(text_position(&output.shapes, crate::i18n::tr("Mettre à jour")).is_none());
+    let reloaded = crate::plugin_import::inventory(&root);
+    assert_eq!(reloaded.iter().find(|plugin|plugin.uuid=="test.a").unwrap().version,"2.0");
+}
+
+#[test]
+fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages(){
     let _reset = ManagementMarketReset;
     let size = vec2(1600.0, 1000.0);
     for lang in ["fr", "en"] {
