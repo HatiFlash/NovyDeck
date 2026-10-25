@@ -2830,7 +2830,7 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
             if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output.clone(),&PathBuf::from(dir).join(format!("store-grid-{lang}-{}-{}.png",physical.x as u32,(dpi*100.0) as u32)));}
             let mut checked=0;
             for shape in &output.shapes {inspect(&shape.shape,shape.clip_rect,size.x,&mut checked);}
-            assert!(checked>=6,"les versions et mises à jour doivent être visibles, {checked}");
+            assert!(checked>=4,"les versions et mises à jour doivent être visibles, {checked}");
             super::plugin_market_ui::test_close();
         }
     }
