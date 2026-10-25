@@ -204,11 +204,15 @@ impl App {
       entries.sort_by(|a,b|a.name.to_lowercase().cmp(&b.name.to_lowercase()));
       if entries.is_empty() && !state.loading{ui.label(tr("Aucun plugin ne correspond à votre recherche."));if ui.button(tr("Proposer un plugin")).clicked(){ctx.open_url(egui::OpenUrl::new_tab(community_plugins::CONTRIBUTE_URL));}}
       let available=ui.available_width();
-      let cols=(((available+12.0)/332.0).floor() as usize).clamp(2,5);
-      let card_width=((available-(cols-1) as f32*12.0)/cols as f32).max(180.0);
+      // A card must have enough room for versions and controls, even at 125–150%.
+      // The old five-column grid squeezed pills into vertical single-letter stacks.
+      let cols=(((available+12.0)/392.0).floor() as usize).clamp(1,4);
+      let card_width=(available-(cols-1) as f32*12.0)/cols as f32;
       for row in entries.chunks(cols){ui.horizontal(|ui|{ui.spacing_mut().item_spacing.x=12.0;for entry in row{ui.push_id(&entry.id,|ui|{
        let card=egui::Frame::new().fill(p.card).stroke(egui::Stroke::new(1.0,p.border)).corner_radius(theme::RADIUS_MD).inner_margin(egui::Margin::same(14)).show(ui,|ui|{
         ui.set_width(card_width-28.0);
+        ui.set_max_width(card_width-28.0);
+        ui.set_min_height(192.0);
         // La rangée de cartes est horizontale : le contenu d'une carte s'empile verticalement.
         ui.vertical(|ui|{
         ui.horizontal(|ui|{thumbnail(ui,entry.icon.as_deref(),true,egui::vec2(64.0,64.0));ui.vertical(|ui|{
@@ -223,16 +227,24 @@ impl App {
          ui.add(egui::Label::new(RichText::new(excerpt(summary,72)).color(p.text_secondary)).wrap());
         });
         ui.add_space(8.0);
-        ui.horizontal_wrapped(|ui|{
+        // No wrapped pill row: a Frame does not reserve its text width before
+        // horizontal_wrapped decides whether to break, producing letter columns.
+        let badges=community_plugins::badges(entry,&state.scans);
+        ui.horizontal(|ui|{
          theme::pill(ui,category_name(entry.category.as_deref().unwrap_or("")),p.accent);
-         badge_pills(ui,community_plugins::badges(entry,&state.scans),true);
-         let local=entry.uuid.as_ref().and_then(|uuid|self.plugin_inventory().installed.iter().find(|item|&item.uuid==uuid).cloned());
-         let choice=super::plugin_management_ui::choice(&entry.version,local.as_ref().map(|p|p.version.as_str()),entry.compatible);
-         if let Some(local)=&local {theme::pill(ui,&trf("Installée : {version}",&[("version",&local.version)]),p.success);}
-         theme::pill(ui,&trf("Disponible : {version}",&[("version",&entry.version)]),p.accent);
-         if choice==super::plugin_management_ui::Choice::Update {theme::pill(ui,tr("Mettre à jour"),p.accent);}else if local.is_none() && !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
-         if local.is_some() && !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
+         let mut labels=Vec::new();
+         if badges.official{labels.push(tr("Officiel"));}
+         if badges.scanned{labels.push(tr("Analysé"));}
+         if badges.tested{labels.push(tr("Testé"));}
+         if badges.warning{labels.push(tr("À vérifier"));}
+         if !labels.is_empty(){ui.add(egui::Label::new(RichText::new(labels.join(" · ")).color(if badges.warning{p.warning}else{p.success})).truncate()).on_hover_text(labels.join(" · "));}
         });
+        let local=entry.uuid.as_ref().and_then(|uuid|self.plugin_inventory().installed.iter().find(|item|&item.uuid==uuid).cloned());
+        let choice=super::plugin_management_ui::choice(&entry.version,local.as_ref().map(|p|p.version.as_str()),entry.compatible);
+        if let Some(local)=&local {ui.label(RichText::new(trf("Installée : {version}",&[("version",&local.version)])).color(p.success));}
+        ui.label(RichText::new(trf("Disponible : {version}",&[("version",&entry.version)])).color(p.accent));
+        if choice==super::plugin_management_ui::Choice::Update {theme::pill(ui,tr("Mettre à jour"),p.accent);}
+        else if !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
         ui.add_space(8.0);
         if ui.link(tr("Voir la fiche")).clicked(){view.selected=Some(entry.id.clone());}
         });
