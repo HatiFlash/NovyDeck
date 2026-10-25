@@ -116,7 +116,11 @@ fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[Pa
     // The official Stream Deck packages identify their plugin by the canonical
     // `{id}.sdPlugin` directory and have no root UUID field. Permit that exact
     // fallback only; an explicit UUID must still match the requested plugin.
-    let explicit=manifest["UUID"].as_str().filter(|value|!value.trim().is_empty());
+    let explicit=match manifest.get("UUID") {
+        None=>None,
+        Some(serde_json::Value::String(value))=>Some(value.as_str()),
+        Some(_)=>anyhow::bail!("UUID du manifeste invalide"),
+    };
     let canonical=format!("{id}.sdPlugin");
     anyhow::ensure!(match explicit {Some(value)=>value==id,None=>source.file_name().is_some_and(|name|name==canonical.as_str())},
         "UUID explicite ou dossier canonique requis dans la mise à jour");
@@ -245,6 +249,14 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         assert!(replace_staged(&root,"test.a",&wrong).is_err());
         assert_eq!(fs::read_to_string(root.join("test.a.sdPlugin/main.js")).unwrap(),"1.0");
         fs::rename(&wrong,&candidate).unwrap();
+        let manifest=candidate.join("manifest.json");
+        let original=fs::read(&manifest).unwrap();
+        let mut malformed:serde_json::Value=serde_json::from_slice(&original).unwrap();
+        malformed["UUID"]=serde_json::json!(42);
+        fs::write(&manifest,serde_json::to_vec(&malformed).unwrap()).unwrap();
+        assert!(replace_staged(&root,"test.a",&candidate).unwrap_err().to_string().contains("UUID du manifeste invalide"));
+        assert_eq!(fs::read_to_string(root.join("test.a.sdPlugin/main.js")).unwrap(),"1.0");
+        fs::write(&manifest,original).unwrap();
         let legacy=d.path().join("legacy-root");fixture(&legacy,"legacy.sdPlugin","test.a","1.0");
         assert!(replace_staged(&legacy,"test.a",&candidate).unwrap_err().to_string().contains("non canonique"));
         assert_eq!(fs::read_to_string(legacy.join("legacy.sdPlugin/main.js")).unwrap(),"1.0");
