@@ -10,32 +10,89 @@ fn newer(next:&str,old:&str)->Result<bool>{let mut a=version(next)?;let mut b=ve
 fn uuid(id:&str)->Result<()> {
     anyhow::ensure!(!id.is_empty() && id.len()<=128 && id.bytes().all(|c|c.is_ascii_lowercase()||c.is_ascii_digit()||matches!(c,b'.'|b'-')) && !id.starts_with('.') && !id.ends_with('.') && !id.contains(".."),"UUID invalide");Ok(())
 }
-fn no_links(path:&Path)->Result<()> {
+fn metadata(path:&Path)->Result<fs::Metadata> {
     let meta=fs::symlink_metadata(path)?;
     anyhow::ensure!(!meta.file_type().is_symlink(),"Lien refusé");
     #[cfg(windows)] {use std::os::windows::fs::MetadataExt;anyhow::ensure!(meta.file_attributes() & 0x400 == 0,"Point de réanalyse refusé");}
+    Ok(meta)
+}
+fn no_links(path:&Path)->Result<()> {
+    let meta=metadata(path)?;
     if meta.is_dir(){for entry in fs::read_dir(path)? {no_links(&entry?.path())?;}}
     else {anyhow::ensure!(meta.is_file(),"Type de fichier refusé");}Ok(())
 }
 fn local(root:&Path,id:&str)->Result<(PathBuf,crate::plugins::Plugin)> {
-    uuid(id)?;no_links(root)?;
-    let mut found=None;
-    for entry in fs::read_dir(root)?.take(513) {
-        let entry=entry?;let name=entry.file_name();let name=name.to_string_lossy();
+    uuid(id)?;anyhow::ensure!(metadata(root)?.is_dir(),"Racine invalide");
+    let mut found=None;let mut count=0;
+    for entry in fs::read_dir(root)? {
+        let entry=entry?;count+=1;anyhow::ensure!(count<=512,"Trop de dossiers de plugins");
+        let name=entry.file_name();let name=name.to_string_lossy();
         if name.starts_with('.') || name.starts_with("__") {continue;}
-        let folder=entry.path();no_links(&folder)?;
-        if !folder.is_dir(){continue;}
-        let manifest=folder.join("manifest.json");if !manifest.is_file(){continue;}
-        let p=crate::plugin_import::validated_folder(&folder)?;
-        if p.uuid==id {anyhow::ensure!(found.is_none(),"UUID installé en double");found=Some((folder,p));}
+        let folder=entry.path();let ty=entry.file_type()?;
+        // Never dereference another plugin's junction to inspect its manifest.
+        if ty.is_symlink() || !ty.is_dir(){continue;}
+        #[cfg(windows)] if metadata(&folder).is_err(){continue;}
+        let manifest=folder.join("manifest.json");
+        let Ok(meta)=metadata(&manifest) else {continue;};
+        if !meta.is_file(){continue;}
+        anyhow::ensure!(meta.len()<=1024*1024,"Manifeste trop volumineux");
+        let bytes=fs::read(&manifest)?;
+        let Ok(p)=crate::plugins::parse(&folder,&bytes) else {continue;};
+        if p.uuid==id {anyhow::ensure!(found.is_none(),"UUID installé en double");no_links(&folder)?;let p=crate::plugin_import::validated_folder(&folder)?;found=Some((folder,p));}
     }
     found.ok_or_else(||anyhow::anyhow!("Plugin installé introuvable"))
 }
 /// Préparation hors UI : les octets doivent avoir été vérifiés SHA-256 avant cet appel.
 /// La fonction ne touche jamais à l'installation existante avant validation complète.
 /// Retourne le chemin du backup intégral, laissé en place pour restauration manuelle.
-pub fn replace_staged(root:&Path,id:&str,source:&Path)->Result<PathBuf>{replace_staged_impl(root,id,source,false)}
-fn replace_staged_impl(root:&Path,id:&str,source:&Path,fail_commit:bool)->Result<PathBuf>{
+/// Update without UI-provided protected paths. Unknown old files missing from the new package
+/// are retained unless they are executable/package artifacts; ambiguous collisions fail closed.
+pub fn replace_staged(root:&Path,id:&str,source:&Path)->Result<PathBuf>{replace_staged_preserving(root,id,source,&[])}
+/// `protected` lists exact relative *files* owned by the user's profile (e.g. an image
+/// referenced by a StateFace). The caller must provide all such collisions explicitly.
+/// Settings under data/config/settings/userdata and root config.json/settings.json are local.
+/// Packaged code, manifest, package metadata, schemas and localization always come from the update.
+pub fn replace_staged_preserving(root:&Path,id:&str,source:&Path,protected:&[PathBuf])->Result<PathBuf>{replace_staged_impl_with_paths(root,id,source,protected,false)}
+fn replace_staged_impl(root:&Path,id:&str,source:&Path,fail_commit:bool)->Result<PathBuf>{replace_staged_impl_with_paths(root,id,source,&[],fail_commit)}
+fn packaged(path:&Path)->bool {
+    let name=path.file_name().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+    let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
+    name=="manifest.json" || name=="package.json" || name=="package-lock.json" || name==".deckforge-import.json"
+        || name.starts_with("i18n.") || name.starts_with("schema.")
+        || ["js","mjs","cjs","dll","exe","node","html","css","wasm","map"].contains(&ext.as_str())
+        || ["schema","schemas","localization","localizations","i18n","node_modules"].iter().any(|dir|path.components().any(|c|c.as_os_str().to_string_lossy().eq_ignore_ascii_case(dir)))
+}
+fn mutable(path:&Path)->bool {
+    let first=path.components().next().and_then(|c|c.as_os_str().to_str()).unwrap_or("");
+    let name=path.file_name().and_then(|s|s.to_str()).unwrap_or("");
+    (path.components().count()==1 && (name.eq_ignore_ascii_case("config.json") || name.eq_ignore_ascii_case("settings.json")))
+        || ["data","config","settings","userdata"].iter().any(|d|first.eq_ignore_ascii_case(d))
+}
+fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
+    fn visit(base:&Path,candidate:&Path,relative:&Path,protected:&[PathBuf],count:&mut usize)->Result<()> {
+        for entry in fs::read_dir(base.join(relative))? {
+            let entry=entry?;*count+=1;anyhow::ensure!(*count<=4096,"Trop de fichiers locaux");
+            let path=relative.join(entry.file_name());let ty=metadata(&entry.path())?;
+            if ty.is_dir(){visit(base,candidate,&path,protected,count)?;continue;}
+            anyhow::ensure!(ty.is_file(),"Type local refusé");
+            let target=candidate.join(&path);let explicit=protected.iter().any(|p|p==&path);
+            let keep=explicit || mutable(&path) || !packaged(&path) && !target.exists();
+            if !keep {continue;}
+            if target.exists(){anyhow::ensure!(metadata(&target)?.is_file(),"Conflit fichier/dossier : {}",path.display());}
+            if !explicit && !mutable(&path) && target.exists(){anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());}
+            anyhow::ensure!(ty.len()<=100*1024*1024,"Donnée locale trop volumineuse");
+            fs::create_dir_all(target.parent().context("Parent absent")?)?;
+            fs::copy(entry.path(),target)?;
+        }
+        Ok(())
+    }
+    let mut count=0;visit(old,candidate,Path::new(""),protected,&mut count)
+}
+fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[PathBuf],fail_commit:bool)->Result<PathBuf>{
+    for path in protected {
+        anyhow::ensure!(!path.as_os_str().is_empty() && path.components().all(|c|matches!(c,std::path::Component::Normal(_)))
+            && !path.to_string_lossy().contains([':', '\\', '\0']) && !packaged(path),"Chemin protégé non confiné ou code packagé : {}",path.display());
+    }
     let (old,previous)=local(root,id)?;no_links(source)?;
     let incoming=crate::plugin_import::validated_folder(source)?;
     let bytes=fs::read(source.join("manifest.json"))?;
@@ -49,7 +106,9 @@ fn replace_staged_impl(root:&Path,id:&str,source:&Path,fail_commit:bool)->Result
     crate::plugin_import::copy_verified_tree(source,&candidate)?;
     let verified=crate::plugin_import::validated_folder(&candidate)?;
     anyhow::ensure!(verified.uuid==id && verified.version==incoming.version,"Staging modifié pendant la copie");
-    no_links(&old)?;no_links(root)?;
+    for path in protected {anyhow::ensure!(metadata(&old.join(path))?.is_file(),"Fichier protégé absent ou invalide : {}",path.display());}
+    preserve(&old,&candidate,protected)?;
+    no_links(&old)?;no_links(&candidate)?;
     let (again,installed)=local(root,id)?;
     anyhow::ensure!(again==old && installed.version==previous.version,"Installation modifiée pendant la préparation");
     let backup_dir=tempfile::Builder::new().prefix(".plugin-backup-").tempdir_in(root)?.keep();

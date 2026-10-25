@@ -75,7 +75,7 @@ pub(crate) fn application_events(watch:&[String],running:&[String],before:&std::
     for app in before.difference(&now){events.push(json!({"event":"applicationDidTerminate","payload":{"application":app}}));}
     (now,events)
 }
-enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>), Resume(String,Sender<Result<(),String>>), Stop }
+enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
 static VIRTUAL_SENDER: std::sync::OnceLock<std::sync::Mutex<Option<Sender<Request>>>> = std::sync::OnceLock::new();
 fn virtual_sender() -> &'static std::sync::Mutex<Option<Sender<Request>>> {
     VIRTUAL_SENDER.get_or_init(|| std::sync::Mutex::new(None))
@@ -143,8 +143,19 @@ impl PluginControl {
     fn command(&self,id:&str,pause:bool)->Result<(),String>{
         if id.is_empty(){return Err("UUID vide".into());}
         let (tx,rx)=mpsc::channel();
-        self.tx.send(if pause{Request::Pause(id.into(),tx)}else{Request::Resume(id.into(),tx)}).map_err(|_|"Runtime arrêté".to_string())?;
-        rx.recv_timeout(Duration::from_secs(10)).map_err(|_|"Acquittement runtime absent : ne pas modifier le disque".to_string())?
+        let cancelled=std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.tx.send(if pause{Request::Pause(id.into(),tx,cancelled.clone())}else{Request::Resume(id.into(),tx)}).map_err(|_|"Runtime arrêté".to_string())?;
+        match rx.recv_timeout(Duration::from_secs(10)) {
+            Ok(result)=>result,
+            Err(_)=>{
+                if pause {
+                    cancelled.store(true,std::sync::atomic::Ordering::SeqCst);
+                    // A pause completing at the timeout boundary must be undone as well.
+                    let (ack,_rx)=mpsc::channel();let _=self.tx.send(Request::Resume(id.into(),ack));
+                }
+                Err("Acquittement runtime absent : ne pas modifier le disque".into())
+            }
+        }
     }
     /// Succès = processus ciblé et inspecteurs terminés ; échec/timeout = AUCUNE mutation disque permise.
     pub fn pause_plugin(&self,id:&str)->Result<(),String>{self.command(id,true)}
@@ -198,24 +209,36 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     loop {
         match requests.recv_timeout(Duration::from_millis(50)) {
             Ok(Request::Stop)|Err(mpsc::RecvTimeoutError::Disconnected)=>break,
-            Ok(Request::Pause(id,ack))=>{
+            Ok(Request::Pause(id,ack,cancelled))=>{
+                if cancelled.load(std::sync::atomic::Ordering::SeqCst) {continue;}
                 paused.insert(id.clone());
                 inspectors.retain(|_,v|v.plugin!=id);
                 monitored.remove(&id);idle.remove(&id);restarts.remove(&id);
-                drop(hosts.remove(&id)); // Host closes its Windows Job and waits for the targeted child and inspectors.
-                let _=ack.send(Ok(()));
+                drop(hosts.remove(&id)); // Targeted child and inspectors only.
+                if ack.send(Ok(())).is_err() || cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+                    paused.remove(&id);
+                    if current.values().any(|v|v.plugin==id) {
+                        if let Some(p)=plugins.iter().find(|p|p.uuid==id) {
+                            match Host::start(p,&device) {
+                                Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));for v in current.values().filter(|v|v.plugin==id){let _=h.send(event("willAppear",v,&device));}hosts.insert(id.clone(),h);},
+                                Err(e)=>{let _=reply.send(Reply::Error(id.clone(),format!("Reprise après pause abandonnée impossible : {e}")));}
+                            }
+                        }
+                    }
+                }
             }
             Ok(Request::Resume(id,ack))=>{
                 if !paused.remove(&id){let _=ack.send(Err("Plugin non suspendu".into()));continue;}
+                let mut result=Ok(());
                 if current.values().any(|v|v.plugin==id){
                     if let Some(p)=plugins.iter().find(|p|p.uuid==id){
                         match Host::start(p,&device){
                             Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));for v in current.values().filter(|v|v.plugin==id){let _=h.send(event("willAppear",v,&device));}hosts.insert(id.clone(),h);},
-                            Err(e)=>{let _=reply.send(Reply::Error(id.clone(),e.to_string()));}
+                            Err(e)=>{let message=e.to_string();let _=reply.send(Reply::Error(id.clone(),message.clone()));result=Err(message);}
                         }
-                    }
+                    } else {result=Err("Plugin installé introuvable".into());}
                 }
-                let _=ack.send(Ok(()));
+                let _=ack.send(result);
             }
             Ok(Request::Title(context,title))=>{if let Some(v)=current.get(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(title_event(v,&device,&title));}}}
             Ok(Request::Device(next))=>{if next!=device {for host in hosts.values(){let _=host.send(device.event("deviceDidDisconnect"));let _=host.send(next.event("deviceDidConnect"));}device=next;}}
@@ -395,6 +418,45 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
         }}
         assert!(survived,"other plugin must keep responding");
         control.resume_plugin(&first.uuid).unwrap();
+    }
+    #[test] fn resume_reports_start_failure_to_caller() {
+        let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let first=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let mut second=first.clone();second.uuid="test.other.fixture".into();
+        let mut manager=Manager::new(vec![first.clone(),second.clone()]);
+        let mut config=Config::default();
+        for (index,p) in [&first,&second].iter().enumerate(){config.keys_mut()[index].plugin=Some(PluginBinding{plugin:p.uuid.clone(),action:p.actions[0].uuid.clone(),settings:json!({}),state:0});}
+        manager.sync(&config);
+        let until=Instant::now()+Duration::from_secs(20);let mut registered=0;
+        while registered<2 && Instant::now()<until {if let Ok(Reply::Message(_,v))=manager.rx.recv_timeout(Duration::from_millis(200)){if v["event"]=="registerPlugin"{registered+=1;}}}
+        assert_eq!(registered,2);
+        let control=manager.control();control.pause_plugin(&first.uuid).unwrap();
+        let mut broken=first.clone();broken.runtime=crate::plugins::Runtime::Node(folder.join("nonexistent-runtime-code.js"));
+        manager.set_catalog(vec![broken,second.clone()]);
+        assert!(control.resume_plugin(&first.uuid).is_err(),"failed start must fail ack");
+        let v=manager.visible().values().find(|v|v.plugin==second.uuid).unwrap().clone();
+        manager.tx.send(Request::Virtual(v)).unwrap();
+        let until=Instant::now()+Duration::from_secs(6);let mut survived=false;
+        while Instant::now()<until {if let Ok(Reply::Message(id,value))=manager.rx.recv_timeout(Duration::from_millis(200)){if id==second.uuid && value["event"]=="setTitle" {survived=true;break;}}}
+        assert!(survived,"other plugin remains alive");
+    }
+    #[test] fn abandoned_pause_ack_does_not_suspend_plugin() {
+        let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let first=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let mut second=first.clone();second.uuid="test.other.fixture".into();
+        let mut manager=Manager::new(vec![first.clone(),second.clone()]);
+        let mut config=Config::default();for (index,p) in [&first,&second].iter().enumerate(){config.keys_mut()[index].plugin=Some(PluginBinding{plugin:p.uuid.clone(),action:p.actions[0].uuid.clone(),settings:json!({}),state:0});}
+        manager.sync(&config);
+        let until=Instant::now()+Duration::from_secs(20);let mut registered=0;
+        while registered<2 && Instant::now()<until {if let Ok(Reply::Message(_,v))=manager.rx.recv_timeout(Duration::from_millis(200)){if v["event"]=="registerPlugin"{registered+=1;}}}
+        assert_eq!(registered,2);
+        let (tx,rx)=mpsc::channel();drop(rx);manager.tx.send(Request::Pause(first.uuid.clone(),tx,std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)))).unwrap();
+        let (barrier,wait)=mpsc::channel();manager.tx.send(Request::Resume(first.uuid.clone(),barrier)).unwrap();
+        assert!(wait.recv_timeout(Duration::from_secs(10)).unwrap().is_err(),"abandoned pause must not persist");
+        for p in [&first,&second] {let v=manager.visible().values().find(|v|v.plugin==p.uuid).unwrap().clone();manager.tx.send(Request::Virtual(v)).unwrap();}
+        let until=Instant::now()+Duration::from_secs(6);let mut seen=HashSet::new();
+        while Instant::now()<until && seen.len()<2 {if let Ok(Reply::Message(id,value))=manager.rx.recv_timeout(Duration::from_millis(200)){if value["event"]=="setTitle"{seen.insert(id);}}}
+        assert!(seen.contains(&first.uuid) && seen.contains(&second.uuid));
     }
     #[test]fn applications_launch_and_terminate_once(){
         let watch=vec!["OBS64.exe".to_string(),"Spotify.exe".to_string()];
