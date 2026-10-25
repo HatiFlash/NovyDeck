@@ -4,6 +4,7 @@ fn setup() -> (Harness, String, String) {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
     let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    plugin.name = "Atelier Témoin".into();
     plugin.inspector = Some("inspector.html".into()); // Offline routing fixture; no WebView is asserted.
     let (id, action) = (plugin.uuid.clone(), plugin.actions[0].uuid.clone());
     h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
@@ -16,11 +17,13 @@ fn setup() -> (Harness, String, String) {
 
 #[test]
 fn two_draft_blocks_click_properties_route_without_action_and_persist() {
+    for lang in ["fr","en"] {
     let (mut h,plugin,action) = setup();
+    crate::i18n::set_language(lang);h.app.preferences.language=lang.into();
     let size = vec2(1366.0,768.0);
     for (i,value) in [(0,11),(1,22)] {
         let output = h.warm(size);
-        let label = format!("Compteur DeckForge › Compteur");
+        let label = "Atelier Témoin › Compteur";
         let property_left = egui::containers::panel::PanelState::load(&h.ctx,egui::Id::new("workshop_properties_panel"))
             .map_or(size.x,|panel|panel.rect.left());
         let mut positions: Vec<_> = output.shapes.iter().filter_map(|shape| {
@@ -33,11 +36,17 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
         }).collect();
         positions.sort_by(|a,b|a.y.total_cmp(&b.y));
         if i == 0 {
-            if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join("plugin-blocks-fr.png"));}
+            if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join(format!("plugin-blocks-{lang}.png")));}
         }
         assert!(positions.len() >= 2,"block labels are not visible");
         h.click(size,positions[i]);
-        let context = h.app.block_inspector.as_ref().expect("direct click opens session").context.clone();
+        let output=h.warm(size);
+        let button=text_position(&output.shapes,crate::i18n::tr("Réglages du plugin")).expect("explicit plugin settings button must be visible");
+        if i==0 {
+            if let Some(out)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join(format!("plugin-block-properties-{lang}.png")));}
+            h.app.block_inspector_close();h.click(size,button);h.warm(size);
+        }
+        let context = h.app.block_inspector.as_ref().expect("direct click or properties button opens session").context.clone();
         assert_eq!(h.app.block_inspector.as_ref().unwrap().path,vec![i]);
         assert!(context.starts_with("novydeck-inspector-block-"));
         assert!(!context.starts_with("novydeck-block-"));
@@ -49,6 +58,7 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
         assert!(matches!(&saved.keys()[0].steps[i],Step::PluginAction {settings,..} if settings["count"]==value));
     }
     assert_eq!(action,"org.deckforge.counter.increment");
+    }
 }
 
 #[test]
