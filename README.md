@@ -30,7 +30,9 @@ In **Workshop**, select a Google Home control action block. Its properties offer
 
 ### Choosing a group
 
-From the selected block's **Plugin settings** (Réglages du plugin), use **Control → Group** (Commander → Groupe) in the plugin inspector to choose devices. Back in block properties, NovyDeck shows the selected device count. Settings are saved separately for each block; changing the state keeps the selected targets. The screenshots, if provided, use an offline test fixture rather than a live account or installed plugin.
+From the selected block's **Plugin settings** (Réglages du plugin), use **Control → Group** (Commander → Groupe) in the plugin inspector to choose devices. Back in block properties, NovyDeck shows the selected device count. Settings are saved separately for each block; changing the state keeps the selected targets. This off-screen test capture uses an offline Google Home demo fixture (its action is named “Compteur”), not an installed plugin or a live account.
+
+![Google Home demo block with press-state selector and two-device group, English test capture](docs/images/googlehome-block-properties-en.png)
 
 ### Plugins remain separate
 
@@ -303,6 +305,7 @@ NovyDeck works offline. Local AI stays on your PC and is optional and disabled b
 
 ## Latest release
 
+- **0.11.1:** official plugin store updates accept verified archives without a root UUID; responsive store cards. Version 0.12.0 is prepared above, not yet published.
 - **0.11.0:** transactional plugin updates/removal, compact installed library, scrolling action picker, independent block inspectors, plugin ON/OFF faces and direct-action test.
 - **0.10.1:** cleaner deck header (texts inside the card, grouped page arrows greyed out on a single page); English fixes (Undo, library categories, step names, Add menu).
 - **0.10.0:** redesigned interface with a new design system: graphite deck stage without neon glow, outline-free buttons, clearer key inspector with underlined tabs, cleaner action library, deeper colours in all themes and Semibold titles. Profiles, media and plugins are kept.

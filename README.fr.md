@@ -30,7 +30,9 @@ Dans l'**Atelier**, sélectionnez un bloc d'action de commande Google Home. Ses 
 
 ### Choisir un groupe
 
-Depuis les **Réglages du plugin** du bloc sélectionné, utilisez **Commander → Groupe** dans l'inspecteur du plugin pour choisir les appareils. De retour dans les propriétés du bloc, NovyDeck indique le nombre d'appareils sélectionnés. Chaque bloc conserve ses propres réglages ; changer l'état garde les cibles choisies. Les captures éventuelles montrent un plugin témoin hors ligne, pas un compte réel ni un plugin installé.
+Depuis les **Réglages du plugin** du bloc sélectionné, utilisez **Commander → Groupe** dans l'inspecteur du plugin pour choisir les appareils. De retour dans les propriétés du bloc, NovyDeck indique le nombre d'appareils sélectionnés. Chaque bloc conserve ses propres réglages ; changer l'état garde les cibles choisies. Cette capture de test hors écran emploie un plugin Google Home témoin hors ligne (son action est nommée « Compteur »), pas un compte réel ni un plugin installé.
+
+![Bloc Google Home témoin, choix de l'état et groupe de deux appareils, capture de test en français](docs/images/googlehome-block-properties-fr.png)
 
 ### Plugins séparés
 
@@ -303,6 +305,7 @@ NovyDeck fonctionne hors ligne. L'IA locale reste sur votre PC ; elle est facult
 
 ## Dernière version
 
+- **0.11.1 :** le magasin accepte les archives officielles vérifiées sans UUID à la racine ; cartes adaptées à la fenêtre. La 0.12.0 est préparée ci-dessus, pas encore publiée.
 - **0.11.0 :** mises à jour/désinstallation transactionnelles, bibliothèque compacte, sélecteur défilable, inspecteurs de blocs indépendants, faces ON/OFF et test direct des actions plugin.
 - **0.10.1 :** en-tête du deck plus propre (textes dans la carte, flèches de page groupées et grisées s'il n'y a qu'une page) ; corrections de l'interface anglaise (Undo, catégories, noms d'étapes, menu Add).
 - **0.10.0 :** interface redessinée avec un nouveau design system : scène du deck graphite sans néon, boutons sans contour, inspecteur de touche plus clair avec onglets soulignés, bibliothèque épurée, couleurs plus profondes dans tous les thèmes et titres en semi-gras. Profils, médias et plugins conservés.
