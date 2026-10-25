@@ -2588,6 +2588,124 @@ fn workshop_plugin_catalogue_adds_action_card_and_capture() {
 }
 
 
+fn navigation_fixture(name: &str, id: &str, count: usize) -> crate::plugins::Plugin {
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    plugin.name = name.into();
+    plugin.uuid = id.into();
+    plugin.prerequisite = None;
+    let action = plugin.actions[0].clone();
+    plugin.actions = (0..count).map(|i| {
+        let mut a = action.clone();
+        a.uuid = format!("{id}.action{i}");
+        a.name = if i == 0 { "Action partagée".into() } else if i + 1 == count { format!("ZZ action finale · {name}") } else { format!("Action {i:03}") };
+        a
+    }).collect();
+    plugin
+}
+
+fn navigation_seek(h: &mut Harness, size: egui::Vec2, label: &str, at: egui::Pos2, delta: f32) -> egui::Pos2 {
+    for _ in 0..80 {
+        let output = h.warm(size);
+        if let Some(position) = text_position(&output.shapes, label) { return position; }
+        h.frame(size, vec![Input::PointerMoved(at), Input::MouseWheel {
+            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, delta), modifiers: Modifiers::NONE,
+        }]);
+    }
+    let output = h.warm(size);
+    if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(size, output, &PathBuf::from(out).join("navigation-unreachable.png"));
+    }
+    panic!("Contrôle inaccessible après défilement réel : {label}");
+}
+
+#[test]
+fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
+    for (physical, dpi) in [(vec2(1366.0, 768.0), 1.25), (vec2(1920.0, 1080.0), 1.5)] {
+        let mut h = Harness::new();
+        crate::i18n::set_language("fr");
+        h.ctx.set_pixels_per_point(dpi);
+        let size = physical / dpi;
+        let plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
+            navigation_fixture("B · Autre plugin", "test.navigation.b", 2),
+            navigation_fixture("Z · Dernier plugin", "test.navigation.z", 55)];
+        let last = plugins[2].clone();
+        let expected_action = last.actions.last().unwrap().uuid.clone();
+        h.app.plugins = Some(crate::plugin_runtime::Manager::new(plugins));
+        h.app.selected = 0;
+        h.app.config.keys_mut()[0].steps.clear();
+        let untouched = serde_json::to_value(&h.app.config.keys()[1]).unwrap();
+        h.app.show_workflow = true;
+        h.warm(size);
+        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
+        h.warm(size);
+        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_library")).expect("palette visible").rect;
+        let category = navigation_seek(&mut h, size, "Plugins", panel.center(), -90.0);
+        h.click(size, category);
+        let first = navigation_seek(&mut h, size, "A · Beaucoup d'actions", panel.center(), -90.0);
+        h.click(size, first);
+        let last_header = navigation_seek(&mut h, size, "Z · Dernier plugin", first, -90.0);
+        h.click(size, last_header);
+        let action = navigation_seek(&mut h, size, &last.actions.last().unwrap().name, last_header, -90.0);
+        h.click(size, action);
+        let output = h.warm(size);
+        if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+            h.png(size, output, &PathBuf::from(out).join(format!("navigation-last-{}-{}.png", physical.x as u32, (dpi * 100.0) as u32)));
+        }
+        assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::PluginAction { plugin, action, settings, .. }]
+            if plugin == &last.uuid && action == &expected_action && settings == &serde_json::json!({})), "la dernière action doit être réellement affectée au bon plugin");
+        assert_eq!(serde_json::to_value(&h.app.config.keys()[1]).unwrap(), untouched);
+    }
+}
+
+#[test]
+fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
+    let mut h = Harness::new();
+    crate::i18n::set_language("fr");
+    let size = vec2(1366.0, 768.0);
+    let first = navigation_fixture("Plugin A", "test.folding.a", 2);
+    let second = navigation_fixture("Plugin B", "test.folding.b", 2);
+    let cached = std::sync::Arc::new(super::plugin_store_ui::Inventory {
+        installed: vec![first.clone(), second.clone()], ..Default::default()
+    });
+    h.app.plugin_inventory = Some(cached.clone());
+    h.app.catalog_tab = 3;
+    h.warm(size);
+    let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog")).unwrap().rect;
+    let a_id = egui::Id::new("installed_plugin_expanded").with(&first.uuid);
+    let b_id = egui::Id::new("installed_plugin_expanded").with(&second.uuid);
+    for (plugin, id, other) in [(&first, a_id, b_id), (&second, b_id, a_id)] {
+        let label = format!("{} · v{}", plugin.display_name(), plugin.version);
+        let header = navigation_seek(&mut h, size, &label, panel.center(), -80.0);
+        let output = h.warm(size);
+        let button = output.shapes.iter().filter_map(|shape| {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let pos = text.pos + text.galley.size() * 0.5;
+                if text.galley.job.text == "Étendre" && shape.clip_rect.contains(pos) { return Some(pos); }
+            }
+            None
+        }).min_by(|a,b| (a.y-header.y).abs().total_cmp(&(b.y-header.y).abs())).expect("bouton Étendre visible dans sa fiche");
+        h.click(size, button);
+        h.warm(size);
+        assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(true));
+        assert_ne!(h.ctx.data(|d| d.get_temp::<bool>(other)), Some(true), "l'autre plugin doit rester replié");
+        let action = format!("+ {}", crate::plugin_import::action_name(plugin, &plugin.actions[0]));
+        navigation_seek(&mut h, size, &action, panel.center(), -80.0);
+        navigation_seek(&mut h, size, &label, panel.center(), 100.0);
+        let output = h.warm(size);
+        let collapse = text_position(&output.shapes, "Réduire").expect("bouton Réduire atteignable");
+        h.click(size, collapse);
+        let output = h.warm(size);
+        assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(false));
+        assert!(text_position(&output.shapes, &action).is_none(), "les actions doivent disparaître au repliage");
+        assert!(std::sync::Arc::ptr_eq(&cached, &h.app.plugin_inventory().clone()));
+    }
+    if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        let output = h.warm(size);
+        h.png(size, output, &PathBuf::from(out).join("plugins-compact-folded.png"));
+    }
+}
+
 /// Captures du README (FR et EN) : ne s'exécute que si NOVYDECK_UI_OUTPUT est défini.
 #[test]
 fn readme_captures_plugin_store_workshop_and_startup() {
