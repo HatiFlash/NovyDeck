@@ -554,7 +554,7 @@ ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willApp
             }
         }
         assert!(foreign_rejected);assert_eq!(appeared.len(),2);assert_eq!(changed[contexts[0]],json!({"x":10}));assert_eq!(changed[contexts[1]],json!({"x":20}));
-        let mut config=Config::default();manager.tx.send(Request::Sync(visible(&config),virtual_bindings(&config),None)).unwrap();
+        let config=Config::default();manager.tx.send(Request::Sync(visible(&config),virtual_bindings(&config),None)).unwrap();
         assert_eq!(sessions().len(),2,"sync with no applied blocks must preserve drafts");
         manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
         assert_eq!(sessions().len(),2,"repeated open must reuse existing PI");
