@@ -2788,6 +2788,23 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
         super::plugin_market_ui::test_close();
         *super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner())=Default::default();
     }}
+    fn inspect(shape:&egui::Shape,clip:egui::Rect,width:f32,checked:&mut usize){
+        match shape {
+            egui::Shape::Vec(children)=>for child in children{inspect(child,clip,width,checked)},
+            egui::Shape::Text(text)=>{
+                let content=text.galley.job.text.as_str();
+                if ["Mettre à jour","Update","Installée :","Disponible :","Installed:","Available:"].iter().any(|s|content.starts_with(s)) {
+                    let bounds=egui::Rect::from_min_size(text.pos,text.galley.size());
+                    if bounds.intersects(clip){
+                        assert!(text.galley.rows.len()<=2 && bounds.height()<=35.0,"badge vertical {content:?}: {bounds:?} rows={}",text.galley.rows.len());
+                        assert!(bounds.right()<=width+1.0 && clip.expand(1.0).contains_rect(bounds),"badge rogné {content:?}: {bounds:?} in {clip:?}");
+                        *checked+=1;
+                    }
+                }
+            },
+            _=>{}
+        }
+    }
     let _reset=Reset;
     for (physical,dpi) in [(vec2(2614.0,1534.0),1.0),(vec2(1366.0,768.0),1.25)] {
         for lang in ["fr","en"] {
@@ -2812,18 +2829,7 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
             let output=h.warm(size);
             if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output.clone(),&PathBuf::from(dir).join(format!("store-grid-{lang}-{}-{}.png",physical.x as u32,(dpi*100.0) as u32)));}
             let mut checked=0;
-            for shape in &output.shapes {
-                if let egui::Shape::Text(text)=&shape.shape {
-                    let content=text.galley.job.text.as_str();
-                    if content.contains("Disponible") || content.contains("Installée") || content.contains("Mettre") {eprintln!("STORE TEXT {content:?} rows={} at {:?}",text.galley.rows.len(),text.pos);}
-                    if [crate::i18n::tr("Mettre à jour"),crate::i18n::tr("Installée : 0.9.0"),crate::i18n::tr("Disponible : 1.0.0")].contains(&content) || content.starts_with(crate::i18n::tr("Disponible :")) || content.starts_with(crate::i18n::tr("Installée :")) {
-                        let bounds=egui::Rect::from_min_size(text.pos,text.galley.size());
-                        assert!(text.galley.rows.len()<=2 && bounds.height()<=35.0,"badge vertical {content:?}: {bounds:?} rows={} at {physical:?}/{dpi}",text.galley.rows.len());
-                        assert!(bounds.right()<=size.x+1.0 && shape.clip_rect.expand(1.0).contains_rect(bounds),"badge rogné {content:?}: {bounds:?} in {:?} at {physical:?}/{dpi}",shape.clip_rect);
-                        checked+=1;
-                    }
-                }
-            }
+            for shape in &output.shapes {inspect(&shape.shape,shape.clip_rect,size.x,&mut checked);}
             assert!(checked>=6,"les versions et mises à jour doivent être visibles, {checked}");
             super::plugin_market_ui::test_close();
         }
