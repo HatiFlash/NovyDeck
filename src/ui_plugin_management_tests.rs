@@ -177,6 +177,25 @@ fn management_successful_update_refreshes_disk_inventory_and_disables_button() {
 }
 
 #[test]
+#[ignore = "télécharge les archives publiques : contrôle explicite sur la VM"]
+fn management_live_store_archives_upgrade_without_touching_installed_plugins() {
+    // All writes are confined to a temporary root, never the VM's installed_root.
+    let entries=crate::community_plugins::fetch().unwrap();
+    for (id,old) in [("com.novydeck.homeassistant","1.0.2"),("com.novydeck.googlehome","1.0.4")] {
+        let entry=entries.iter().find(|entry|entry.id==id).unwrap();
+        let root=tempfile::tempdir().unwrap();
+        let plugin=fixture(root.path(),&format!("{id}.sdPlugin"),id,old);
+        let (_owner,source)=crate::community_plugins::stage_verified_update(entry,root.path()).unwrap();
+        let backup=plugin_management_ui::disk_operation(root.path(),id,Operation::Update{source,protected:vec![]}).unwrap();
+        let observed=crate::plugin_import::validated_folder(&plugin).unwrap();
+        assert_eq!(observed.version,entry.version,"{id}: mise à jour sur disque");
+        assert_eq!(crate::plugin_import::inventory(root.path()).iter().find(|p|p.uuid==id).unwrap().version,entry.version,"{id}: inventaire rechargé");
+        assert_eq!(plugin_management_ui::choice(&entry.version,Some(&observed.version),entry.compatible),plugin_management_ui::Choice::Installed,"{id}: bouton à jour");
+        assert_eq!(crate::plugin_import::validated_folder(&backup).unwrap().version,old,"{id}: sauvegarde conservée");
+    }
+}
+
+#[test]
 fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages(){
     let _reset = ManagementMarketReset;
     let size = vec2(1600.0, 1000.0);
