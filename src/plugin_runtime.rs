@@ -89,7 +89,7 @@ pub(crate) fn application_events(watch:&[String],running:&[String],before:&std::
     for app in before.difference(&now){events.push(json!({"event":"applicationDidTerminate","payload":{"application":app}}));}
     (now,events)
 }
-enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), OpenVirtualInspector(Visible), CloseVirtualInspector(String), #[cfg(test)] SimulateInspectors(Sender<()>), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
+enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), OpenVirtualInspector(Visible), CloseVirtualInspector(String), #[cfg(test)] SimulateInspectors(Sender<()>), #[cfg(test)] TestSessions(Sender<Vec<(String,String,u16)>>), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
 static VIRTUAL_SENDER: std::sync::OnceLock<std::sync::Mutex<Option<Sender<Request>>>> = std::sync::OnceLock::new();
 fn virtual_sender() -> &'static std::sync::Mutex<Option<Sender<Request>>> {
     VIRTUAL_SENDER.get_or_init(|| std::sync::Mutex::new(None))
@@ -273,6 +273,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 let _=ack.send(result);
             }
             #[cfg(test)] Ok(Request::SimulateInspectors(ack))=>{simulate_inspectors=true;for host in hosts.values(){host.simulate_inspectors();}let _=ack.send(());}
+            #[cfg(test)] Ok(Request::TestSessions(ack))=>{let _=ack.send(inspectors.iter().filter_map(|(id,v)|hosts.get(&v.plugin).map(|h|(id.clone(),v.context.clone(),h.ws_port))).collect());}
             Ok(Request::OpenVirtualInspector(mut v))=>{
                 if !v.context.starts_with("novydeck-inspector-block-") || v.context.len()<"novydeck-inspector-block-".len()+1 || v.index>=device.columns*device.rows || current.contains_key(&v.context) && !drafts.contains_key(&v.context) {
                     let _=reply.send(Reply::Error(v.plugin.clone(),"Contexte de brouillon invalide ou déjà utilisé".into()));continue;
@@ -511,6 +512,60 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     // Host::drop termine tout l'arbre de chaque processus.
 }
 #[cfg(test)]mod tests {use super::*;use crate::model::{Config,PluginBinding};
+    #[test] fn draft_inspectors_are_independent_and_survive_sync_without_keypress() {
+        use tungstenite::Message;
+        let fixture=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let mut plugin=crate::plugins::parse(&fixture,&std::fs::read(fixture.join("manifest.json")).unwrap()).unwrap();
+        let dir=tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pi.html"),"<html></html>").unwrap();
+        std::fs::write(dir.path().join("witness.js"),r#"
+const args=process.argv.slice(2),val=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${val('-port')}`);
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:val('-registerEvent'),uuid:val('-pluginUUID')})));
+ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willAppear'||v.event==='willDisappear'||v.event==='keyDown'||v.event==='didReceiveSettings')ws.send(JSON.stringify({event:'logMessage',context:v.context,payload:{message:v.event,settings:v.payload.settings}}));});
+"#).unwrap();
+        plugin.folder=dir.path().into();plugin.runtime=crate::plugins::Runtime::Node(dir.path().join("witness.js"));plugin.actions[0].inspector=Some("pi.html".into());
+        let manager=Manager::new(vec![plugin.clone()]);
+        let (ack,wait)=mpsc::channel();manager.tx.send(Request::SimulateInspectors(ack)).unwrap();wait.recv_timeout(Duration::from_secs(2)).unwrap();
+        let contexts=["novydeck-inspector-block-a","novydeck-inspector-block-b"];
+        let sessions=||{let (tx,rx)=mpsc::channel();manager.tx.send(Request::TestSessions(tx)).unwrap();rx.recv_timeout(Duration::from_secs(3)).unwrap()};
+        for (i,ctx) in contexts.iter().enumerate(){manager.open_virtual_inspector(Visible{context:(*ctx).into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:i,settings:if i==0 {Value::Null}else{json!({"value":2})},state:0}).unwrap();}
+        let initial=sessions();assert_eq!(initial.len(),2);
+        let (first,_,port)=initial.iter().find(|(_,ctx,_)|ctx==contexts[0]).unwrap().clone();
+        let (second,_,_)=initial.iter().find(|(_,ctx,_)|ctx==contexts[1]).unwrap().clone();
+        // A test seam simulates ONLY WebView spawn; real Host HTTP path, registry, random sessions and sockets are used.
+        let mut peers=Vec::new();
+        for id in [&first,&second] {let (mut ws,_)=tungstenite::connect(format!("ws://127.0.0.1:{port}")).unwrap();ws.send(Message::Text(json!({"event":"registerPropertyInspector","uuid":id}).to_string().into())).unwrap();peers.push(ws);}
+        for (index,settings) in [(0,json!({"x":10})),(1,json!({"x":20}))] {
+            peers[index].send(Message::Text(json!({"event":"setSettings","context":"wrong","payload":settings}).to_string().into())).unwrap();
+        }
+        let until=Instant::now()+Duration::from_secs(12);let mut changed=HashMap::new();let mut appeared=HashSet::new();
+        while Instant::now()<until && (changed.len()<2 || appeared.len()<2) {
+            match manager.rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(Reply::Message(_,v)) if v["event"]=="setSettings"=>{changed.insert(v["context"].as_str().unwrap().to_owned(),v["payload"].clone());},
+                Ok(Reply::Message(_,v)) if v["event"]=="logMessage" && v["payload"]["message"]=="willAppear"=>{appeared.insert(v["context"].as_str().unwrap().to_owned());},
+                Ok(Reply::Message(_,v)) if v["event"]=="logMessage"=>{assert_ne!(v["payload"]["message"],"keyDown");},
+                Ok(Reply::Error(_,e))=>panic!("unexpected: {e}"),_=>{}
+            }
+        }
+        assert_eq!(appeared.len(),2);assert_eq!(changed[contexts[0]],json!({"x":10}));assert_eq!(changed[contexts[1]],json!({"x":20}));
+        let mut config=Config::default();manager.tx.send(Request::Sync(visible(&config),virtual_bindings(&config),None)).unwrap();
+        assert_eq!(sessions().len(),2,"sync with no applied blocks must preserve drafts");
+        manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
+        assert_eq!(sessions().len(),2,"repeated open must reuse existing PI");
+        manager.close_virtual_inspector(contexts[0]).unwrap();assert_eq!(sessions().len(),1);
+        peers[0].send(Message::Text(json!({"event":"setSettings","payload":{"stale":true}}).to_string().into())).ok();
+        manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
+        let reopened=sessions();assert_eq!(reopened.len(),2);assert!(!reopened.iter().any(|(id,_,_)|id==&first));assert!(reopened.iter().any(|(id,_,_)|id==&second));
+        for i in 2..4 {manager.open_virtual_inspector(Visible{context:format!("novydeck-inspector-block-{i}"),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:i,settings:Value::Null,state:0}).unwrap();}
+        assert_eq!(sessions().len(),4);
+        manager.open_virtual_inspector(Visible{context:"novydeck-inspector-block-overflow".into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:4,settings:Value::Null,state:0}).unwrap();
+        assert_eq!(sessions().len(),4);
+        let deadline=Instant::now()+Duration::from_secs(4);let mut limited=false;
+        while Instant::now()<deadline {if let Ok(Reply::Error(_,e))=manager.rx.recv_timeout(Duration::from_millis(100)){if e.contains("quatre inspecteurs"){limited=true;break;}}}
+        assert!(limited);
+        config.page="main".into(); // no applied plugin binding or physical key was required
+    }
     #[test] fn pause_targets_one_plugin_and_blocks_virtual_restart() {
         let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
         let first=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
