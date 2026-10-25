@@ -39,5 +39,6 @@ Chaque worker a son worktree et ses fichiers bornés. Aucun fichier logique part
 
 - Verrous d'exécutables Windows et redémarrage automatique des plugins : arrêt ciblé acquitté avant toute mutation.
 - Contrats de réglages des inspecteurs tiers : tester deux blocs d'un même plugin et des messages sans action, ainsi qu'un profil/page changés pendant l'ouverture.
+- Les sources maison consultées dans plugins-release104 (Google Home et Wallpaper Engine) envoient actuellement showOk/showAlert et des titres, mais pas setState ; le SDK n'expose pas encore d'helper d'état. T6 doit donc inclure une émission explicite d'état pour les actions maison concernées, pas seulement une option d'images dans NovyDeck. Pour Google Home, ne jamais remplacer la lecture réelle GetTraits par un compteur local ; pour Wallpaper Engine, qualifier clairement l'état Pause/Lecture comme local. Tester le flux protocolaire de succès ET d'échec, sans compte ni logiciel tiers réel, dans un worktree de plugins distinct.
 - setState peut signifier autre chose que ON/OFF selon le plugin : mapping explicite requis ; absence de signal ne doit jamais être présentée comme un état réel.
 - Les captures déjà reçues montrent un menu tronqué, mais ne prouvent pas à elles seules qu'il ne contient que SignalRGB : corriger l'accessibilité et vérifier l'inventaire.
