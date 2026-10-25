@@ -68,6 +68,19 @@ fn mutable(path:&Path)->bool {
     (path.components().count()==1 && (name.eq_ignore_ascii_case("config.json") || name.eq_ignore_ascii_case("settings.json")))
         || ["data","config","settings","userdata"].iter().any(|d|first.eq_ignore_ascii_case(d))
 }
+fn same_contents(left:&Path,right:&Path)->Result<bool> {
+    use std::io::Read;
+    let a=metadata(left)?;let b=metadata(right)?;
+    if !a.is_file() || !b.is_file() || a.len()!=b.len(){return Ok(false);}
+    anyhow::ensure!(a.len()<=100*1024*1024,"Donnée locale trop volumineuse");
+    let mut a=fs::File::open(left)?;let mut b=fs::File::open(right)?;
+    let mut left_bytes=[0_u8;8192];let mut right_bytes=[0_u8;8192];
+    loop {
+        let count=a.read(&mut left_bytes)?;let other=b.read(&mut right_bytes)?;
+        if count!=other || left_bytes[..count]!=right_bytes[..other]{return Ok(false);}
+        if count==0{return Ok(true);}
+    }
+}
 fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
     fn visit(base:&Path,candidate:&Path,relative:&Path,protected:&[PathBuf],count:&mut usize)->Result<()> {
         for entry in fs::read_dir(base.join(relative))? {
@@ -76,7 +89,10 @@ fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
             if ty.is_dir(){visit(base,candidate,&path,protected,count)?;continue;}
             anyhow::ensure!(ty.is_file(),"Type local refusé");
             let target=candidate.join(&path);let explicit=protected.iter().any(|p|p==&path);
-            if !packaged(&path) && !explicit && !mutable(&path) && target.exists(){anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());}
+            if !packaged(&path) && !explicit && !mutable(&path) && target.exists(){
+                if same_contents(&entry.path(),&target)? {continue;}
+                anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());
+            }
             let keep=!packaged(&path) && (explicit || mutable(&path) || !target.exists());
             if !keep {continue;}
             if target.exists(){anyhow::ensure!(metadata(&target)?.is_file(),"Conflit fichier/dossier : {}",path.display());}
@@ -91,7 +107,7 @@ fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
 fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[PathBuf],fail_commit:bool)->Result<PathBuf>{
     for path in protected {
         anyhow::ensure!(!path.as_os_str().is_empty() && path.components().all(|c|matches!(c,std::path::Component::Normal(_)))
-            && !path.to_string_lossy().contains([':', '\\', '\0']) && !packaged(path),"Chemin protégé non confiné ou code packagé : {}",path.display());
+            && !path.to_string_lossy().contains([':', '\0']) && !packaged(path),"Chemin protégé non confiné ou code packagé : {}",path.display());
     }
     let (old,previous)=local(root,id)?;no_links(source)?;
     let incoming=crate::plugin_import::validated_folder(source)?;
