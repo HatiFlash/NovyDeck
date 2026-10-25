@@ -406,6 +406,11 @@ pub struct PluginBinding {
 #[serde(rename_all = "snake_case")]
 pub enum RunMode { #[default] Ignore, Restart, Queue }
 
+/// Opt-in source for two-state plugin faces. Block paths refer only to short-press steps.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PluginStateTarget { Direct, Block { path: Vec<usize> } }
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Key {
     pub label: String,
@@ -427,6 +432,8 @@ pub struct Key {
     pub steps: Vec<Step>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_display: Option<StateDisplay>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_state: Option<PluginStateTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub long_steps: Vec<Step>,
     #[serde(skip)]
@@ -452,6 +459,7 @@ impl Default for Key {
             plugin: None,
             steps: vec![],
             state_display: None,
+            plugin_state: None,
             long_steps: vec![],
             display_kind: None,
             runtime_badge: None,
@@ -1001,9 +1009,16 @@ pub fn parse_hotkey(text: &str) -> Result<Vec<u16>> {
 }
 pub fn validate_key(key: &Key, config: &Config) -> Result<()> {
     anyhow::ensure!(key.debounce_ms <= 60_000, "Anti-rebond : 60 000 ms maximum");
-    if let Some(display) = &key.state_display { display.validate()?; }
+    if let Some(display) = &key.state_display {
+        if key.plugin_state.is_some() { StateDisplay { toggle: true, ..display.clone() }.validate()?; }
+        else { display.validate()?; }
+    }
+    if let Some(target) = &key.plugin_state {
+        anyhow::ensure!(crate::plugin_state_display::target_valid(key, target), "Source d'état plugin invalide");
+    }
     if !key.long_steps.is_empty() {
         let mut long = key.clone();
+        long.plugin_state = None;
         long.steps = std::mem::take(&mut long.long_steps);
         validate_key(&long, config)?;
     }
