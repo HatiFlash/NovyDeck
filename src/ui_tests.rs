@@ -1,4 +1,5 @@
 //! Tests of the actual egui widgets, without opening or controlling Windows.
+#[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
 
 #[test]
 fn workshop_ai_requires_consent_and_local_never_offers_it() {
