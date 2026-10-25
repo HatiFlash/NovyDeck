@@ -1018,6 +1018,7 @@ pub fn validate_key(key: &Key, config: &Config) -> Result<()> {
     }
     if !key.long_steps.is_empty() {
         let mut long = key.clone();
+        if long.plugin_state.is_some() { long.state_display = None; }
         long.plugin_state = None;
         long.steps = std::mem::take(&mut long.long_steps);
         validate_key(&long, config)?;
@@ -1324,6 +1325,14 @@ mod state_display_tests {
             assert!(validate_key(&Key { state_display: Some(bad), ..Key::default() }, &Config::default()).is_err());
         }
         assert!(validate_key(&Key { state_display: Some(StateDisplay { condition: crate::conditions::Condition::All { conditions: vec![] }, ..display }), ..Key::default() }, &Config::default()).is_err());
+    }
+    #[test] fn plugin_source_validates_paths_but_not_inactive_condition() {
+        let mut key = Key { plugin: Some(PluginBinding { plugin: "p".into(), action: "a".into(), settings: serde_json::json!({}), state: 0 }),
+            plugin_state: Some(PluginStateTarget::Direct), state_display: Some(StateDisplay { condition: crate::conditions::Condition::All { conditions: vec![] }, poll_ms: 0, ..StateDisplay::default() }),
+            long_steps: vec![Step::Delay { ms: 1 }], ..Key::default() };
+        assert!(validate_key(&key, &Config::default()).is_ok());
+        key.plugin_state = Some(PluginStateTarget::Block { path: vec![0] });
+        assert!(validate_key(&key, &Config::default()).is_err());
     }
     #[test]
     fn toggle_ignores_condition_and_poll_but_validates_faces() {
