@@ -2574,6 +2574,9 @@ fn workshop_plugin_catalogue_adds_action_card_and_capture() {
     let category = text_position(&output.shapes, "Plugins").expect("plugin category");
     h.click(size, category);
     let output = h.warm(size);
+    let plugin_pos = text_position(&output.shapes, "Atelier Témoin").expect("installed plugin group");
+    h.click(size, plugin_pos);
+    let output = h.warm(size);
     let action_pos = text_position(&output.shapes, "Incrémenter").expect("installed action in palette");
     h.click(size, action_pos);
     let output = h.warm(size);
