@@ -89,8 +89,32 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         assert_eq!(fs::read_to_string(backup.join("custom.data")).unwrap(),"keep");
         assert_eq!(fs::read(backup.join("images/user.png")).unwrap(),b"image");
         assert_eq!(fs::read(backup.join("config.json")).unwrap(),b"configuration");
-        assert!(!installed.join("a.sdPlugin/custom.data").exists());
+        assert_eq!(fs::read(installed.join("a.sdPlugin/custom.data")).unwrap(),b"keep");
+        assert_eq!(fs::read(installed.join("a.sdPlugin/images/user.png")).unwrap(),b"image");
+        assert_eq!(fs::read(installed.join("a.sdPlugin/config.json")).unwrap(),b"configuration");
         assert_eq!(fs::read_to_string(d.path().join("profiles/settings.json")).unwrap(),"saved");
+    }
+    #[test] fn protected_collision_and_packaged_code() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+        let old=root.join("a.sdPlugin");fs::create_dir(old.join("images")).unwrap();
+        fs::write(old.join("images/user.png"),b"mine").unwrap();fs::write(old.join("main.js"),b"old code").unwrap();
+        fs::write(old.join("i18n.json"),b"old translation").unwrap();
+        let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+        let src=stage.join("a.sdPlugin");fs::create_dir(src.join("images")).unwrap();
+        fs::write(src.join("images/user.png"),b"new image").unwrap();fs::write(src.join("i18n.json"),b"new translation").unwrap();
+        let backup=replace_staged_preserving(&root,"test.a",&src,&[PathBuf::from("images/user.png")]).unwrap();
+        assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"mine");
+        assert_eq!(fs::read(old.join("i18n.json")).unwrap(),b"new translation");
+        assert_eq!(fs::read(old.join("main.js")).unwrap(),b"2.0");
+        assert_eq!(fs::read(backup.join("main.js")).unwrap(),b"old code");
+    }
+    #[test] fn invalid_protection_never_mutates() {
+        for path in ["../outside","/absolute","manifest.json","main.js","images/../main.js"] {
+            let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+            let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+            assert!(replace_staged_preserving(&root,"test.a",&stage.join("a.sdPlugin"),&[PathBuf::from(path)]).is_err(),"{path}");
+            assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"1.0");
+        }
     }
     #[test] fn invalid_identity_and_version_never_mutate() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","2.0");
