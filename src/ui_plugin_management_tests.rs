@@ -129,7 +129,74 @@ fn local_fixture(h: &Harness) -> crate::plugins::Plugin {
 }
 
 #[test]
-fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages() {
+fn management_successful_update_refreshes_disk_inventory_and_disables_button() {
+    let _reset = ManagementMarketReset;
+    let mut h = Harness::new();
+    crate::i18n::set_language("fr");
+    let local = local_fixture(&h);
+    let root = h.dir.path().join("plugins");
+    std::fs::create_dir_all(&root).unwrap();
+    let installed = fixture(&root, "local.sdPlugin", "test.a", "1.0");
+    let incoming = fixture(&h.dir.path().join("stage"), "local.sdPlugin", "test.a", "2.0");
+    let registry = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme/registry.json");
+    let mut entry = crate::community_plugins::parse(&std::fs::read(registry).unwrap()).unwrap().remove(0);
+    entry.uuid = Some(local.uuid.clone());
+    entry.version = "2.0".into();
+    entry.compatible = true;
+    entry.name = "Plugin de test du magasin".into();
+    entry.icon = None;
+    entry.screenshots.clear();
+    h.app.plugins=Some(crate::plugin_runtime::Manager::new(vec![]));
+    h.app.plugin_inventory=Some(std::sync::Arc::new(super::plugin_store_ui::Inventory{installed:vec![local.clone()],..Default::default()}));
+    let control=h.app.plugins.as_ref().unwrap().control();
+    control.pause_plugin("test.a").unwrap();
+    let backup = plugin_management_ui::disk_operation(&root, "test.a", Operation::Update {source:incoming, protected:vec![]}).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    h.app.plugin_management.working = Some(rx);
+    let installed_plugin=crate::plugin_import::validated_folder(&installed).unwrap();
+    tx.send(plugin_management_ui::JobResult::Disk{id:"test.a".into(),remove:false,paused:true,result:Ok((backup,Some(installed_plugin))),control}).unwrap();
+    h.app.management_poll(&h.ctx);
+    let on_disk = crate::plugin_import::inventory(&root);
+    assert_eq!(on_disk.iter().find(|plugin|plugin.uuid=="test.a").unwrap().version,"2.0");
+    for _ in 0..40 {if h.app.plugin_management.working.is_none(){break;}std::thread::sleep(std::time::Duration::from_millis(10));h.app.management_poll(&h.ctx);}
+    assert!(h.app.plugin_management.working.is_none(),"le runtime doit reprendre");
+    assert!(h.app.plugin_management.message.contains("Plugin mis à jour"),"{}",h.app.plugin_management.message);
+    let cached=h.app.plugin_inventory.as_ref().unwrap();
+    assert_eq!(cached.installed.iter().find(|p|p.uuid=="test.a").unwrap().version,"2.0");
+    let mut state = super::plugin_store_ui::community_state().lock().unwrap();
+    *state = Default::default();
+    state.consent = true;
+    state.entries = vec![entry.clone()];
+    drop(state);
+    super::plugin_market_ui::test_view(Some(&entry.id));
+    let output = h.warm(vec2(1600.0,1000.0));
+    assert!(text_position(&output.shapes, crate::i18n::tr("À jour")).is_some());
+    assert!(text_position(&output.shapes, crate::i18n::tr("Mettre à jour")).is_none());
+    let reloaded = crate::plugin_import::inventory(&root);
+    assert_eq!(reloaded.iter().find(|plugin|plugin.uuid=="test.a").unwrap().version,"2.0");
+}
+
+#[test]
+#[ignore = "télécharge les archives publiques : contrôle explicite sur la VM"]
+fn management_live_store_archives_upgrade_without_touching_installed_plugins() {
+    // All writes are confined to a temporary root, never the VM's installed_root.
+    let entries=crate::community_plugins::fetch().unwrap();
+    for (id,old) in [("com.novydeck.homeassistant","1.0.2"),("com.novydeck.googlehome","1.0.4")] {
+        let entry=entries.iter().find(|entry|entry.id==id).unwrap();
+        let root=tempfile::tempdir().unwrap();
+        let plugin=fixture(root.path(),&format!("{id}.sdPlugin"),id,old);
+        let (_owner,source)=crate::community_plugins::stage_verified_update(entry,root.path()).unwrap();
+        let backup=plugin_management_ui::disk_operation(root.path(),id,Operation::Update{source,protected:vec![]}).unwrap();
+        let observed=crate::plugin_import::validated_folder(&plugin).unwrap();
+        assert_eq!(observed.version,entry.version,"{id}: mise à jour sur disque");
+        assert_eq!(crate::plugin_import::inventory(root.path()).iter().find(|p|p.uuid==id).unwrap().version,entry.version,"{id}: inventaire rechargé");
+        assert_eq!(plugin_management_ui::choice(&entry.version,Some(&observed.version),entry.compatible),plugin_management_ui::Choice::Installed,"{id}: bouton à jour");
+        assert_eq!(crate::plugin_import::validated_folder(&backup).unwrap().version,old,"{id}: sauvegarde conservée");
+    }
+}
+
+#[test]
+fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages(){
     let _reset = ManagementMarketReset;
     let size = vec2(1600.0, 1000.0);
     for lang in ["fr", "en"] {

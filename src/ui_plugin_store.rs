@@ -270,6 +270,16 @@ impl App {
  }
  /// Après un import, le gestionnaire connaît le nouveau plugin sans redémarrage de l'application.
  pub(super) fn refresh_plugin_catalog(&mut self){self.plugin_inventory=None;if let (Some(manager),Ok(root))=(self.plugins.as_mut(),plugin_import::installed_root()){manager.set_catalog(plugin_import::inventory(&root));}}
+ /// A committed update has already been read back from its exact installed folder.
+ /// Preserve this observation for both the store and runtime even if an unrelated
+ /// directory makes a broad inventory scan miss the plugin.
+ pub(super) fn refresh_plugin_catalog_observed(&mut self,plugin:Plugin){
+  let mut inventory=Inventory::scan();
+  inventory.installed.retain(|item|item.uuid!=plugin.uuid);
+  inventory.installed.push(plugin);
+  if let Some(manager)=self.plugins.as_mut(){manager.set_catalog(inventory.installed.clone());}
+  self.plugin_inventory=Some(std::sync::Arc::new(inventory));
+ }
  fn plugin_import_request(&mut self,source:Option<std::path::PathBuf>){
   self.start_dialog(move||{let result=plugin_import::installed_root().and_then(|root|match source{Some(folder)=>plugin_import::import_folder(&folder,&root).map(|copied|if copied{crate::i18n::tr("Plugin : copié").into()}else{crate::i18n::tr("Plugin : déjà présent").into()}),None=>{let report=plugin_import::import_sources(&root);Ok(crate::i18n::trf("Import : {copied} copiés, {existing} déjà présents, {protected} protégés, {built_in} intégrés FIFINE, {skipped} ignorés", &[("copied", &report.copied), ("existing", &report.existing), ("protected", &report.protected), ("built_in", &report.built_in), ("skipped", &report.skipped)]))}});
    Some(Box::new(move |app:&mut App|match result{Ok(text)=>{app.notice=text.clone();app.log(text);app.refresh_plugin_catalog();},Err(e)=>app.fail(crate::i18n::trf("Import plugin impossible : {error}", &[("error", &(e))] ))}))
