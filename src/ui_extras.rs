@@ -109,10 +109,12 @@ fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,pl
         ui.horizontal(|ui| {
             ui.label(crate::i18n::tr("État à l’appui"));
             egui::ComboBox::from_id_salt(ui.id().with("googlehome-mode"))
-                .selected_text(crate::i18n::tr(match selected {
-                    0 => "Allumer", 1 => "Éteindre", 2 => "Basculer",
-                    3 => "Luminosité (réglages du plugin)", _ => "À configurer",
-                }))
+                .selected_text(match selected {
+                    0 => crate::i18n::tr("Allumer"), 1 => crate::i18n::tr("Éteindre"),
+                    2 => crate::i18n::tr("Basculer"),
+                    3 => crate::i18n::tr("Luminosité (réglages du plugin)"),
+                    _ => crate::i18n::tr("À configurer"),
+                })
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut selected, 0, crate::i18n::tr("Allumer"));
                     ui.selectable_value(&mut selected, 1, crate::i18n::tr("Éteindre"));
