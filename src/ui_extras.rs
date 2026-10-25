@@ -140,6 +140,14 @@ fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,pl
     if ui.add_enabled(available,egui::Button::new(crate::i18n::tr("Réglages du plugin")))
         .on_disabled_hover_text(crate::i18n::tr("Inspecteur du plugin indisponible"))
         .clicked() {ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.to_vec()));}
+    if *plugin == "com.novydeck.googlehome" && *action == "com.novydeck.googlehome.control" {
+        if settings["scope"] == "group" {
+            let count = settings["targets"].as_array().map_or(0, Vec::len);
+            ui.label(crate::i18n::trf("Groupe : {count} appareils", &[("count", &count)]));
+        } else {
+            ui.label(crate::i18n::tr("Plusieurs appareils : Réglages du plugin → Commander → Groupe."));
+        }
+    }
     ui.menu_button(crate::i18n::tr("Copier les réglages d'une touche…"), |ui| {
         for (index,key) in config.keys().iter().enumerate() {
             if let Some(binding)=key.plugin.as_ref().filter(|b|b.plugin==*plugin && b.action==*action) {

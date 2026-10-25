@@ -152,9 +152,14 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
         *settings = serde_json::json!({"mode":"brightness","brightness":42,"scope":"device","target":"id1"});
     }
     let size = vec2(1366.0, 768.0);
+    crate::i18n::set_language("fr");
+    h.app.preferences.language = "fr".into();
     h.warm(size); // initialise the workshop's selection context
     h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0]));
-    h.warm(size);
+    let output = h.warm(size);
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(size, output, &PathBuf::from(dir).join("googlehome-block-properties-fr.png"));
+    }
     assert!(matches!(&h.app.config.keys()[0].steps[0], Step::PluginAction {settings,..}
         if settings["mode"] == "brightness" && settings["brightness"] == 42));
     if let Step::PluginAction { settings, .. } = &mut h.app.config.keys_mut()[0].steps[0] {
@@ -173,6 +178,10 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
         Step::PluginAction {settings,..} if settings == &payload));
     assert!(matches!(&h.app.config.keys()[0].steps[1],
         Step::PluginAction {settings,..} if settings == &neighbour_settings));
+    let output = h.warm(size);
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(size, output, &PathBuf::from(dir).join("googlehome-block-group-off-fr.png"));
+    }
 
     // Persisted on disk and still intact after reload.
     let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();

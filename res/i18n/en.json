@@ -1346,6 +1346,8 @@
     "Basculer": "Toggle",
     "Luminosité (réglages du plugin)": "Brightness (plugin settings)",
     "À configurer": "Configure",
+    "Groupe : {count} appareils": "Group: {count} devices",
+    "Plusieurs appareils : Réglages du plugin → Commander → Groupe.": "Multiple devices: Plugin settings → Control → Group.",
     "État confirmé": "Confirmed state",
     "État inconnu": "Unknown state",
     "État local": "Local state",
