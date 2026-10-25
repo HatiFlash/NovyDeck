@@ -15,7 +15,10 @@ Ouvrir `http://127.0.0.1:8765/`. Le site utilise uniquement `index.html` et les 
 ## Contenu et sources
 
 - Palette et typographie : `docs/DESIGN.md` ; logo : `res/branding/novydeck-logo.png`.
-- Captures issues de `docs/images/novydeck-main.png`, `redesign-light-fr.png`, `novydeck-block-editor.png`, `v0111-store-fr.png` ; affiche issue de `docs/media/novydeck-demo-poster.png`.
+- Captures issues de `docs/images/novydeck-main.png`, `redesign-light-fr.png`, `novydeck-block-editor.png`, `v0111-store-fr.png`, `v011-plugin-state-on-fr.png`, `novydeck-media-crop.png` et `novydeck-assistant.png` ; affiche issue de `docs/media/novydeck-demo-poster.png`.
+- La séquence locale `assets/novydeck-motion.mp4` est un extrait de 11 secondes, muet, encodé depuis `docs/media/novydeck-demo.mp4` (film public déjà présent dans le dépôt). Elle ne charge que lorsque la section entre à l'écran ; elle se met en pause hors champ et en onglet masqué. Bouton lecture/pause. Avec « réduire les animations », lecture automatique désactivée et poster statique, lecture manuelle possible.
+- L'aperçu du logiciel a une légère profondeur 3D au pointeur ; les chapitres apparaissent au défilement ; le module « Dans les détails » comporte trois onglets accessibles au clavier. Ces effets sont décoratifs : contenu et liens restent accessibles si JavaScript ou les animations sont désactivés.
+- L'inventaire de 22 fonctions décrit séparément touches, macros, écosystème et contrôles. Les intégrations domotiques sont des **plugins** : elles peuvent dépendre de comptes/services tiers ; les autres modèles de deck ne sont pas déclarés testés.
 - Fonctions et limites matérielles : `README.fr.md` de la version 0.11.1. Les captures sont des rendus de l'application hors écran ; aucun périphérique réel n'était nécessaire.
 - Bouton principal : installeur officiel 0.11.1 sur GitHub ; bouton secondaire : page `releases/latest` pour choisir notamment le ZIP portable. La vidéo s'ouvre depuis l'asset public de la même version.
 

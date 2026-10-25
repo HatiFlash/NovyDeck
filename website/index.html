@@ -62,11 +62,43 @@
     .download-section{padding:105px 0;background:linear-gradient(180deg,#121d2f 0%,#0c111c 100%);border-block:1px solid #33425a;text-align:center}.download-section .section-title{max-width:none}.download-section p{color:var(--secondary);max-width:590px;margin:0 auto 26px}.download-foot{font-size:12px;color:var(--muted);margin-top:17px}.download-foot a{text-decoration:underline;text-underline-offset:3px}
     .faq{padding:96px 0}.faq-layout{display:grid;grid-template-columns:260px 1fr;gap:80px}.faq .section-title{font-size:36px}.faq-list{border-top:1px solid var(--hairline)}details{border-bottom:1px solid var(--hairline);padding:20px 0}summary{font-size:16px;font-weight:650;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:20px}summary::-webkit-details-marker{display:none}summary::after{content:"+";font-size:23px;color:#95b6f9;font-weight:300;line-height:1}details[open] summary::after{content:"−"}details p{color:var(--secondary);margin:12px 36px 0 0;font-size:14px}
     .footer{background:var(--sunken);border-top:1px solid var(--hairline);padding:38px 0}.footer-inner{display:flex;justify-content:space-between;gap:24px;align-items:center}.footer .brand{font-size:15px}.footer .brand img{height:23px;width:23px}.footer p{color:var(--muted);font-size:12px;margin:7px 0 0}.footer-links{display:flex;gap:20px;flex-wrap:wrap;color:var(--secondary);font-size:12px}
+    /* Motion language: real product media, restrained depth and scroll reveals. */
+    .hero{isolation:isolate}.product-stage{perspective:1400px;transform-style:preserve-3d}
+    .stage-browser{transform:perspective(1400px) rotateX(var(--tilt-x,2deg)) rotateY(var(--tilt-y,-2deg));transform-style:preserve-3d;transition:transform .7s cubic-bezier(.18,.67,.18,1);will-change:transform}
+    .product-stage:hover .stage-browser{box-shadow:0 43px 95px #000a,0 0 0 6px #ffffff06}
+    .stage-browser::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(120deg,#fff0 35%,#ffffff12 50%,#fff0 66%);opacity:.35}
+    .float-label{position:absolute;z-index:2;display:flex;align-items:center;gap:9px;background:#171f2ce8;backdrop-filter:blur(12px);border:1px solid #526078;border-radius:9px;padding:11px 13px;font-size:12px;font-weight:700;color:#f0f4fc;box-shadow:0 13px 30px #0007;animation:float-breathe 6s ease-in-out infinite;pointer-events:none}.float-label::before{content:"";width:8px;height:8px;background:var(--green);border-radius:50%}.float-label.one{left:-8px;top:22%;transform:translateZ(55px)}.float-label.two{right:0;bottom:23%;animation-delay:-3s}.float-label.two::before{background:#7aa5ff}
+    @keyframes float-breathe{0%,100%{translate:0 0}50%{translate:0 -10px}}
+    .cinema{position:relative;min-height:clamp(620px,88vh,900px);overflow:hidden;isolation:isolate;background:#090d16;border-bottom:1px solid var(--hairline)}
+    .cinema video,.cinema .cinema-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-2;transform:translate3d(0,calc(var(--scroll-p,0) * 28px),0) scale(1.08)}
+    .cinema::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,#0b0f1770 0%,transparent 27%,#090d1680 62%,#090d16 100%)}
+    .cinema-content{display:flex;min-height:inherit;align-items:flex-end;padding:0 0 clamp(65px,10vh,110px);transform:translate3d(0,calc(var(--scroll-p,0) * -16px),0)}
+    .cinema-copy{max-width:670px}.cinema h2{font-size:clamp(42px,6.8vw,84px);line-height:1.03;letter-spacing:-.065em;margin-bottom:18px}.cinema p{color:#d7e0ed;font-size:clamp(16px,1.7vw,19px);max-width:550px;margin-bottom:23px;text-shadow:0 2px 12px #090d16}
+    .motion-note{display:inline-block;border-left:2px solid #8bacf4;padding-left:12px;color:#c8d4e5;font-size:12px;max-width:530px}
+    .cinema-control{position:absolute;right:max(24px,calc((100vw - var(--wrap))/2));bottom:32px;background:#121a26d9;border:1px solid #66738c;border-radius:8px;color:#fff;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;min-height:40px}.cinema-control:hover{background:#273a56}
+    .showcase{padding:108px 0;border-top:1px solid var(--hairline)}
+    .showcase-head{max-width:760px}.showcase-head .section-lead{margin-bottom:31px}.showcase-tabs{display:none;gap:7px;flex-wrap:wrap;padding:5px;border:1px solid var(--hairline);border-radius:11px;background:var(--sunken);width:max-content;max-width:100%;margin-bottom:28px}.showcase.tabs-ready .showcase-tabs{display:flex}.showcase:not(.tabs-ready) .showcase-panel + .showcase-panel{margin-top:68px}
+    .showcase-tabs button{cursor:pointer;border:0;border-radius:7px;background:transparent;color:var(--secondary);padding:10px 16px;min-height:44px;font-weight:650;font-size:13px}.showcase-tabs button:hover{color:#fff;background:#1a2638}.showcase-tabs button[aria-selected="true"]{background:var(--raised);color:#fff;box-shadow:0 1px 5px #0005}
+    .showcase-panel{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);align-items:center;gap:clamp(28px,6vw,86px);animation:panel-enter .5s cubic-bezier(.2,.7,.2,1)}.showcase-panel[hidden]{display:none}.showcase-visual{border:1px solid #3f4c60;background:var(--surface);padding:9px;border-radius:13px;box-shadow:0 18px 50px #0005}.showcase-visual img{display:block;width:100%;aspect-ratio:1.6;object-fit:contain;border-radius:6px;background:#0b0f17}
+    .showcase-copy h3{font-size:clamp(27px,3vw,38px);line-height:1.18;letter-spacing:-.04em;margin-bottom:15px}.showcase-copy p{color:var(--secondary);margin:0 0 17px}.showcase-copy small{display:block;color:var(--muted);line-height:1.5;font-size:12px}
+    @keyframes panel-enter{from{opacity:0;transform:translateY(16px) scale(.99)}to{opacity:1;transform:none}}
+    .capabilities{background:var(--sunken);border-block:1px solid var(--hairline);padding:108px 0}.capabilities .section-title{max-width:680px}.capabilities .section-lead{margin-bottom:55px}
+    .capability-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:80px;row-gap:66px}
+    .capability-group{border-top:1px solid #455368;padding-top:20px}.capability-overline{font:700 11px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;color:#90b4ff;letter-spacing:.14em;margin-bottom:9px}.capability-group h3{font-size:27px;letter-spacing:-.04em;margin-bottom:18px}.capability-group ul{margin:0;padding:0;list-style:none}.capability-group li{display:grid;grid-template-columns:minmax(0,180px) 1fr;gap:20px;border-top:1px solid var(--hairline);padding:14px 0}.capability-group li strong{font-size:13px;font-weight:700}.capability-group li span{font-size:13px;line-height:1.5;color:var(--secondary)}
+    .motion-ready [data-reveal]{opacity:0;transform:translate3d(0,35px,0);filter:blur(5px);transition:opacity .85s cubic-bezier(.18,.7,.2,1),transform .85s cubic-bezier(.18,.7,.2,1),filter .85s cubic-bezier(.18,.7,.2,1)}
+    .motion-ready [data-reveal].is-visible{opacity:1;transform:none;filter:none}
     @media(max-width:900px){.nav-links{gap:15px}.nav-links a{font-size:12px}.nav-inner{gap:16px}.feature-story,.plugin-layout,.video-layout{gap:40px}.section{padding:88px 0}}
     @media(max-width:720px){.wrap{width:min(calc(100% - 36px),var(--wrap))}.nav-inner{height:64px}.nav-links{display:none;position:absolute;top:63px;left:0;right:0;padding:12px 18px 20px;background:#0b0f17;border-bottom:1px solid var(--hairline);flex-direction:column;align-items:stretch;gap:0}.nav-links.open{display:flex}.nav-links a{font-size:15px;padding:10px 8px}.nav-actions{margin-left:auto}.nav-download{display:none}.menu-toggle{display:block}.hero{padding:78px 0 62px}.hero h1{font-size:clamp(41px,9vw,62px)}.hero-intro{font-size:16px}.product-stage{margin-top:50px}.rail-inner{grid-template-columns:1fr}.rail-item{padding:12px 8px;border-left:0;border-bottom:1px solid var(--hairline)}.rail-item:last-child{border-bottom:0}.section{padding:76px 0}.feature-story,.plugin-layout,.video-layout,.compat-head,.faq-layout{grid-template-columns:1fr;gap:32px}.feature-story{margin-top:48px}.feature-story.reverse .story-media,.feature-story.reverse .story-copy{order:initial}.feature-story.reverse .story-copy{order:1}.feature-story.reverse .story-media{order:2}.compat-grid{grid-template-columns:1fr;gap:10px}.compat-cell{min-height:auto;padding:18px}.compat-cell .small{margin-bottom:9px}.video-section,.faq{padding:74px 0}.download-section{padding:78px 0}.faq-layout{gap:12px}.footer-inner{align-items:flex-start;flex-direction:column}.stage-caption{display:block}}
     @media(max-width:400px){.wrap{width:min(calc(100% - 30px),var(--wrap))}.brand{font-size:16px}.hero-actions .button-primary,.hero-actions .button-quiet{width:100%}.hero-meta span+span::before{display:none}.hero-meta{gap:5px 10px}.stage-browser{border-radius:7px}.browser-bar{height:23px}.stage-caption{font-size:11px}.section-title{font-size:34px}}
-    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    @media(max-width:800px){.showcase-panel{grid-template-columns:1fr}.showcase-visual{order:1}.showcase-copy{order:2}.capability-grid{column-gap:34px}.capability-group li{grid-template-columns:1fr;gap:3px}.float-label{display:none}}
+    @media(max-width:720px){.cinema{min-height:650px}.cinema video{object-position:54% center}.cinema-content{padding-bottom:96px}.cinema-control{right:18px;bottom:18px}.showcase,.capabilities{padding:78px 0}.capability-grid{grid-template-columns:1fr;row-gap:42px}.capabilities .section-lead{margin-bottom:36px}.showcase.tabs-ready .showcase-tabs{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:3px}.showcase-tabs button{padding:8px 6px;font-size:12px}.showcase-panel{gap:24px}.cinema h2{max-width:600px}}
+    @media(max-width:400px){.cinema{min-height:590px}.showcase.tabs-ready .showcase-tabs{grid-template-columns:1fr}.showcase-tabs button{text-align:left}.cinema h2{font-size:39px}.motion-note{font-size:11px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}.motion-ready [data-reveal]{opacity:1;transform:none;filter:none}.stage-browser{transform:none!important}.cinema video,.cinema-content{transform:none!important}.float-label{animation:none!important}}
   </style>
+  <noscript><style>
+    .cinema-control,.lang-switch,.menu-toggle{display:none!important}
+    @media(max-width:720px){.nav-inner{height:auto;flex-wrap:wrap;padding-block:12px}.nav-links{display:flex;position:static;flex-basis:100%;background:transparent;border:0;padding:0;flex-direction:row;flex-wrap:wrap;gap:8px}.nav-links a{padding:5px}}
+  </style></noscript>
 </head>
 <body id="top">
   <a class="skip" href="#main" data-fr="Aller au contenu" data-en="Skip to content">Aller au contenu</a>
@@ -76,8 +108,8 @@
       <nav class="nav-links" id="navigation" aria-label="Navigation principale" data-aria-fr="Navigation principale" data-aria-en="Main navigation">
         <a href="#features" data-fr="Fonctionnalités" data-en="Features">Fonctionnalités</a>
         <a href="#plugins" data-fr="Plugins" data-en="Plugins">Plugins</a>
+        <a href="#toutes-les-fonctions" data-fr="Tout voir" data-en="All features">Tout voir</a>
         <a href="#compatibilite" data-fr="Compatibilité" data-en="Compatibility">Compatibilité</a>
-        <a href="#questions" data-fr="Questions" data-en="FAQ">Questions</a>
       </nav>
       <div class="nav-actions"><button class="lang-switch" type="button" id="language" aria-label="Switch to English">EN</button><a class="nav-download" href="#telecharger" data-fr="Télécharger" data-en="Download">Télécharger</a><button class="menu-toggle" type="button" id="menu" aria-expanded="false" aria-controls="navigation" data-fr="Menu" data-en="Menu">Menu</button></div>
     </div>
@@ -97,6 +129,8 @@
         </div>
         <div class="product-stage">
           <div class="stage-browser"><div class="browser-bar" aria-hidden="true"><i></i><i></i><i></i><span>NovyDeck</span></div><img src="assets/app.webp" width="1840" height="1150" alt="Interface réelle de NovyDeck : profil de démonstration et touches du deck" data-alt-fr="Interface réelle de NovyDeck : profil de démonstration et touches du deck" data-alt-en="Real NovyDeck interface: demo profile and deck keys" fetchpriority="high"></div>
+          <div class="float-label one" aria-hidden="true" data-fr="15 touches · D6" data-en="15 keys · D6">15 touches · D6</div>
+          <div class="float-label two" aria-hidden="true" data-fr="Vos profils, votre rythme" data-en="Your profiles, your flow">Vos profils, votre rythme</div>
           <div class="stage-caption"><strong data-fr="Un vrai aperçu de NovyDeck, pas une maquette." data-en="An actual NovyDeck screenshot, not a mockup.">Un vrai aperçu de NovyDeck, pas une maquette.</strong><span data-fr="Capture du profil de démonstration, sans appareil connecté." data-en="Demo profile screenshot, no device connected.">Capture du profil de démonstration, sans appareil connecté.</span></div>
         </div>
       </div>
@@ -106,13 +140,92 @@
       <div class="rail-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h6v5H4zM14 13h6v5h-6zM10 8h3v8h1" stroke-linejoin="round"/></svg><span data-fr="Des macros à composer visuellement" data-en="Build macros visually">Des macros à composer visuellement</span></div>
       <div class="rail-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" stroke-linejoin="round"/></svg><span data-fr="Un magasin de plugins intégré" data-en="A built-in plugin store">Un magasin de plugins intégré</span></div>
     </div></div>
+    <section class="cinema" id="film" aria-labelledby="cinema-title">
+      <video id="cinema-film" muted loop playsinline preload="none" poster="assets/video-poster.webp" aria-hidden="true">
+        <source src="assets/novydeck-motion.mp4" type="video/mp4">
+      </video>
+      <div class="cinema-content wrap">
+        <div class="cinema-copy" data-reveal>
+          <span class="section-kicker" data-fr="NovyDeck en mouvement" data-en="NovyDeck in motion">NovyDeck en mouvement</span>
+          <h2 id="cinema-title" data-fr="Une touche. Puis tout s’ouvre." data-en="One key. A whole new flow.">Une touche. Puis tout s’ouvre.</h2>
+          <p data-fr="Une interface native pour mettre vos idées sur vos touches. Regardez le deck prendre forme, puis imaginez ce que chaque appui pourrait faire." data-en="A native app that puts your ideas on your keys. Watch the deck take shape, then imagine what each press could do.">Une interface native pour mettre vos idées sur vos touches. Regardez le deck prendre forme, puis imaginez ce que chaque appui pourrait faire.</p>
+          <span class="motion-note" data-fr="Extrait de la vidéo officielle : D6 animé en 3D, captures du logiciel issues de l’application." data-en="Clip from the official film: 3D-animated D6, genuine app screenshots.">Extrait de la vidéo officielle : D6 animé en 3D, captures du logiciel issues de l’application.</span>
+        </div>
+      </div>
+      <button class="cinema-control" type="button" id="cinema-toggle" aria-pressed="false" data-aria-fr="Lire ou mettre en pause l’animation" data-aria-en="Play or pause the animation">Lire l’animation</button>
+    </section>
     <section class="section" id="features" aria-labelledby="features-title"><div class="wrap">
       <span class="section-kicker" data-fr="Ce que vous pouvez faire" data-en="What you can do">Ce que vous pouvez faire</span><h2 class="section-title" id="features-title" data-fr="Une idée sur l’écran. Une action sous le doigt." data-en="An idea on screen. An action at your fingertips.">Une idée sur l’écran. Une action sous le doigt.</h2><p class="section-lead" data-fr="NovyDeck vous donne les outils pour organiser votre espace de travail, sans vous imposer la manière de vous en servir." data-en="NovyDeck gives you the tools to shape your workspace, without telling you how to use it.">NovyDeck vous donne les outils pour organiser votre espace de travail, sans vous imposer la manière de vous en servir.</p>
-      <div class="feature-story"><figure class="story-media"><img src="assets/light.webp" width="1250" height="781" loading="lazy" alt="NovyDeck en thème clair avec touches personnalisées" data-alt-fr="NovyDeck en thème clair avec touches personnalisées" data-alt-en="NovyDeck light theme with customized keys"><figcaption data-fr="L’interface NovyDeck en thème clair." data-en="The NovyDeck interface in light mode.">L’interface NovyDeck en thème clair.</figcaption></figure><div class="story-copy"><div class="number">01 / 03</div><h3 data-fr="Des touches qui n’appartiennent qu’à vous." data-en="Keys that belong to you.">Des touches qui n’appartiennent qu’à vous.</h3><p data-fr="Images, GIF, couleurs ou vidéo courte : composez chaque touche et voyez son rendu avant de l’envoyer sur votre deck." data-en="Images, GIFs, colors or short videos: shape each key and preview it before sending it to your deck.">Images, GIF, couleurs ou vidéo courte : composez chaque touche et voyez son rendu avant de l’envoyer sur votre deck.</p><ul class="detail-list"><li data-fr="Profils, pages et dossiers pour tout organiser" data-en="Profiles, pages and folders to stay organized">Profils, pages et dossiers pour tout organiser</li><li data-fr="Changement de profil selon l’application active" data-en="Switch profiles with the active application">Changement de profil selon l’application active</li><li data-fr="Images ON/OFF distinctes pour les actions compatibles" data-en="Separate ON/OFF images for compatible actions">Images ON/OFF distinctes pour les actions compatibles</li></ul></div></div>
-      <div class="feature-story reverse"><figure class="story-media"><img src="assets/atelier.webp" width="1440" height="900" loading="lazy" alt="Atelier de blocs NovyDeck pour construire des macros" data-alt-fr="Atelier de blocs NovyDeck pour construire des macros" data-alt-en="NovyDeck block workshop for building macros"><figcaption data-fr="Un exemple de macro dans l’Atelier de blocs." data-en="An example macro in the block workshop.">Un exemple de macro dans l’Atelier de blocs.</figcaption></figure><div class="story-copy"><div class="number">02 / 03</div><h3 data-fr="Des actions complexes, sans écrire de script." data-en="Powerful actions, no scripts required.">Des actions complexes, sans écrire de script.</h3><p data-fr="Raccourcis, texte, médias, conditions et actions de plugins s’assemblent dans l’Atelier de blocs. Simulez d’abord, exécutez ensuite." data-en="Shortcuts, text, media, conditions and plugin actions come together in the block workshop. Simulate first, run when you're ready.">Raccourcis, texte, médias, conditions et actions de plugins s’assemblent dans l’Atelier de blocs. Simulez d’abord, exécutez ensuite.</p><ul class="detail-list"><li data-fr="Actions à l’appui court et à l’appui long" data-en="Short-press and long-press actions">Actions à l’appui court et à l’appui long</li><li data-fr="Simulation avant les commandes réelles" data-en="Simulation before real commands">Simulation avant les commandes réelles</li><li data-fr="Assistant local facultatif, désactivé par défaut" data-en="Optional local assistant, off by default">Assistant local facultatif, désactivé par défaut</li></ul></div></div>
+      <div class="feature-story" data-reveal><figure class="story-media"><img src="assets/light.webp" width="1250" height="781" loading="lazy" alt="NovyDeck en thème clair avec touches personnalisées" data-alt-fr="NovyDeck en thème clair avec touches personnalisées" data-alt-en="NovyDeck light theme with customized keys"><figcaption data-fr="L’interface NovyDeck en thème clair." data-en="The NovyDeck interface in light mode.">L’interface NovyDeck en thème clair.</figcaption></figure><div class="story-copy"><div class="number">01 / 03</div><h3 data-fr="Des touches qui n’appartiennent qu’à vous." data-en="Keys that belong to you.">Des touches qui n’appartiennent qu’à vous.</h3><p data-fr="Images, GIF, couleurs ou vidéo courte : composez chaque touche et voyez son rendu avant de l’envoyer sur votre deck." data-en="Images, GIFs, colors or short videos: shape each key and preview it before sending it to your deck.">Images, GIF, couleurs ou vidéo courte : composez chaque touche et voyez son rendu avant de l’envoyer sur votre deck.</p><ul class="detail-list"><li data-fr="Profils, pages et dossiers pour tout organiser" data-en="Profiles, pages and folders to stay organized">Profils, pages et dossiers pour tout organiser</li><li data-fr="Changement de profil selon l’application active" data-en="Switch profiles with the active application">Changement de profil selon l’application active</li><li data-fr="Images ON/OFF distinctes pour les actions compatibles" data-en="Separate ON/OFF images for compatible actions">Images ON/OFF distinctes pour les actions compatibles</li></ul></div></div>
+      <div class="feature-story reverse" data-reveal><figure class="story-media"><img src="assets/atelier.webp" width="1440" height="900" loading="lazy" alt="Atelier de blocs NovyDeck pour construire des macros" data-alt-fr="Atelier de blocs NovyDeck pour construire des macros" data-alt-en="NovyDeck block workshop for building macros"><figcaption data-fr="Un exemple de macro dans l’Atelier de blocs." data-en="An example macro in the block workshop.">Un exemple de macro dans l’Atelier de blocs.</figcaption></figure><div class="story-copy"><div class="number">02 / 03</div><h3 data-fr="Des actions complexes, sans écrire de script." data-en="Powerful actions, no scripts required.">Des actions complexes, sans écrire de script.</h3><p data-fr="Raccourcis, texte, médias, conditions et actions de plugins s’assemblent dans l’Atelier de blocs. Simulez d’abord, exécutez ensuite." data-en="Shortcuts, text, media, conditions and plugin actions come together in the block workshop. Simulate first, run when you're ready.">Raccourcis, texte, médias, conditions et actions de plugins s’assemblent dans l’Atelier de blocs. Simulez d’abord, exécutez ensuite.</p><ul class="detail-list"><li data-fr="Actions à l’appui court et à l’appui long" data-en="Short-press and long-press actions">Actions à l’appui court et à l’appui long</li><li data-fr="Simulation avant les commandes réelles" data-en="Simulation before real commands">Simulation avant les commandes réelles</li><li data-fr="Assistant local facultatif, désactivé par défaut" data-en="Optional local assistant, off by default">Assistant local facultatif, désactivé par défaut</li></ul></div></div>
       </div></section>
-    <section class="section inset" id="plugins" aria-labelledby="plugins-title"><div class="wrap plugin-layout"><div class="plugin-copy"><span class="section-kicker">03 / 03 · PLUGINS</span><h2 class="section-title" id="plugins-title" data-fr="Votre deck peut toujours en faire plus." data-en="There's always more your deck can do.">Votre deck peut toujours en faire plus.</h2><p class="section-lead" data-fr="Découvrez les plugins officiels et communautaires depuis l’application. Consultez les prérequis, installez avec confirmation et mettez à jour sans perdre vos profils ni vos images." data-en="Discover first-party and community plugins inside the app. Review requirements, confirm installations and update without losing your profiles or images.">Découvrez les plugins officiels et communautaires depuis l’application. Consultez les prérequis, installez avec confirmation et mettez à jour sans perdre vos profils ni vos images.</p><a class="text-link" href="https://github.com/HatiFlash/novydeck-plugins" target="_blank" rel="noopener noreferrer"><span data-fr="Explorer les plugins sur GitHub" data-en="Explore plugins on GitHub">Explorer les plugins sur GitHub</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div><div class="store-shot"><img src="assets/store.webp" width="1300" height="813" loading="lazy" alt="Magasin de plugins NovyDeck en français" data-alt-fr="Magasin de plugins NovyDeck en français" data-alt-en="NovyDeck plugin store screenshot in French"></div></div></section>
+    <section class="section inset" id="plugins" aria-labelledby="plugins-title"><div class="wrap plugin-layout" data-reveal><div class="plugin-copy"><span class="section-kicker">03 / 03 · PLUGINS</span><h2 class="section-title" id="plugins-title" data-fr="Votre deck peut toujours en faire plus." data-en="There's always more your deck can do.">Votre deck peut toujours en faire plus.</h2><p class="section-lead" data-fr="Découvrez les plugins officiels et communautaires depuis l’application. Consultez les prérequis, installez avec confirmation et mettez à jour sans perdre vos profils ni vos images." data-en="Discover first-party and community plugins inside the app. Review requirements, confirm installations and update without losing your profiles or images.">Découvrez les plugins officiels et communautaires depuis l’application. Consultez les prérequis, installez avec confirmation et mettez à jour sans perdre vos profils ni vos images.</p><a class="text-link" href="https://github.com/HatiFlash/novydeck-plugins" target="_blank" rel="noopener noreferrer"><span data-fr="Explorer les plugins sur GitHub" data-en="Explore plugins on GitHub">Explorer les plugins sur GitHub</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div><div class="store-shot"><img src="assets/store.webp" width="1300" height="813" loading="lazy" alt="Magasin de plugins NovyDeck en français" data-alt-fr="Magasin de plugins NovyDeck en français" data-alt-en="NovyDeck plugin store screenshot in French"></div></div></section>
+    <section class="showcase" id="details" aria-labelledby="details-title">
+      <div class="wrap">
+        <div class="showcase-head" data-reveal>
+          <span class="section-kicker" data-fr="Dans les détails" data-en="The little details">Dans les détails</span>
+          <h2 class="section-title" id="details-title" data-fr="Pensé jusque dans le dernier pixel." data-en="Thought through to the last pixel.">Pensé jusque dans le dernier pixel.</h2>
+          <p class="section-lead" data-fr="Explorez trois gestes qui changent la manière de créer avec votre deck." data-en="Explore three details that change how you create with your deck.">Explorez trois gestes qui changent la manière de créer avec votre deck.</p>
+        </div>
+        <div class="showcase-tabs" role="tablist" aria-label="Démonstrations NovyDeck" data-aria-fr="Démonstrations NovyDeck" data-aria-en="NovyDeck demonstrations">
+          <button type="button" role="tab" id="tab-states" aria-controls="panel-states" aria-selected="true" tabindex="0" data-fr="Touches à deux états" data-en="Two-state keys">Touches à deux états</button>
+          <button type="button" role="tab" id="tab-media" aria-controls="panel-media" aria-selected="false" tabindex="-1" data-fr="Médias sur mesure" data-en="Custom media">Médias sur mesure</button>
+          <button type="button" role="tab" id="tab-assistant" aria-controls="panel-assistant" aria-selected="false" tabindex="-1" data-fr="Assistant local" data-en="Local assistant">Assistant local</button>
+        </div>
+        <div class="showcase-panel" id="panel-states" role="tabpanel" aria-labelledby="tab-states">
+          <div class="showcase-visual"><img src="assets/states.webp" width="1400" height="787" loading="lazy" alt="Choix d’une face ON depuis l’état confirmé par un plugin" data-alt-fr="Choix d’une face ON depuis l’état confirmé par un plugin" data-alt-en="Choosing an ON key face from a plugin-confirmed state"></div>
+          <div class="showcase-copy"><span class="section-kicker" data-fr="Votre retour visuel" data-en="Visual feedback">Votre retour visuel</span><h3 data-fr="Voyez ce que la touche a fait." data-en="See what your key just did.">Voyez ce que la touche a fait.</h3><p data-fr="Associez deux images à une touche, ou reliez-la à l’état ON/OFF confirmé par un plugin compatible. Si l’état reste inconnu, NovyDeck n’invente pas une réponse." data-en="Assign two images to a key, or connect it to an ON/OFF state confirmed by a compatible plugin. If the state is unknown, NovyDeck won't invent an answer.">Associez deux images à une touche, ou reliez-la à l’état ON/OFF confirmé par un plugin compatible. Si l’état reste inconnu, NovyDeck n’invente pas une réponse.</p><small data-fr="Les états transmis dépendent de la version et du comportement du plugin installé." data-en="Reported states depend on the version and behavior of the installed plugin.">Les états transmis dépendent de la version et du comportement du plugin installé.</small></div>
+        </div>
+        <div class="showcase-panel" id="panel-media" role="tabpanel" aria-labelledby="tab-media">
+          <div class="showcase-visual"><img src="assets/crop.webp" width="1400" height="875" loading="lazy" alt="Éditeur de recadrage d’image pour une touche NovyDeck" data-alt-fr="Éditeur de recadrage d’image pour une touche NovyDeck" data-alt-en="NovyDeck image crop editor for a key"></div>
+          <div class="showcase-copy"><span class="section-kicker" data-fr="La touche comme écran" data-en="Your key, your canvas">La touche comme écran</span><h3 data-fr="Chaque image trouve sa place." data-en="Every image finds its place.">Chaque image trouve sa place.</h3><p data-fr="Recadrez et zoomez vos médias directement dans l’aperçu, sans altérer le fichier d’origine. Images, GIF et vidéos courtes donnent une autre dimension à vos touches." data-en="Crop and zoom media in the preview without altering the original file. Images, GIFs and short videos add another dimension to your keys.">Recadrez et zoomez vos médias directement dans l’aperçu, sans altérer le fichier d’origine. Images, GIF et vidéos courtes donnent une autre dimension à vos touches.</p><small data-fr="Le rendu de la capture est celui de l’application, pas une image du périphérique physique." data-en="The screenshot shows the app, not a photograph of the physical device.">Le rendu de la capture est celui de l’application, pas une image du périphérique physique.</small></div>
+        </div>
+        <div class="showcase-panel" id="panel-assistant" role="tabpanel" aria-labelledby="tab-assistant">
+          <div class="showcase-visual"><img src="assets/assistant.webp" width="1400" height="875" loading="lazy" alt="Aperçu d’une macro proposée par l’assistant local" data-alt-fr="Aperçu d’une macro proposée par l’assistant local" data-alt-en="Preview of a macro proposed by the local assistant"></div>
+          <div class="showcase-copy"><span class="section-kicker" data-fr="Facultatif par défaut" data-en="Optional by default">Facultatif par défaut</span><h3 data-fr="Décrivez l’idée. Gardez la décision." data-en="Describe the idea. Keep control.">Décrivez l’idée. Gardez la décision.</h3><p data-fr="Une phrase en français ou en anglais peut devenir des blocs proposés en aperçu. Rien n’est inséré sans votre validation ; l’IA locale est facultative et désactivée par défaut." data-en="A sentence in French or English can become blocks in a preview. Nothing is added without your approval; local AI is optional and off by default.">Une phrase en français ou en anglais peut devenir des blocs proposés en aperçu. Rien n’est inséré sans votre validation ; l’IA locale est facultative et désactivée par défaut.</p><small data-fr="L’assistant dépend des composants locaux que vous choisissez de configurer." data-en="The assistant depends on the local components you choose to configure.">L’assistant dépend des composants locaux que vous choisissez de configurer.</small></div>
+        </div>
+      </div>
+    </section>
     <section class="video-section" id="apercu" aria-labelledby="video-title"><div class="wrap video-layout"><div><span class="section-kicker" data-fr="En images" data-en="Watch it in action">En images</span><h2 class="section-title" id="video-title" data-fr="Regardez NovyDeck prendre vie." data-en="See NovyDeck come to life.">Regardez NovyDeck prendre vie.</h2><p class="section-lead" data-fr="Quarante secondes pour découvrir le pavé, les touches et l’interface. Les captures du logiciel sont réelles ; la présentation du D6 est une animation 3D." data-en="A 40-second look at the deck, its keys and the app. Software captures are real; the D6 presentation is a 3D animation.">Quarante secondes pour découvrir le pavé, les touches et l’interface. Les captures du logiciel sont réelles ; la présentation du D6 est une animation 3D.</p><a class="text-link" href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1" target="_blank" rel="noopener noreferrer"><span data-fr="Voir la version publiée" data-en="View the published release">Voir la version publiée</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg></a></div><a class="video-cover" href="https://github.com/HatiFlash/NovyDeck/releases/download/v0.11.1/NovyDeck-0.11.1-Presentation.mp4" target="_blank" rel="noopener noreferrer" aria-label="Voir la vidéo de présentation NovyDeck (MP4)" data-aria-fr="Voir la vidéo de présentation NovyDeck (MP4)" data-aria-en="Watch the NovyDeck presentation video (MP4)"><img src="assets/video-poster.webp" width="1280" height="720" loading="lazy" alt="Affiche du film de présentation NovyDeck"><span class="play" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="m7 4 13 8-13 8z"/></svg></span></a></div></section>
+    <section class="capabilities" id="toutes-les-fonctions" aria-labelledby="capabilities-title">
+      <div class="wrap">
+        <span class="section-kicker" data-fr="Plus qu’un éditeur de touches" data-en="More than a key editor">Plus qu’un éditeur de touches</span>
+        <h2 class="section-title" id="capabilities-title" data-fr="Toute la palette NovyDeck." data-en="The full NovyDeck toolkit.">Toute la palette NovyDeck.</h2>
+        <p class="section-lead" data-fr="Du premier raccourci au deck piloté par des plugins, chaque pièce a sa place. Voici les fonctions qui méritent leur propre lumière." data-en="From your first shortcut to a plugin-powered deck, each piece has its place. These are the capabilities worth a closer look.">Du premier raccourci au deck piloté par des plugins, chaque pièce a sa place. Voici les fonctions qui méritent leur propre lumière.</p>
+        <div class="capability-grid">
+          <div class="capability-group" data-reveal><div class="capability-overline">01 / KEYS</div><h3 data-fr="Composer le deck" data-en="Shape the deck">Composer le deck</h3><ul>
+            <li><strong data-fr="Images et mouvement" data-en="Images & motion">Images et mouvement</strong><span data-fr="Icônes, GIF et vidéos courtes sur les touches LCD." data-en="Icons, GIFs and short videos on LCD keys.">Icônes, GIF et vidéos courtes sur les touches LCD.</span></li>
+            <li><strong data-fr="Recadrage fidèle" data-en="Non-destructive crop">Recadrage fidèle</strong><span data-fr="Zoomez et déplacez un média sans toucher à l’original." data-en="Zoom and reposition media without changing the original.">Zoomez et déplacez un média sans toucher à l’original.</span></li>
+            <li><strong data-fr="Deux façons d’appuyer" data-en="Two ways to press">Deux façons d’appuyer</strong><span data-fr="Action distincte à l’appui court et à l’appui long." data-en="Different actions for a short or long press.">Action distincte à l’appui court et à l’appui long.</span></li>
+            <li><strong data-fr="États ON / OFF" data-en="ON / OFF states">États ON / OFF</strong><span data-fr="Images distinctes, bascule locale ou état confirmé par plugin." data-en="Separate images, local toggle or plugin-confirmed state.">Images distinctes, bascule locale ou état confirmé par plugin.</span></li>
+            <li><strong data-fr="Profils & pages" data-en="Profiles & pages">Profils & pages</strong><span data-fr="Dossiers et profils qui peuvent suivre l’application active." data-en="Folders and profiles that can follow the active app.">Dossiers et profils qui peuvent suivre l’application active.</span></li>
+          </ul></div>
+          <div class="capability-group" data-reveal><div class="capability-overline">02 / WORKFLOWS</div><h3 data-fr="Construire des actions" data-en="Build your actions">Construire des actions</h3><ul>
+            <li><strong data-fr="Atelier de blocs" data-en="Block workshop">Atelier de blocs</strong><span data-fr="Assemblez une macro visuellement, sans script." data-en="Assemble a macro visually, without a script.">Assemblez une macro visuellement, sans script.</span></li>
+            <li><strong data-fr="Tout en séquence" data-en="One sequence">Tout en séquence</strong><span data-fr="Raccourcis, texte, applications, médias et fenêtres." data-en="Shortcuts, text, apps, media and windows.">Raccourcis, texte, applications, médias et fenêtres.</span></li>
+            <li><strong data-fr="Logique intégrée" data-en="Built-in logic">Logique intégrée</strong><span data-fr="Conditions, attentes, répétitions et variables." data-en="Conditions, delays, repeats and variables.">Conditions, attentes, répétitions et variables.</span></li>
+            <li><strong data-fr="Plugins combinés" data-en="Combine plugins">Plugins combinés</strong><span data-fr="Enchaînez des actions de plugins différents dans une macro." data-en="Chain actions from different plugins in one macro.">Enchaînez des actions de plugins différents dans une macro.</span></li>
+            <li><strong data-fr="Simuler d’abord" data-en="Simulate first">Simuler d’abord</strong><span data-fr="Aperçu et simulation avant l’exécution réelle." data-en="Preview and simulate before a real run.">Aperçu et simulation avant l’exécution réelle.</span></li>
+          </ul></div>
+          <div class="capability-group" data-reveal><div class="capability-overline">03 / ECOSYSTEM</div><h3 data-fr="Étendre les possibilités" data-en="Extend what's possible">Étendre les possibilités</h3><ul>
+            <li><strong data-fr="Magasin intégré" data-en="Built-in store">Magasin intégré</strong><span data-fr="Parcourez plugins officiels et communautaires." data-en="Browse first-party and community plugins.">Parcourez plugins officiels et communautaires.</span></li>
+            <li><strong data-fr="Plugins officiels" data-en="First-party plugins">Plugins officiels</strong><span data-fr="Horloge, compteur, moniteur, lecture en cours, OLED, Home Assistant et Google Assistant." data-en="Clock, counter, monitor, now playing, OLED, Home Assistant and Google Assistant.">Horloge, compteur, moniteur, lecture en cours, OLED, Home Assistant et Google Assistant.</span></li>
+            <li><strong data-fr="Contrôles d’archive" data-en="Archive checks">Contrôles d’archive</strong><span data-fr="Empreinte SHA-256, badges et avertissements visibles." data-en="SHA-256 checks, badges and visible warnings.">Empreinte SHA-256, badges et avertissements visibles.</span></li>
+            <li><strong data-fr="Mise à jour prudente" data-en="Careful updates">Mise à jour prudente</strong><span data-fr="Confirmation, sauvegarde et retour arrière du plugin ciblé." data-en="Confirmation, backup and rollback for the selected plugin.">Confirmation, sauvegarde et retour arrière du plugin ciblé.</span></li>
+            <li><strong data-fr="Inspecteurs de plugins" data-en="Plugin inspectors">Inspecteurs de plugins</strong><span data-fr="Réglages propres à chaque action si le plugin les fournit." data-en="Per-action settings when a plugin provides them.">Réglages propres à chaque action si le plugin les fournit.</span></li>
+            <li><strong data-fr="Import Stream Deck" data-en="Stream Deck import">Import Stream Deck</strong><span data-fr="Archives .sdPlugin et .streamDeckPlugin non chiffrées." data-en="Unencrypted .sdPlugin and .streamDeckPlugin archives.">Archives .sdPlugin et .streamDeckPlugin non chiffrées.</span></li>
+            <li><strong data-fr="Retrait guidé" data-en="Guided removal">Retrait guidé</strong><span data-fr="Signale les touches et blocs liés avant une désinstallation." data-en="Shows linked keys and blocks before uninstalling.">Signale les touches et blocs liés avant une désinstallation.</span></li>
+          </ul></div>
+          <div class="capability-group" data-reveal><div class="capability-overline">04 / CONTROL</div><h3 data-fr="Garder la main" data-en="Stay in control">Garder la main</h3><ul>
+            <li><strong data-fr="Sauvegardes" data-en="Backups">Sauvegardes</strong><span data-fr="Copies rotatives et restauration guidée des profils." data-en="Rotating copies and guided profile restoration.">Copies rotatives et restauration guidée des profils.</span></li>
+            <li><strong data-fr="Import Elgato" data-en="Elgato import">Import Elgato</strong><span data-fr="Import des sauvegardes de profils compatibles." data-en="Import compatible profile backups.">Import des sauvegardes de profils compatibles.</span></li>
+            <li><strong data-fr="MCP avec accord" data-en="MCP with approval">MCP avec accord</strong><span data-fr="Claude et autres clients compatibles proposent ; vous validez." data-en="Compatible AI clients propose; you approve.">Claude et autres clients compatibles proposent ; vous validez.</span></li>
+            <li><strong data-fr="À votre rythme" data-en="On your schedule">À votre rythme</strong><span data-fr="Thèmes, interface FR/EN et démarrage réduit facultatif." data-en="Themes, FR/EN interface and optional minimized startup.">Thèmes, interface FR/EN et démarrage réduit facultatif.</span></li>
+            <li><strong data-fr="Un autre deck ?" data-en="Another deck?">Un autre deck ?</strong><span data-fr="Préparez un rapport matériel anonymisé pour aider à l’adapter." data-en="Prepare an anonymized hardware report to help support it.">Préparez un rapport matériel anonymisé pour aider à l’adapter.</span></li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
     <section class="section inset" id="compatibilite" aria-labelledby="compat-title"><div class="wrap"><div class="compat-head"><div><span class="section-kicker" data-fr="À savoir avant d’installer" data-en="Before you install">À savoir avant d’installer</span><h2 class="section-title" id="compat-title" data-fr="Pensé pour votre PC. Clair sur le matériel." data-en="Made for your PC. Clear about hardware.">Pensé pour votre PC. Clair sur le matériel.</h2></div><p class="section-lead" data-fr="Une application Windows native en Rust et egui. NovyDeck a été testé avec le FIFINE AmpliGame D6 et l’Elgato Stream Deck ; les autres modèles ne sont pas encore garantis." data-en="A native Windows app built with Rust and egui. NovyDeck has been tested with the FIFINE AmpliGame D6 and Elgato Stream Deck; other models aren't guaranteed yet.">Une application Windows native en Rust et egui. NovyDeck a été testé avec le FIFINE AmpliGame D6 et l’Elgato Stream Deck ; les autres modèles ne sont pas encore garantis.</p></div><div class="compat-grid"><div class="compat-cell"><span class="small" data-fr="Système" data-en="System">Système</span><strong>Windows 10 / 11</strong><p data-fr="64 bits · installation par utilisateur ou archive portable." data-en="64-bit · per-user installer or portable archive.">64 bits · installation par utilisateur ou archive portable.</p></div><div class="compat-cell"><span class="small" data-fr="Périphériques testés" data-en="Tested devices">Périphériques testés</span><strong>FIFINE D6 · Elgato</strong><p data-fr="D6 à 15 touches et modèles Elgato Stream Deck testés." data-en="15-key D6 and tested Elgato Stream Deck models.">D6 à 15 touches et modèles Elgato Stream Deck testés.</p></div><div class="compat-cell"><span class="small" data-fr="Code ouvert" data-en="Open source">Code ouvert</span><strong>Rust · MIT</strong><p data-fr="Code source, historique et suivi des problèmes publics." data-en="Public source code, history and issue tracking.">Code source, historique et suivi des problèmes publics.</p></div></div></div></section>
     <section class="download-section" id="telecharger" aria-labelledby="download-title"><div class="wrap"><span class="section-kicker" data-fr="C’est à vous de jouer" data-en="Your turn">C’est à vous de jouer</span><h2 class="section-title" id="download-title" data-fr="Prêt à faire vôtre chaque touche ?" data-en="Ready to make every key yours?">Prêt à faire vôtre chaque touche ?</h2><p data-fr="Téléchargez l’installateur Windows ou choisissez l’archive portable depuis la dernière version publiée. Vos profils et médias sont conservés lors d’une mise à jour." data-en="Download the Windows installer or choose the portable archive from the latest release. Your profiles and media are preserved on update.">Téléchargez l’installateur Windows ou choisissez l’archive portable depuis la dernière version publiée. Vos profils et médias sont conservés lors d’une mise à jour.</p><div class="section-actions"><a class="button-primary" href="https://github.com/HatiFlash/NovyDeck/releases/download/v0.11.1/NovyDeck-0.11.1-Setup.exe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v2h16v-2" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-fr="Télécharger l’installateur · v0.11.1" data-en="Download installer · v0.11.1">Télécharger l’installateur · v0.11.1</span></a><a class="button-quiet" href="https://github.com/HatiFlash/NovyDeck/releases/latest" target="_blank" rel="noopener noreferrer" data-fr="Autres téléchargements" data-en="Other downloads">Autres téléchargements</a></div><div class="download-foot"><span data-fr="Windows 10/11 · 64 bits · installation sans droits administrateur." data-en="Windows 10/11 · 64-bit · no admin rights needed to install.">Windows 10/11 · 64 bits · installation sans droits administrateur.</span> <a href="https://github.com/HatiFlash/NovyDeck" target="_blank" rel="noopener noreferrer" data-fr="Voir le code source" data-en="View source code">Voir le code source</a></div></div></section>
     <section class="faq" id="questions" aria-labelledby="faq-title"><div class="wrap faq-layout"><div><span class="section-kicker">FAQ</span><h2 class="section-title" id="faq-title" data-fr="Les réponses, sans détour." data-en="The short answers.">Les réponses, sans détour.</h2></div><div class="faq-list"><details><summary data-fr="NovyDeck est-il gratuit ?" data-en="Is NovyDeck free?">NovyDeck est-il gratuit ?</summary><p data-fr="Oui. NovyDeck est un logiciel libre publié sous licence MIT. Son code source est consultable sur GitHub." data-en="Yes. NovyDeck is open-source software under the MIT license. You can inspect the source on GitHub.">Oui. NovyDeck est un logiciel libre publié sous licence MIT. Son code source est consultable sur GitHub.</p></details><details><summary data-fr="Quels decks sont pris en charge ?" data-en="Which decks are supported?">Quels decks sont pris en charge ?</summary><p data-fr="Le FIFINE AmpliGame D6 et l’Elgato Stream Deck ont été testés. D’autres decks basés sur Mirabox pourraient fonctionner, mais ne sont pas encore validés." data-en="The FIFINE AmpliGame D6 and Elgato Stream Deck have been tested. Other Mirabox-based decks may work, but haven't been validated yet.">Le FIFINE AmpliGame D6 et l’Elgato Stream Deck ont été testés. D’autres decks basés sur Mirabox pourraient fonctionner, mais ne sont pas encore validés.</p></details><details><summary data-fr="Mes profils restent-ils après une mise à jour ?" data-en="Will an update keep my profiles?">Mes profils restent-ils après une mise à jour ?</summary><p data-fr="Oui, l’installateur met à jour les exécutables en conservant vos profils, médias et plugins. Pour la version portable, remplacez les exécutables sans supprimer vos fichiers personnels." data-en="Yes. The installer updates the executables while preserving your profiles, media and plugins. For the portable version, replace the executables without deleting personal files.">Oui, l’installateur met à jour les exécutables en conservant vos profils, médias et plugins. Pour la version portable, remplacez les exécutables sans supprimer vos fichiers personnels.</p></details><details><summary data-fr="Faut-il une connexion ou une IA ?" data-en="Do I need an account or AI?">Faut-il une connexion ou une IA ?</summary><p data-fr="L’assistant local est facultatif et désactivé par défaut. Le magasin de plugins se connecte après votre accord pour consulter ou installer des plugins. Certaines actions de plugins peuvent dépendre de services tiers." data-en="The local assistant is optional and off by default. The plugin store connects with your consent to browse or install plugins. Some plugin actions may depend on third-party services.">L’assistant local est facultatif et désactivé par défaut. Le magasin de plugins se connecte après votre accord pour consulter ou installer des plugins. Certaines actions de plugins peuvent dépendre de services tiers.</p></details></div></div></section>
@@ -123,6 +236,17 @@
       const language = document.querySelector('#language');
       const menu = document.querySelector('#menu');
       const navigation = document.querySelector('#navigation');
+      const film = document.querySelector('#cinema-film');
+      const filmToggle = document.querySelector('#cinema-toggle');
+      const stage = document.querySelector('.product-stage');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      function updateFilmButton() {
+        const playing = !film.paused;
+        filmToggle.setAttribute('aria-pressed', String(playing));
+        filmToggle.textContent = document.documentElement.lang === 'fr'
+          ? (playing ? 'Mettre en pause' : 'Lire l’animation')
+          : (playing ? 'Pause animation' : 'Play animation');
+      }
       function setLanguage(lang) {
         document.documentElement.lang = lang;
         document.querySelectorAll('[data-fr][data-en]').forEach(el => { el.textContent = el.dataset[lang]; });
@@ -134,6 +258,7 @@
         document.querySelector('meta[name="description"]').content = lang === 'fr'
           ? 'NovyDeck : personnalisez vos touches, composez des macros et découvrez des plugins pour FIFINE D6 et Elgato Stream Deck. Logiciel libre pour Windows.'
           : 'NovyDeck: customize keys, build macros and discover plugins for FIFINE D6 and Elgato Stream Deck. Open-source Windows software.';
+        updateFilmButton();
         try { localStorage.setItem('novydeck-site-language', lang); } catch (_) {}
       }
       let saved = 'fr';
@@ -143,6 +268,103 @@
       menu.addEventListener('click', () => { const open = menu.getAttribute('aria-expanded') !== 'true'; menu.setAttribute('aria-expanded', String(open)); navigation.classList.toggle('open', open); });
       navigation.addEventListener('click', event => { if (event.target.closest('a')) { menu.setAttribute('aria-expanded', 'false'); navigation.classList.remove('open'); } });
       document.addEventListener('keydown', event => { if (event.key === 'Escape' && menu.getAttribute('aria-expanded') === 'true') { menu.setAttribute('aria-expanded','false'); navigation.classList.remove('open'); menu.focus(); } });
+
+      const tabs = [...document.querySelectorAll('.showcase-tabs [role="tab"]')];
+      function activateTab(index, focus = false) {
+        tabs.forEach((tab, position) => {
+          const selected = position === index;
+          tab.setAttribute('aria-selected', String(selected));
+          tab.tabIndex = selected ? 0 : -1;
+          document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
+        });
+        if (focus) tabs[index].focus();
+      }
+      tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => activateTab(index));
+        tab.addEventListener('keydown', event => {
+          const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+            : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+            : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+          if (next !== null) { event.preventDefault(); activateTab(next, true); }
+        });
+      });
+      document.querySelector('.showcase').classList.add('tabs-ready');
+      activateTab(0);
+
+      let manualPause = false;
+      let filmInView = false;
+      film.addEventListener('play', updateFilmButton);
+      film.addEventListener('pause', updateFilmButton);
+      filmToggle.addEventListener('click', () => {
+        if (film.paused) {
+          manualPause = false;
+          film.play().catch(() => updateFilmButton());
+        } else {
+          manualPause = true;
+          film.pause();
+        }
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) film.pause();
+        else if (filmInView && !manualPause && !reducedMotion.matches) film.play().catch(() => updateFilmButton());
+      });
+      if ('IntersectionObserver' in window) {
+        const revealObserver = new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+              revealObserver.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.13, rootMargin: '0px 0px -5% 0px' });
+        document.querySelectorAll('[data-reveal]').forEach(el => revealObserver.observe(el));
+        if (!reducedMotion.matches) document.documentElement.classList.add('motion-ready');
+        const filmObserver = new IntersectionObserver(entries => {
+          filmInView = entries[0].isIntersecting;
+          if (!filmInView) film.pause();
+          else if (!reducedMotion.matches && !manualPause && !document.hidden) film.play().catch(() => updateFilmButton());
+        }, { threshold: 0.15 });
+        filmObserver.observe(document.querySelector('.cinema'));
+      }
+      reducedMotion.addEventListener('change', () => {
+        document.documentElement.classList.toggle('motion-ready', !reducedMotion.matches && 'IntersectionObserver' in window);
+        if (reducedMotion.matches) film.pause();
+        else if (filmInView && !manualPause && !document.hidden) film.play().catch(() => updateFilmButton());
+      });
+      let scrollFrame = 0;
+      const cinema = document.querySelector('.cinema');
+      function updateCinemaDepth() {
+        scrollFrame = 0;
+        if (reducedMotion.matches) return;
+        const rect = cinema.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > innerHeight) return;
+        const progress = Math.max(-1, Math.min(1, (innerHeight / 2 - (rect.top + rect.height / 2)) / (innerHeight / 2 + rect.height / 2)));
+        cinema.style.setProperty('--scroll-p', progress.toFixed(3));
+      }
+      window.addEventListener('scroll', () => {
+        if (!scrollFrame) scrollFrame = requestAnimationFrame(updateCinemaDepth);
+      }, { passive: true });
+      window.addEventListener('resize', updateCinemaDepth, { passive: true });
+      updateCinemaDepth();
+      let tiltFrame = 0;
+      stage.addEventListener('pointermove', event => {
+        if (reducedMotion.matches || event.pointerType === 'touch' || tiltFrame) return;
+        const { clientX, clientY } = event;
+        tiltFrame = requestAnimationFrame(() => {
+          const rect = stage.getBoundingClientRect();
+          const nx = (clientX - rect.left) / rect.width - .5;
+          const ny = (clientY - rect.top) / rect.height - .5;
+          stage.style.setProperty('--tilt-x', `${(-ny * 7).toFixed(2)}deg`);
+          stage.style.setProperty('--tilt-y', `${(nx * 9).toFixed(2)}deg`);
+          tiltFrame = 0;
+        });
+      });
+      stage.addEventListener('pointerleave', () => {
+        if (tiltFrame) cancelAnimationFrame(tiltFrame);
+        tiltFrame = 0;
+        stage.style.setProperty('--tilt-x', '2deg');
+        stage.style.setProperty('--tilt-y', '-2deg');
+      });
     })();
   </script>
 </body>
