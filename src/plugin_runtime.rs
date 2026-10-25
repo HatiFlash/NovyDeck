@@ -431,7 +431,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
         while registered<2 && Instant::now()<until {if let Ok(Reply::Message(_,v))=manager.rx.recv_timeout(Duration::from_millis(200)){if v["event"]=="registerPlugin"{registered+=1;}}}
         assert_eq!(registered,2);
         let control=manager.control();control.pause_plugin(&first.uuid).unwrap();
-        let mut broken=first.clone();broken.runtime=crate::plugins::Runtime::Node(folder.join("nonexistent-runtime-code.js"));
+        let mut broken=first.clone();broken.runtime=crate::plugins::Runtime::Exe(folder.join("nonexistent-runtime-code.exe"));
         manager.set_catalog(vec![broken,second.clone()]);
         assert!(control.resume_plugin(&first.uuid).is_err(),"failed start must fail ack");
         let v=manager.visible().values().find(|v|v.plugin==second.uuid).unwrap().clone();

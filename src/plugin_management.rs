@@ -175,6 +175,20 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
             assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"1.0");
         }
     }
+    #[test] fn unrelated_link_does_not_block_targeted_update() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+        let outside=d.path().join("outside");fixture(&outside,"other.sdPlugin","test.other","1.0");
+        #[cfg(windows)] {
+            let link=root.join("other.sdPlugin");
+            let status=std::process::Command::new("cmd").args(["/C","mklink","/J"]).arg(&link).arg(outside.join("other.sdPlugin")).status().unwrap();
+            assert!(status.success(),"junction fixture required");
+        }
+        #[cfg(not(windows))] std::os::unix::fs::symlink(outside.join("other.sdPlugin"),root.join("other.sdPlugin")).unwrap();
+        let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+        replace_staged(&root,"test.a",&stage.join("a.sdPlugin")).unwrap();
+        assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"2.0");
+        assert_eq!(fs::read(outside.join("other.sdPlugin/main.js")).unwrap(),b"1.0");
+    }
     #[test] fn invalid_identity_and_version_never_mutate() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","2.0");
         let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.b","3.0");
