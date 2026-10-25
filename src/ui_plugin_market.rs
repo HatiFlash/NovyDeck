@@ -144,7 +144,7 @@ impl App {
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
          use super::plugin_management_ui::{Choice,Request};
-         let label=match action {Choice::Install=>tr("Installer"),Choice::Update=>tr("Mettre à jour"),Choice::Installed=>tr(if entry.compatible{"À jour"}else{"Installé"}),Choice::Invalid=>tr("Version invalide")};
+         let label=match action {Choice::Install=>tr("Installer"),Choice::Update=>tr("Mettre à jour"),Choice::Installed=>if entry.compatible{tr("À jour")}else{tr("Installé")},Choice::Invalid=>tr("Version invalide")};
          if ui.add_enabled(matches!(action,Choice::Install|Choice::Update) && state.installing.is_none() && self.plugin_management.working.is_none(),theme::primary(label)).clicked(){
           if let Some(local)=&local {self.plugin_management.confirmation=Some(Request::Update{entry:entry.clone(),old:local.version.clone(),folder:local.folder.clone()});}
           else {state.confirmation=Some(entry.clone());}
