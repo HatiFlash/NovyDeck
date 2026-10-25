@@ -129,7 +129,8 @@ fn inspector_exe()->anyhow::Result<std::path::PathBuf>{
  #[cfg(test)] if let Some(exe)=std::env::var_os("DECKFORGE_TEST_APP_EXE"){return Ok(exe.into());}
  Ok(std::env::current_exe()?)
 }
-pub struct Host { #[cfg(windows)] job:Job, pub incoming:Receiver<Value>, outgoing:SyncSender<Value>, feedback:Sender<Value>, pub ws_port:u16, pub http_port:Option<u16>, pub inspectors:Option<crate::plugin_http::Inspectors>, pub folder:std::path::PathBuf, pub uuid:String, child:Child, worker:Option<thread::JoinHandle<()>>, stop:Arc<AtomicBool>, inspector_children:Mutex<Vec<(String,Child)>>, #[cfg(test)] simulated_inspectors:AtomicBool, _http:Option<crate::plugin_http::HtmlServer> }
+struct InspectorChild {id:String,child:Child,#[cfg(windows)] job:Job}
+pub struct Host { #[cfg(windows)] job:Job, pub incoming:Receiver<Value>, outgoing:SyncSender<Value>, feedback:Sender<Value>, pub ws_port:u16, pub http_port:Option<u16>, pub inspectors:Option<crate::plugin_http::Inspectors>, pub folder:std::path::PathBuf, pub uuid:String, child:Child, worker:Option<thread::JoinHandle<()>>, stop:Arc<AtomicBool>, inspector_children:Mutex<Vec<InspectorChild>>, #[cfg(test)] simulated_inspectors:AtomicBool, _http:Option<crate::plugin_http::HtmlServer> }
 impl Host {
  pub fn start(plugin:&Plugin,device:&crate::plugin_runtime::Device)->anyhow::Result<Self>{
   if let Some(reason)=&plugin.prerequisite {anyhow::bail!("Prérequis manquant : {reason}");}
@@ -193,29 +194,32 @@ impl Host {
   let url=session_url(server,&self.uuid,path,&id);
   anyhow::ensure!(crate::plugin_inspector::allowed_initial(&url),"Chemin PI non pris en charge (encodage ou identifiant ambigu)");
   let mut children=self.inspector_children.lock().map_err(|_|anyhow::anyhow!("Inspecteurs indisponibles"))?;
-  children.retain_mut(|(id,child)|{let active=child.try_wait().ok().flatten().is_none();if !active {registry.lock().unwrap().remove(id);}active});
+  children.retain_mut(|entry|{let active=entry.child.try_wait().ok().flatten().is_none();if !active {registry.lock().unwrap().remove(&entry.id);}active});
   #[cfg(test)] let simulated=self.simulated_inspectors.load(Ordering::Relaxed);
   #[cfg(not(test))] let simulated=false;
   let count=children.len()+if simulated {registry.lock().unwrap().len()}else{0};
   anyhow::ensure!(count<4,"Limite de quatre inspecteurs actifs");
   registry.lock().unwrap().insert(id.clone(),format!("JSON.stringify({})",action_info));
   if simulated {return Ok(id);}
-  let result=(||->anyhow::Result<Child>{
+  let result=(||->anyhow::Result<InspectorChild>{
+   #[cfg(windows)] let job=Job::new()?;
    let mut inspector=Command::new(inspector_exe()?).arg("--isolated-inspector")
        .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
-   #[cfg(windows)] if let Err(e)=self.job.assign(&inspector){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
+   #[cfg(windows)] if let Err(e)=job.assign(&inspector){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
    if let Err(e)=inspector.stdin.take().unwrap().write_all(format!("{url}\n{}\n{title}\n{}\n{}\n",self.ws_port,MAIN_WINDOW.load(Ordering::Relaxed),std::process::id()).as_bytes()){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
-   Ok(inspector)
+   Ok(InspectorChild{id:id.clone(),child:inspector,#[cfg(windows)] job})
   })();
-  match result {Ok(child)=>{children.push((id.clone(),child));Ok(id)},Err(e)=>{registry.lock().unwrap().remove(&id);Err(e)}}
+  match result {Ok(child)=>{children.push(child);Ok(id)},Err(e)=>{registry.lock().unwrap().remove(&id);Err(e)}}
  }
  /// Invalidates the exact session and closes only its owned WebView process.
  pub fn close_inspector(&self,id:&str){
   if let Some(registry)=&self.inspectors {registry.lock().unwrap().remove(id);}
   let _=self.outgoing.try_send(json!({"__close_pi":id}));
   if let Ok(mut children)=self.inspector_children.lock(){
-   if let Some(index)=children.iter().position(|(session,_)|session==id){
-    let (_,mut child)=children.swap_remove(index);let _=child.kill();let _=child.wait();
+   if let Some(index)=children.iter().position(|entry|entry.id==id){
+    let mut entry=children.swap_remove(index);
+    #[cfg(windows)] entry.job.close();
+    let _=entry.child.kill();let _=entry.child.wait();
    }
   }
  }
@@ -312,7 +316,7 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
 }
 impl Drop for Host {fn drop(&mut self){self.stop.store(true,Ordering::Relaxed);
  #[cfg(windows)] self.job.close();
- if let Ok(mut children)=self.inspector_children.lock(){for (_,child) in children.iter_mut(){let _=child.kill();let _=child.wait();}children.clear();}
+ if let Ok(mut children)=self.inspector_children.lock(){for entry in children.iter_mut(){#[cfg(windows)] entry.job.close();let _=entry.child.kill();let _=entry.child.wait();}children.clear();}
  let _=self.child.kill();let _=self.child.wait();
  if let Some(worker)=self.worker.take(){let _=worker.join();} // Acquittement seulement après fermeture des sockets ciblés.
 }}
