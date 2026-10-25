@@ -636,7 +636,6 @@
     "Installer le moteur et le modèle (≈1,2 Go)": "Install engine and model (≈1.2 GB)",
     "Installer maintenant": "Install now",
     "Installer…": "Install…",
-    "Installé": "Installed",
     "Installés dans NovyDeck": "Installed in NovyDeck",
     "Insérer un bloc après": "Insert block after",
     "Insérer un texte personnalisable dans la fenêtre active. Modifie le texte dans l’inspecteur.": "Type customizable text into the active window. Edit it in the inspector.",
@@ -1221,7 +1220,6 @@
     "Veille après": "Sleep after",
     "Veille du périphérique": "Device sleep",
     "Ven": "Fri",
-    "Version : {version}": "Version: {version}",
     "Version portable : téléchargez le ZIP depuis la page des nouveautés": "Portable version: download the ZIP from the What's New page",
     "Vider": "Clear",
     "Vider le presse-papiers": "Clear clipboard",
@@ -1373,6 +1371,7 @@
     "Références conservées ; plugin indisponible. Réinstallez-le ou réaffectez les touches.": "References retained; plugin unavailable. Reinstall it or reassign the keys.",
     "Remise en route non confirmée": "Restart not confirmed",
     "Gestion du plugin en cours": "Managing plugin",
+    "Le traitement du plugin a été interrompu.": "Plugin operation was interrupted.",
     "Veuillez patienter : préparation, sauvegarde et reprise du plugin.": "Please wait: preparing, backing up and resuming the plugin."
   }
 }

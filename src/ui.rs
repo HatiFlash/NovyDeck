@@ -2311,7 +2311,7 @@ impl App {
     }
     fn empty_key(key: &Key) -> bool { key.label.is_empty() && key.image.is_empty() && key.steps.is_empty() }
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.wants_keyboard_input() { return; }
+        if self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some()||ctx.wants_keyboard_input() { return; }
         let pressed = |key| ctx.input(|i| i.modifiers.ctrl && !i.modifiers.alt && !i.modifiers.shift && i.key_pressed(key));
         if pressed(egui::Key::Z) { self.undo_edit(); } else if pressed(egui::Key::Y) { self.redo_edit(); }
         else if self.show_workflow { }
@@ -4496,7 +4496,8 @@ impl App {
         self.plugin_events();
         self.housekeeping();
         self.assistant_events();
-        let modal = self.show_workflow
+        let management_modal=self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some();
+        let modal = management_modal || self.show_workflow
             || plugin_market_ui::is_open()
             || self.show_assets
             || self.show_desktop_settings

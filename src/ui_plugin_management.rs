@@ -98,8 +98,16 @@ impl App {
         });
     }
     pub(super) fn management_poll(&mut self,ctx:&egui::Context){
-        let result=self.plugin_management.working.as_ref().and_then(|rx|rx.try_recv().ok());
-        let Some(result)=result else{return};
+        let received=self.plugin_management.working.as_ref().map(|rx|rx.try_recv());
+        let result=match received {
+            None|Some(Err(std::sync::mpsc::TryRecvError::Empty))=>return,
+            Some(Ok(result))=>result,
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected))=>{
+                self.plugin_management.working=None;
+                self.plugin_management.message=crate::i18n::tr("Le traitement du plugin a été interrompu.").into();
+                return;
+            }
+        };
         self.plugin_management.working=None;
         match result {
             JobResult::Disk{id,remove,paused,result,control}=>{
@@ -111,12 +119,20 @@ impl App {
             }
             JobResult::Resume{result,disk,remove}=>{
                 let outcome=match disk {Ok(backup)=>format!("{} · {}: {}",if remove {crate::i18n::tr("Plugin désinstallé")}else{crate::i18n::tr("Plugin mis à jour")},crate::i18n::tr("Sauvegarde"),backup.display()),Err(error)=>format!("{}: {error}",crate::i18n::tr("Opération impossible"))};
-                let resume=match result {Ok(()) if remove=>format!(" · {}",crate::i18n::tr("Références conservées ; plugin indisponible. Réinstallez-le ou réaffectez les touches.")),Ok(())=>String::new(),Err(error)=>format!(" · {}: {error}",crate::i18n::tr("Remise en route non confirmée"))};
+                let resume=match result {
+                    Ok(())=>String::new(),
+                    Err(error) if remove && disk.is_ok() && error=="Plugin installé introuvable"=>String::new(),
+                    Err(error)=>format!(" · {}: {error}",crate::i18n::tr("Remise en route non confirmée")),
+                };
                 self.plugin_management.message=format!("{outcome}{resume}");
             }
         }
     }
     pub(super) fn management_modal(&mut self,ctx:&egui::Context){
+        let active=self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some();
+        if !active{return;}
+        let backdrop=egui::LayerId::new(egui::Order::Middle,egui::Id::new("plugin_management_backdrop"));
+        ctx.memory_mut(|memory|memory.set_modal_layer(Some(backdrop)));
         if let Some(request)=self.plugin_management.confirmation.clone(){
             let mut open=true;let mut confirm=false;let mut cancel=false;
             crate::theme::fixed_window(crate::i18n::tr("Confirmer la gestion du plugin")).open(&mut open).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).default_width(440.0).show(ctx,|ui|{
@@ -137,12 +153,18 @@ impl App {
             if !open || cancel {self.plugin_management.confirmation=None;}else if confirm {self.management_start(ctx);}
         }
         if self.plugin_management.working.is_some(){
-            // Modal cover intercepts edits of profiles/media while replacement is in progress.
-            egui::Area::new(egui::Id::new("plugin_management_block")).order(egui::Order::Foreground).fixed_pos(ctx.screen_rect().min).show(ctx,|ui|{
+            // Keep the modal backdrop below the native-style window so its controls remain usable.
+            egui::Area::new(egui::Id::new("plugin_management_block")).order(egui::Order::Middle).fixed_pos(ctx.screen_rect().min).show(ctx,|ui|{
                 let rect=ctx.screen_rect();ui.allocate_rect(rect,egui::Sense::click());
                 ui.painter().rect_filled(rect,0.0,egui::Color32::from_black_alpha(110));
             });
-            crate::theme::fixed_window(crate::i18n::tr("Gestion du plugin en cours")).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui|{ui.horizontal(|ui|{ui.spinner();ui.label(crate::i18n::tr("Veuillez patienter : préparation, sauvegarde et reprise du plugin."));});});
+            let layer=egui::LayerId::new(egui::Order::Foreground,egui::Id::new("plugin_management_progress"));
+            ctx.move_to_top(layer);
+            crate::theme::fixed_window(crate::i18n::tr("Gestion du plugin en cours")).id(layer.id).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui|{ui.horizontal(|ui|{ui.spinner();ui.label(crate::i18n::tr("Veuillez patienter : préparation, sauvegarde et reprise du plugin."));});});
+        }else if self.plugin_management.confirmation.is_some(){
+            let layer=egui::LayerId::new(egui::Order::Foreground,egui::Id::new("plugin_management_confirmation"));
+            ctx.move_to_top(layer);
+            ctx.memory_mut(|memory|memory.set_modal_layer(Some(layer)));
         }
     }
 }
