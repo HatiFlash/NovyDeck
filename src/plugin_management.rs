@@ -163,12 +163,22 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         let src=stage.join("a.sdPlugin");fs::create_dir(src.join("images")).unwrap();
         fs::write(src.join("images/user.png"),b"new image").unwrap();fs::write(src.join("i18n.json"),b"new translation").unwrap();
         fs::create_dir(src.join("data")).unwrap();fs::write(src.join("data/config.json"),b"defaults").unwrap();
-        let backup=replace_staged_preserving(&root,"test.a",&src,&[PathBuf::from("images/user.png")]).unwrap();
+        let backup=replace_staged_preserving(&root,"test.a",&src,&[PathBuf::from("images").join("user.png")]).unwrap();
         assert_eq!(fs::read(old.join("data/config.json")).unwrap(),b"local");
         assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"mine");
         assert_eq!(fs::read(old.join("i18n.json")).unwrap(),b"new translation");
         assert_eq!(fs::read(old.join("main.js")).unwrap(),b"2.0");
         assert_eq!(fs::read(backup.join("main.js")).unwrap(),b"old code");
+    }
+    #[test] fn unchanged_assets_do_not_require_explicit_protection() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+        let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+        for folder in [root.join("a.sdPlugin"),stage.join("a.sdPlugin")] {
+            fs::create_dir(folder.join("images")).unwrap();fs::write(folder.join("images/icon.png"),b"same unchanged packaged icon").unwrap();
+        }
+        replace_staged(&root,"test.a",&stage.join("a.sdPlugin")).unwrap();
+        assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"2.0");
+        assert_eq!(fs::read(root.join("a.sdPlugin/images/icon.png")).unwrap(),b"same unchanged packaged icon");
     }
     #[test] fn ambiguous_image_collision_refuses_before_mutation() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
