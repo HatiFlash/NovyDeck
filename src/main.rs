@@ -47,6 +47,7 @@ mod plugin_validation;
 mod plugin_validation_proxy;
 #[allow(dead_code)]
 mod plugin_import;
+mod plugin_management;
 mod plugin_catalog;
 mod https_get;
 mod community_plugins;
