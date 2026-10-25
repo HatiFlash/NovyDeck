@@ -1,6 +1,6 @@
 # Site vitrine NovyDeck
 
-> **Nouvelle expérience :** la refonte Next.js est dans [`launch/`](launch/README.md). Elle est déployable séparément sur GitHub Pages sans remplacer cette page statique dans les sources. Ses captures, composants 3D illustratifs, dépendances et commandes de validation sont documentés dans son README.
+> **Nouvelle expérience publiée :** la refonte Next.js est dans [`launch/`](launch/README.md) et visible sur [GitHub Pages](https://hatiflash.github.io/NovyDeck/). Elle est déployée séparément sans remplacer cette page statique dans les sources. Ses captures, composants 3D illustratifs, dépendances et commandes de validation sont documentés dans son README.
 
 Page statique autonome pour présenter NovyDeck, inspirée par la **structure** du site Nusa (aperçu, fonctions, compatibilité, téléchargement), mais réalisée avec l'identité visuelle et les captures réelles de NovyDeck. Aucun code, texte, logo ou image de Nusa n'est repris.
 

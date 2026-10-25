@@ -1,6 +1,6 @@
 # NovyDeck — expérience de lancement
 
-Refonte indépendante du site vitrine, développée dans `website/launch/`. Elle **ne remplace pas** `website/index.html` ; aucune publication ni mise à jour du logiciel Rust n'est impliquée.
+Refonte indépendante du site vitrine, développée dans `website/launch/` et publiée séparément sur GitHub Pages. Elle **ne remplace pas** `website/index.html` dans les sources et ne modifie pas le logiciel Rust.
 
 ## Démarrer
 
@@ -60,4 +60,4 @@ Le MCP 21st n'était pas connecté à l'environnement. Son CLI a refusé une rec
 
 ## Publication
 
-Le site statique est destiné à GitHub Pages sur `https://hatiflash.github.io/NovyDeck/`, avec le build `NEXT_PUBLIC_SITE_BASE_PATH=/NovyDeck` depuis `website/launch/`. La branche de publication ne contient que l'export `out/` et `.nojekyll` ; la source reste dans le dépôt principal. L'ancienne page `website/index.html` reste présente. Après toute publication, vérifier en ligne l'URL, les médias, le chargement WebGL et les liens de téléchargement avant d'annoncer le site disponible.
+Le site est publié sur `https://hatiflash.github.io/NovyDeck/` depuis la branche `gh-pages` (racine). L'export a été généré avec `NEXT_PUBLIC_SITE_BASE_PATH=/NovyDeck`, puis déployé avec `.nojekyll` pour que GitHub Pages serve `_next/`. La source reste dans `website/launch/` sur `main`, et l'ancienne page `website/index.html` reste présente. Le build Pages a été déclaré réussi par GitHub et le contrôle Playwright a vérifié en ligne bureau/mobile, WebGL, police, images, interactions et absence de requêtes HTTP en erreur. Après toute prochaine publication, répéter ce contrôle et vérifier les liens de téléchargement.

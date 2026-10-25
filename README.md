@@ -4,6 +4,7 @@ English · [Français](README.fr.md)
   <img src="res/branding/novydeck-logo.png" width="120" alt="NovyDeck logo">
   <h1>NovyDeck</h1>
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
+  <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
     <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1"><img src="https://img.shields.io/badge/Release-v0.11.1-3478F6.svg" alt="Release v0.11.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>

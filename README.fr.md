@@ -4,6 +4,7 @@
   <img src="res/branding/novydeck-logo.png" width="120" alt="Logo NovyDeck">
   <h1>NovyDeck</h1>
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
+  <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
     <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1"><img src="https://img.shields.io/badge/Release-v0.11.1-3478F6.svg" alt="Version 0.11.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
