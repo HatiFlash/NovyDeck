@@ -514,6 +514,8 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     }
     // Host::drop termine tout l'arbre de chaque processus.
 }
+#[cfg(all(test,windows))]
+#[path="plugin_block_native_tests.rs"] mod native_pi_tests;
 #[cfg(test)]mod tests {use super::*;use crate::model::{Config,PluginBinding};
     #[test] fn draft_inspectors_are_independent_and_survive_sync_without_keypress() {
         use tungstenite::Message;
