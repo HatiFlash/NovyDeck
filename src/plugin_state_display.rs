@@ -102,12 +102,12 @@ impl Cache {
         let observation = match message["event"].as_str() {
             Some("novydeckStateUnknown") => Observation::Unknown,
             Some("setState") => {
-                let value = match message["payload"]["state"].as_u64() { Some(0) => false, Some(1) => true, _ => return self.lookup_source(source) };
+                let value = match message["payload"]["state"].as_u64() { Some(0) => false, Some(1) => true, _ => { self.values.remove(&source.context); return Observation::Unknown; } };
                 match message["payload"]["novydeckStateSource"].as_str() {
                     Some("confirmed") => Observation::Confirmed(value),
                     Some("local") => Observation::Local(value),
                     None if message["payload"].get("novydeckStateSource").is_none() => Observation::SourceReported(value),
-                    _ => return self.lookup_source(source),
+                    _ => {self.values.remove(&source.context);return Observation::Unknown;},
                 }
             }
             _ => return self.lookup_source(source),
@@ -170,9 +170,13 @@ mod tests {
         assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("local"))), Observation::Local(false));
         let off = cache.apply(&config, 0, &key);
         assert_eq!(off.display_kind, crate::audio::builtin_kind("builtin:speakers")); assert!(off.image.is_empty());
-        for bad in [msg(json!(2), None), msg(json!("1"), None), msg(json!(true), None), msg(json!(1), Some("forged"))] {
-            assert_eq!(cache.record(&s, "owner", &bad), Observation::Local(false));
+        for bad in [msg(json!(2), None), msg(json!("1"), None), msg(json!(true), None)] {
+            assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("local"))), Observation::Local(false));
+            assert_eq!(cache.record(&s, "owner", &bad), Observation::Unknown);
         }
+        assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("local"))), Observation::Local(false));
+        assert_eq!(cache.record(&s, "owner", &msg(json!(1), Some("forged"))), Observation::Unknown);
+        cache.record(&s, "owner", &msg(json!(0), Some("local")));
         assert_eq!(cache.record(&s, "other", &msg(json!(1), None)), Observation::Local(false));
         let mut alien = msg(json!(1), None); alien["action"] = json!("alien"); assert_eq!(cache.record(&s, "owner", &alien), Observation::Local(false));
         alien["action"] = json!("switch"); alien["context"] = json!("other"); assert_eq!(cache.record(&s, "owner", &alien), Observation::Local(false));

@@ -26,7 +26,11 @@ pub(super) fn source_ui(ui: &mut egui::Ui, key: &mut Key, observation: Observati
     let selected = key.plugin_state.as_ref().and_then(|target| choices.iter().find(|(candidate, _)| candidate == target).map(|(_, name)| name.as_str()))
         .unwrap_or_else(|| if key.plugin_state.is_some() { tr("Source introuvable") } else { tr("Aucune source plugin") });
     let mut changed = false;
-    egui::ComboBox::from_label(tr("Source de l'état plugin")).selected_text(selected).show_ui(ui, |ui| {
+    ui.label(tr("Source de l'état plugin"));
+    let max_width = ui.available_width().max(100.0);
+    egui::ComboBox::from_id_salt("plugin_state_source").width(max_width.min(380.0))
+        .selected_text(egui::RichText::new(selected).size(11.0)).truncate().show_ui(ui, |ui| {
+        ui.set_max_width(max_width.min(380.0));
         changed |= ui.selectable_value(&mut key.plugin_state, None, tr("Aucune source plugin")).changed();
         for (target, name) in choices { changed |= ui.selectable_value(&mut key.plugin_state, Some(target), name).changed(); }
     });

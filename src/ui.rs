@@ -47,6 +47,8 @@ pub(crate) use plugin_validation_harness::{validate_restart_persistence, validat
 mod workshop_chat_ui;
 #[path = "ui_plugin_blocks.rs"]
 mod plugin_blocks;
+#[path = "ui_plugin_state.rs"]
+mod ui_plugin_state;
 
 #[derive(Default,Clone)]
 struct PluginFace { title:String, image_bytes:Option<Vec<u8>>, state:u8, flash:Option<(bool,Instant)>, version:u64 }
@@ -200,6 +202,7 @@ pub struct App {
     block_inspector: Option<plugin_blocks::BlockInspector>,
     block_inspector_nonce: u64,
     plugin_faces: HashMap<String, PluginFace>,
+    plugin_states: crate::plugin_state_display::Cache,
     plugin_errors: HashMap<String,String>,
     /// Demandes externes capturées dans une App de validation ; jamais exécutées.
     plugin_external_effects: Option<Vec<String>>,
@@ -434,6 +437,7 @@ impl App {
             last_key: None,
             key_previews: key_preview::Cache::default(),
             plugin_faces: HashMap::new(),
+            plugin_states: Default::default(),
             block_inspector: None,
             block_inspector_nonce: 0,
             plugin_errors: HashMap::new(),
@@ -587,14 +591,20 @@ impl App {
         self.state_generation = self.state_generation.wrapping_add(1);
         self.state_values = [None; 32];
         for index in 0..self.config.keys().len().min(self.state_values.len()) {
-            if self.config.keys()[index].state_display.as_ref().is_some_and(|s| s.toggle) {
+            if self.config.keys()[index].plugin_state.is_none() && self.config.keys()[index].state_display.as_ref().is_some_and(|s| s.toggle) {
                 self.state_values[index] = Some(*self.toggle_faces.get(&self.toggle_face_id(index)).unwrap_or(&false));
             }
         }
         let _ = self.state_monitor.send(crate::state_display::Command::Page(
             self.state_generation, self.config.keys().clone()));
     }
-    fn state_key(&self, index: usize, key: Key) -> Key {
+    fn state_key(&self,index:usize,key:Key)->Key {self.state_key_in(&self.config,index,key)}
+    fn state_key_in(&self, config: &Config, index: usize, key: Key) -> Key {
+        if key.plugin_state.is_some() {
+            let mut presented = self.plugin_states.apply(config, index, &key);
+            if self.plugin_states.lookup(config, index, &key).active().is_none() { presented.runtime_badge = Some(tr("État inconnu").into()); }
+            return presented;
+        }
         match (key.state_display.clone(), self.state_values.get(index).copied().flatten()) {
             (Some(display), active) if display.toggle => display.apply(&key, active.unwrap_or(false)),
             (Some(display), Some(active)) => display.apply(&key, active),
@@ -602,7 +612,7 @@ impl App {
         }
     }
     fn toggle_key_face(&mut self, index: usize) {
-        if self.applied.keys().get(index).and_then(|key| key.state_display.as_ref()).is_some_and(|state| state.toggle) {
+        if self.applied.keys().get(index).is_some_and(|key| key.plugin_state.is_none() && key.state_display.as_ref().is_some_and(|state| state.toggle)) {
             self.state_values[index] = Some(!self.state_values[index].unwrap_or(false));
             self.toggle_faces.insert(self.toggle_face_id(index), self.state_values[index].unwrap());
             self.send_state_face(index);
@@ -611,14 +621,17 @@ impl App {
     fn send_state_face(&self, index: usize) {
         if !self.wanted || !self.gate.connected || self.gate.dirty || self.pending.is_some()
             || self.sleep.sleeping || index >= self.device_keys() || index >= self.applied.keys().len() { return; }
-        let key = self.state_key(index, self.applied.keys()[index].clone());
+        let key = self.state_key_in(&self.applied, index, self.applied.keys()[index].clone());
+        let face = self.plugin_face(index);
+        let key = if let Some(face)=face {self.plugin_render_key(index,key,face,&self.applied)} else {key};
         if let Ok(font) = crate::key_render::font() {
-            if let Ok(jpeg) = crate::key_render::for_plugin(&key, self.applied.image_size, &font, None, None) {
+            if let Ok(jpeg) = crate::key_render::for_plugin(&key, self.applied.image_size, &font, self.plugin_image_bytes(index, face, &self.applied), None) {
                 let _ = self.device.send(Command::KeyImage(index, jpeg));
             }
         }
     }
     fn edited(&mut self) {
+        self.plugin_states.retain(&self.config);
         self.sync_state_display();
         self.long_press.clear();
         self.gate.dirty = true;
@@ -901,8 +914,9 @@ impl App {
                         if let Some((r, c)) = self.pending.take() {
                             if r == revision {
                                 self.applied = c;
+                                self.plugin_states.retain(&self.applied);
                                 for index in 0..self.device_keys() {
-                                    if self.state_values[index].is_some() || self.applied.keys().get(index).and_then(|k| k.state_display.as_ref()).is_some_and(|s| s.toggle) {
+                                    if self.state_values[index].is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
                                         self.send_state_face(index);
                                     }
                                 }
@@ -2947,7 +2961,11 @@ impl App {
             };
             let mut buttons = Vec::new();
             let header_preview = self.presented_key(self.selected);
-            let header_face = self.plugin_face(self.selected).cloned();
+            let mut header_face = self.plugin_face(self.selected).cloned();
+            if let Some(face) = &mut header_face {
+                if self.plugin_image_bytes(self.selected, Some(face), &self.config).is_none() { face.image_bytes = None; }
+            }
+            let header_preview = header_face.as_ref().map_or(header_preview.clone(), |face| self.plugin_render_key(self.selected, header_preview, face, &self.config));
             let header_texture = self.key_previews.texture(ctx, self.selected, &header_preview, self.config.image_size, header_face.as_ref());
             ui.horizontal(|ui| {
                 let (mini, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
@@ -2995,11 +3013,18 @@ impl App {
                 });
             }
             let preview_key = self.presented_key(self.selected);
-            let preview_face = self.plugin_face(self.selected).cloned();
+            let mut preview_face = self.plugin_face(self.selected).cloned();
+            if let Some(face) = &mut preview_face {
+                if self.plugin_image_bytes(self.selected, Some(face), &self.config).is_none() { face.image_bytes = None; }
+            }
+            let preview_key = preview_face.as_ref().map_or(preview_key.clone(), |face| self.plugin_render_key(self.selected, preview_key, face, &self.config));
             let preview = self.key_previews.texture(ctx, self.selected, &preview_key, self.config.image_size, preview_face.as_ref());
             let long_editor = self.long_editor;
             let active=self.config.active; let names=self.config.profiles.iter().map(|p|p.name.clone()).collect::<Vec<_>>();
-            let pages=self.config.profiles[active].pages.clone();let selected=self.selected;let page_id=self.config.page.clone();let dialog_tx=self.dialog_tx.clone();let image_size=self.config.image_size;let key=&mut self.config.keys_mut()[selected];
+            let pages=self.config.profiles[active].pages.clone();let selected=self.selected;let page_id=self.config.page.clone();let dialog_tx=self.dialog_tx.clone();let image_size=self.config.image_size;
+            let source_observation = self.plugin_states.lookup(&self.config, selected, &self.config.keys()[selected]);
+            let plugin_catalog = self.plugins.as_ref().map(|m| m.catalog.as_slice());
+            let key=&mut self.config.keys_mut()[selected];
             let mut removed_step=false; let mut changed=false; let mut add_kind=None; let mut record_step=None; let mut open_icons=false; let mut recrop=false; let mut state_icon=None; let mut state_file=None; let mut pick_audio=None; let mut open_workflow=false; let mut open_model=false; let mut advanced: Option<u8>=None;
             if let Some(binding)=key.plugin.clone(){
                 // Boutons d'abord, à droite : l'identifiant long du plugin est tronqué à gauche.
@@ -3100,17 +3125,22 @@ impl App {
                         let mut enabled = key.state_display.is_some();
                         if ui.checkbox(&mut enabled, tr("Adapter la touche à deux états")).changed() {
                             key.state_display = enabled.then(crate::model::StateDisplay::default);
+                            if !enabled { key.plugin_state = None; }
                             changed = true;
                         }
+                        if enabled && (key.plugin_state.is_some() || key.plugin.is_some() || !crate::plugin_state_display::block_sources(key).is_empty()) {
+                            changed |= ui_plugin_state::source_ui(ui, key, source_observation, plugin_catalog);
+                        }
+                        let plugin_mode = key.plugin_state.is_some();
                         if let Some(display) = &mut key.state_display {
                             ui.push_id("state_display", |ui| {
-                                ui.horizontal_wrapped(|ui| {
+                                if !plugin_mode { ui.horizontal_wrapped(|ui| {
                                     changed |= ui.radio_value(&mut display.toggle, false, tr("Selon une condition réelle")).changed();
                                     changed |= ui.radio_value(&mut display.toggle, true, tr("Interrupteur : change à chaque appui")).changed();
                                 });
-                                if !display.toggle { changed |= edit_condition(ui, &mut display.condition, &self.audio, 0); }
-                                let on_title = if display.toggle { tr("Activé") } else { tr("Quand c'est vrai") };
-                                let off_title = if display.toggle { tr("Désactivé") } else { tr("Sinon") };
+                                if !display.toggle { changed |= edit_condition(ui, &mut display.condition, &self.audio, 0); } }
+                                let on_title = if plugin_mode || display.toggle { tr("Activé") } else { tr("Quand c'est vrai") };
+                                let off_title = if plugin_mode || display.toggle { tr("Désactivé") } else { tr("Sinon") };
                                 for (active, title, face) in [(true, on_title, &mut display.on), (false, off_title, &mut display.off)] {
                                     theme::card_frame(theme::palette(ui.ctx())).show(ui, |ui| {
                                         ui.label(RichText::new(title).strong());
@@ -3131,7 +3161,7 @@ impl App {
                                         });
                                     });
                                 }
-                                if !display.toggle {
+                                if !plugin_mode && !display.toggle {
                                     ui.collapsing(tr("Options avancées"), |ui| {
                                         changed |= ui.add(egui::DragValue::new(&mut display.poll_ms).range(250..=600_000).suffix(" ms")).changed();
                                     });
@@ -3270,9 +3300,11 @@ impl App {
         let p = theme::palette(ctx);
 
                                             let mut key = self.presented_key(i);
-                                            let face = self.plugin_face(i).cloned();
-                                            if let Some(face) = &face {
-                                                key = self.plugin_render_key(i, key, face);
+                                            let mut face = self.plugin_face(i).cloned();
+                                            if let Some(value) = &mut face {
+                                                let rendered = self.plugin_render_key(i, key, value, &self.config);
+                                                if self.plugin_image_bytes(i, Some(value), &self.config).is_none() { value.image_bytes = None; }
+                                                key = rendered;
                                             }
                                             let selected = i == self.selected;
                                             let flashing = self.last_key.is_some_and(|(idx, t)| {
@@ -4669,25 +4701,36 @@ impl App {
         let id=manager.visible().values().find(|v|v.index==index)?.context.as_str();
         self.plugin_faces.get(id)
     }
-    fn plugin_render_key(&self,index:usize,mut key:Key,face:&PluginFace)->Key {
-        if !face.title.is_empty(){key.label=face.title.clone();}
-        if face.image_bytes.is_none() {
-            if let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().values().find(|v|v.index==index)) {
-                if let Some(action)=self.plugins.as_ref().into_iter().flat_map(|m|m.catalog.iter()).find(|p|p.uuid==v.plugin).and_then(|p|p.actions.iter().find(|a|a.uuid==v.action)) {
-                    if key.label.is_empty(){if let Some(title)=action.titles.get(face.state as usize).and_then(Option::as_ref){key.label=title.clone();}}
-                    if let Some(icon)=action.states.get(face.state as usize).and_then(Option::as_ref).or(action.icon.as_ref()) {
-                        key.image=icon.to_string_lossy().into_owned();
-                    }
-                }
+    fn plugin_image_bytes<'a>(&self, index: usize, face: Option<&'a PluginFace>, config: &Config) -> Option<&'a [u8]> {
+        let original=config.keys().get(index)?;
+        if original.plugin_state.is_some() {return None;}
+        let binding=original.plugin.as_ref()?;
+        self.plugins.as_ref()?.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)?;
+        let key=self.state_key_in(config,index,original.clone());
+        if !key.image.is_empty() || key.display_kind.is_some() {return None;}
+        face.and_then(|face|face.image_bytes.as_deref())
+    }
+    fn plugin_render_key(&self,index:usize,mut key:Key,face:&PluginFace,config:&Config)->Key {
+        if key.plugin_state.is_some() {return key;}
+        let Some(binding)=config.keys().get(index).and_then(|key|key.plugin.as_ref()) else {return key};
+        let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)) else {return key};
+        if !face.title.is_empty() {key.label=face.title.clone();}
+        if key.image.is_empty() && key.display_kind.is_none() && face.image_bytes.is_none() {
+            if let Some(action)=self.plugins.as_ref().and_then(|m|m.catalog.iter().find(|p|p.uuid==v.plugin)).and_then(|p|p.actions.iter().find(|a|a.uuid==v.action)) {
+                if key.label.is_empty() {if let Some(title)=action.titles.get(face.state as usize).and_then(Option::as_ref){key.label=title.clone();}}
+                if let Some(icon)=action.states.get(face.state as usize).and_then(Option::as_ref).or(action.icon.as_ref()) {key.image=icon.to_string_lossy().into_owned();}
             }
         }
         key
     }
     fn send_plugin_face(&self,index:usize){
+        if !self.wanted || !self.gate.connected || self.gate.dirty || self.pending.is_some()
+            || self.sleep.sleeping || index >= self.device_keys() || index >= self.applied.keys().len() { return; }
         let Some(face)=self.plugin_face(index) else {return};
-        let key=self.plugin_render_key(index,self.applied.keys()[index].clone(),face);
+        let key=self.state_key_in(&self.applied,index,self.applied.keys()[index].clone());
+        let key=self.plugin_render_key(index,key,face,&self.applied);
         if let Ok(font)=crate::key_render::font(){
-            if let Ok(jpeg)=crate::key_render::for_plugin(&key,self.applied.image_size,&font,face.image_bytes.as_deref(),face.flash.filter(|(_,when)|when.elapsed()<Duration::from_secs(1)).map(|(ok,_)|ok)){
+            if let Ok(jpeg)=crate::key_render::for_plugin(&key,self.applied.image_size,&font,self.plugin_image_bytes(index,Some(face),&self.applied),face.flash.filter(|(_,when)|when.elapsed()<Duration::from_secs(1)).map(|(ok,_)|ok)){
                 let _=self.device.send(Command::KeyImage(index,jpeg));
             }
         }
@@ -4696,14 +4739,24 @@ impl App {
         let mut messages=Vec::new();
         if let Some(manager)=&self.plugins {while let Ok(message)=manager.rx.try_recv(){messages.push(message);if messages.len()>=100 {break;}}}
         for message in messages {match message {
-            crate::plugin_runtime::Reply::Error(plugin,error)=>{self.plugin_errors.insert(plugin.clone(),error.clone());self.log(format!("Plugin {plugin} : {error}"));},
+            crate::plugin_runtime::Reply::Error(plugin,error)=>{
+                self.plugin_states.clear_plugin(&plugin);
+                for index in 0..self.applied.keys().len() {
+                    if self.applied.keys()[index].plugin_state.as_ref().and_then(|target|crate::plugin_state_display::source(&self.applied,index,target)).is_some_and(|source|source.plugin==plugin) {self.send_state_face(index);}
+                }
+                self.plugin_errors.insert(plugin.clone(),error.clone());self.log(format!("Plugin {plugin} : {error}"));
+            },
             crate::plugin_runtime::Reply::Message(plugin,message)=>self.plugin_message(&plugin,&message),
         }}
     }
     fn plugin_message(&mut self,plugin:&str,message:&serde_json::Value){
         if self.block_inspector_message(plugin,message) { return; }
-        use serde_json::json;
         let name=message["event"].as_str().unwrap_or("");
+        let state_message = matches!(name,"setState"|"novydeckStateUnknown");
+        if state_message {
+            if let Some((index,_))=self.plugin_states.observe(&self.applied,plugin,message) { self.send_state_face(index); }
+        }
+        use serde_json::json;
         let context=message["context"].as_str().unwrap_or("");
         let visible=self.plugins.as_ref().and_then(|m|m.visible().get(context)).filter(|v|v.plugin==plugin).cloned();
         if context.starts_with("novydeck-block-") && matches!(name,"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings") {

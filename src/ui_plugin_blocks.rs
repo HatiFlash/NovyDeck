@@ -54,7 +54,7 @@ impl App {
             page: self.config.page.clone(), key: self.selected, path,
             plugin: plugin.clone(), action: action.clone(), tree: structure(&key.steps) };
         let visible = crate::plugin_runtime::Visible { context, plugin, action,
-            index: self.selected, settings, state: 0 };
+            index: 0, settings, state: 0 };
         match manager.open_virtual_inspector(visible) {
             Ok(()) => self.block_inspector = Some(session),
             Err(error) => self.fail(crate::i18n::trf("Inspecteur indisponible : {error}", &[("error", &error)])),
@@ -71,7 +71,7 @@ impl App {
         if name == "getSettings" {
             let Some(Step::PluginAction {settings,..}) = extras::step_mut(&mut self.config.keys()[s.key].steps.clone(), &s.path).cloned() else { return true };
             let v = crate::plugin_runtime::Visible { context: context.into(), plugin: s.plugin.clone(),
-                action: s.action.clone(), index: s.key, settings: settings.clone(), state: 0 };
+                action: s.action.clone(), index: 0, settings: settings.clone(), state: 0 };
             if let Some(manager) = &self.plugins { manager.send(plugin, app_settings_event(&v,&crate::plugin_runtime::Device::virtual_device(),&settings,None)); }
         } else if name == "setSettings" {
             let Some(payload) = message["payload"].as_object() else { return true };
@@ -84,7 +84,10 @@ impl App {
                 if let Err(error) = store::save(&self.path, &self.config) {
                     self.config = before;
                     self.fail(crate::i18n::trf("Réglages du plugin non sauvegardés : {error}", &[("error", &error)]));
-                } else if let Some(manager) = &self.plugins { manager.virtual_settings(context, settings); }
+                } else {
+                    if let Some(manager) = &self.plugins { manager.virtual_settings(context, settings); }
+                    self.edited();
+                }
             }
         }
         true

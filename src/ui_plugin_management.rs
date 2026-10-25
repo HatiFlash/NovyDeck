@@ -112,6 +112,7 @@ impl App {
         match result {
             JobResult::Disk{id,remove,paused,result,control}=>{
                 if !paused {self.plugin_management.message=format!("{}",result.unwrap_err());return;}
+                self.plugin_states.clear_plugin(&id);
                 // Never restart against an obsolete catalog. Even a failed disk transaction may have rolled back.
                 self.refresh_plugin_catalog();
                 let (tx,rx)=mpsc::channel();self.plugin_management.working=Some(rx);let ctx=ctx.clone();
