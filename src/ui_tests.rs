@@ -2703,7 +2703,7 @@ fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
         navigation_seek(&mut h, size, &action, panel.center(), -80.0);
         navigation_seek(&mut h, size, &label, panel.center(), 100.0);
         let output = h.warm(size);
-        let collapse = text_position(&output.shapes, "Réduire").expect("bouton Réduire atteignable");
+        let collapse = text_position(&output.shapes, "Replier").expect("bouton Replier atteignable");
         h.click(size, collapse);
         let output = h.warm(size);
         assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(false));

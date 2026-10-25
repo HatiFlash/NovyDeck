@@ -55,12 +55,14 @@ impl App {
     ui.group(|ui|{
      ui.horizontal(|ui|{
       if let Some(icon)=plugin.icon.as_ref().and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())){ui.image((icon.id(),egui::vec2(24.0,24.0)));}
-      ui.vertical(|ui|{
-       ui.label(RichText::new(format!("{} · v{}",plugin.display_name(),plugin.version)).strong());
-       ui.label(crate::i18n::trf("{count} actions · {status}", &[("count", &(plugin.actions.len())), ("status", &(self.plugin_errors.get(&plugin.uuid).map(String::as_str).unwrap_or(crate::i18n::tr("arrêté"))))] ));
-      });
-      if ui.button(if expanded {crate::i18n::tr("Réduire")}else{crate::i18n::tr("Étendre")}).clicked(){ui.ctx().data_mut(|d|d.insert_persisted(expanded_id,!expanded));}
+      let title=format!("{} · v{}",plugin.display_name(),plugin.version);
+      ui.add(egui::Label::new(RichText::new(&title).strong()).truncate()).on_hover_text(title);
+     });
+     ui.horizontal(|ui|{
+      if ui.button(if expanded {crate::i18n::tr("Replier")}else{crate::i18n::tr("Étendre")}).clicked(){ui.ctx().data_mut(|d|d.insert_persisted(expanded_id,!expanded));}
       if ui.add_enabled(self.plugin_management.working.is_none(),egui::Button::new(crate::i18n::tr("Désinstaller"))).clicked(){self.plugin_management.confirmation=Some(super::plugin_management_ui::Request::Remove{id:plugin.uuid.clone(),name:plugin.display_name().to_owned(),version:plugin.version.clone()});}
+      let status=crate::i18n::trf("{count} actions · {status}", &[("count", &(plugin.actions.len())), ("status", &(self.plugin_errors.get(&plugin.uuid).map(String::as_str).unwrap_or(crate::i18n::tr("arrêté"))))]);
+      ui.add(egui::Label::new(RichText::new(&status).small()).truncate()).on_hover_text(status);
      });
      if !expanded{return;}
      ui.label(crate::i18n::trf("Auteur : {author} · Origine : import local", &[("author", &(if plugin.author.trim().is_empty(){crate::i18n::tr("inconnu")}else{&plugin.author}))] ));

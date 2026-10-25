@@ -58,6 +58,41 @@ fn management_fixture_update_and_removal_preserve_unrelated_and_user_data() {
     assert_eq!(std::fs::read(other.join("main.js")).unwrap(),b"1.0");
 }
 
+#[test]
+fn management_removal_does_not_report_expected_missing_plugin_as_restart_failure() {
+    for (remove, disk_ok, error, warning) in [
+        (true,true,"Plugin installé introuvable",false),
+        (true,true,"Runtime arrêté",true),
+        (true,false,"Plugin installé introuvable",true),
+        (false,true,"Plugin installé introuvable",true),
+    ] {
+        let mut h = Harness::new();
+        crate::i18n::set_language("fr");
+        let (tx,rx)=std::sync::mpsc::channel();
+        h.app.plugin_management.working=Some(rx);
+        tx.send(plugin_management_ui::JobResult::Resume {
+            result:Err(error.into()),
+            disk:if disk_ok {Ok(h.dir.path().join("backup"))} else {Err("transaction refusée".into())},
+            remove,
+        }).unwrap();
+        h.app.management_poll(&h.ctx);
+        assert!(h.app.plugin_management.working.is_none());
+        assert_eq!(h.app.plugin_management.message.contains("Remise en route non confirmée"),warning,"{}",h.app.plugin_management.message);
+        if remove && disk_ok && !warning {assert!(h.app.plugin_management.message.contains("Références conservées"));}
+    }
+}
+
+#[test]
+fn management_disconnected_worker_does_not_leave_interface_blocked() {
+    let mut h=Harness::new();
+    let (tx,rx)=std::sync::mpsc::channel::<plugin_management_ui::JobResult>();
+    h.app.plugin_management.working=Some(rx);
+    drop(tx);
+    h.app.management_poll(&h.ctx);
+    assert!(h.app.plugin_management.working.is_none(),"a dead worker must release the blocking progress layer");
+    assert!(!h.app.plugin_management.message.is_empty(),"the interrupted operation must be reported, not silently accepted");
+}
+
 struct ManagementMarketReset;
 impl Drop for ManagementMarketReset {
     fn drop(&mut self) {
