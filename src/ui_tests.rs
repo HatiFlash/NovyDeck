@@ -2647,6 +2647,15 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         let last_header = navigation_seek(&mut h, size, "Z · Dernier plugin", first, -90.0);
         h.click(size, last_header);
         let action = navigation_seek(&mut h, size, &last.actions.last().unwrap().name, last_header, -90.0);
+        let output = h.warm(size);
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                if text.galley.job.text == last.actions.last().unwrap().name {
+                    let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    assert!(shape.clip_rect.expand(1.0).contains_rect(bounds), "libellé de dernière action tronqué à {physical:?}/{dpi}: {bounds:?} dans {:?}", shape.clip_rect);
+                }
+            }
+        }
         h.click(size, action);
         let output = h.warm(size);
         if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
