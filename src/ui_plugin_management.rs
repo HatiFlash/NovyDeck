@@ -25,7 +25,7 @@ pub(super) fn disk_operation(root:&Path,id:&str,operation:Operation)->anyhow::Re
 fn walk(steps:&[Step],id:&str)->usize {
     steps.iter().map(|step|match step {
         Step::PluginAction{plugin,..}=>usize::from(plugin==id),
-        Step::Disabled{step}=>walk(std::slice::from_ref(step),id),
+        Step::Disabled{step}=>walk(std::slice::from_ref(step.as_ref()),id),
         Step::Repeat{steps,..}=>walk(steps,id),
         Step::Toggle{a,b}=>walk(a,id)+walk(b,id),
         Step::IfCondition{then_steps,else_steps,..}|Step::IfWindow{then_steps,else_steps,..}|Step::IfVariable{then_steps,else_steps,..}=>walk(then_steps,id)+walk(else_steps,id),
@@ -66,7 +66,7 @@ fn protected_images(folder:&Path,images:&[String])->Vec<PathBuf>{
         (absolute.is_file() && !relative.as_os_str().is_empty()).then(||relative.to_path_buf())
     }).collect()
 }
-pub(super) enum JobResult { Disk {id:String,remove:bool,result:Result<PathBuf,String>,control:PluginControl}, Resume {result:Result<(),String>,disk:Result<PathBuf,String>,remove:bool} }
+pub(super) enum JobResult { Disk {id:String,remove:bool,paused:bool,result:Result<PathBuf,String>,control:PluginControl}, Resume {result:Result<(),String>,disk:Result<PathBuf,String>,remove:bool} }
 #[derive(Default)] pub(super) struct State {pub confirmation:Option<Request>,pub working:Option<Receiver<JobResult>>,pub message:String}
 impl App {
     pub(super) fn management_start(&mut self,ctx:&egui::Context){
@@ -93,7 +93,7 @@ impl App {
                 Ok(outcome.map_err(|e|e.to_string()))
             });
             // Pause failure must not trigger a catalog refresh or disk mutation.
-            match result {Ok(result)=>{let _=tx.send(JobResult::Disk{id,remove,result,control});},Err(error)=>{let _=tx.send(JobResult::Disk{id,remove,result:Err(format!("Pause refusée : {error}")),control});}}
+            match result {Ok(result)=>{let _=tx.send(JobResult::Disk{id,remove,paused:true,result,control});},Err(error)=>{let _=tx.send(JobResult::Disk{id,remove,paused:false,result:Err(format!("Pause refusée : {error}")),control});}}
             ctx.request_repaint();
         });
     }
@@ -102,9 +102,10 @@ impl App {
         let Some(result)=result else{return};
         self.plugin_management.working=None;
         match result {
-            JobResult::Disk{id,remove,result,control}=>{
+            JobResult::Disk{id,remove,paused,result,control}=>{
+                if !paused {self.plugin_management.message=format!("{}",result.unwrap_err());return;}
                 // Never restart against an obsolete catalog. Even a failed disk transaction may have rolled back.
-                if !result.as_ref().err().is_some_and(|e|e.starts_with("Pause refusée")){self.refresh_plugin_catalog();}
+                self.refresh_plugin_catalog();
                 let (tx,rx)=mpsc::channel();self.plugin_management.working=Some(rx);let ctx=ctx.clone();
                 std::thread::spawn(move||{let resume=control.resume_plugin(&id);let _=tx.send(JobResult::Resume{result:resume,disk:result,remove});ctx.request_repaint();});
             }

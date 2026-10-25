@@ -44,6 +44,7 @@ impl App {
    if ui.button(crate::i18n::tr("Actualiser la liste")).on_hover_text(crate::i18n::tr("Relire les dossiers de plugins")).clicked(){self.plugin_inventory=None;}
   });
   ui.label(RichText::new(&self.notice).small());
+  if !self.plugin_management.message.is_empty(){ui.add(egui::Label::new(&self.plugin_management.message).wrap());}
   let inventory=self.plugin_inventory();
    ui.separator();iconset::heading(ui,Ico::Plug,RichText::new(crate::i18n::tr("Installés dans NovyDeck")).strong());
    {for plugin in inventory.installed.iter(){

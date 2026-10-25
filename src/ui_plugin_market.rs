@@ -126,6 +126,7 @@ impl App {
     });
     if state.loading{ui.label(tr("Chargement de la bibliothèque…"));}
     if !state.message.is_empty(){ui.add(egui::Label::new(RichText::new(&state.message).color(p.text_secondary)).wrap());}
+    if !self.plugin_management.message.is_empty(){ui.add(egui::Label::new(&self.plugin_management.message).wrap());}
     ui.add_space(12.0);
     egui::ScrollArea::vertical().id_salt("market_content").auto_shrink([false,false]).show(ui,|ui|{
      if let Some(entry)=view.selected.as_ref().and_then(|id|state.entries.iter().find(|entry|&entry.id==id)).cloned(){
