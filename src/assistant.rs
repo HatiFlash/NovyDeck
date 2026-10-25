@@ -178,6 +178,7 @@ impl Proposals {
                     title_size: old.title_size,
                     icon_scale: a.icon_scale.unwrap_or(old.icon_scale),
                     plugin: a.plugin.or_else(|| old.plugin.clone()),
+                    plugin_state: old.plugin_state.clone(),
                     steps: a.steps,
                     state_display: a.state_display.or_else(|| old.state_display.clone()),
                     long_steps: a.long_steps.unwrap_or_else(|| old.long_steps.clone()),
