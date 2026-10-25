@@ -23,9 +23,23 @@ python3 -m http.server 8766 --directory out --bind 127.0.0.1
 
 Dans un autre terminal : `npm run test:e2e` (Chromium installé via Playwright), puis `node tests/perf.mjs`. Les captures et `performance.json` sont sous `test-results/`, ignoré par Git. Le script de performance suppose que le serveur statique répond sur `127.0.0.1:8766` ; ses chiffres sont locaux et ne constituent pas un score Lighthouse.
 
+### Export GitHub Pages
+
+Pour le projet `HatiFlash/NovyDeck`, depuis `website/launch/` :
+
+```sh
+NEXT_PUBLIC_SITE_BASE_PATH=/NovyDeck npm run build
+mkdir -p "$TMPDIR/novy-pages-preview/NovyDeck"
+cp -a out/. "$TMPDIR/novy-pages-preview/NovyDeck/"
+python3 -m http.server 8767 --directory "$TMPDIR/novy-pages-preview" --bind 127.0.0.1
+# Dans un autre terminal : node tests/pages-smoke.mjs http://127.0.0.1:8767/NovyDeck/
+```
+
+Publier le **contenu** de `out/`, et non le répertoire `out/` lui-même, à la racine de la branche `gh-pages`. Ajouter `.nojekyll` pour que GitHub Pages serve `_next/`. La source de publication Pages est `gh-pages` `/`, et l'adresse cible est `https://hatiflash.github.io/NovyDeck/`. Ne pas déployer l'export racine (`npm run build` sans variable) à cette adresse. `tests/pages-smoke.mjs` prend l'URL en argument et contrôle bureau/mobile, chargement WebGL, police, images, onglets, thème, langue et ressources HTTP.
+
 ## Architecture et comportement
 
-- Next.js, TypeScript, Tailwind CSS 4 ; export statique `out/`. Le site doit être servi à la **racine** de l'hôte. Les chemins des polices et de l'icône sont absolus ; pour un sous-chemin, ajuster `basePath`, `assetPrefix`, les URLs des médias et les métadonnées puis retester l'export.
+- Next.js, TypeScript, Tailwind CSS 4 ; export statique `out/`. Sans `NEXT_PUBLIC_SITE_BASE_PATH`, le site est servi à la racine. Avec `NEXT_PUBLIC_SITE_BASE_PATH=/NovyDeck`, Next génère `basePath` et `assetPrefix` adaptés à GitHub Pages, préfixe l'icône et embarque la police InterDisplay via `next/font/local`. Les médias du site utilisent des chemins relatifs. Retester toute autre valeur de sous-chemin avant publication.
 - Onglets du showcase générés par la CLI shadcn (`src/components/ui/tabs.tsx`, primitif Radix). Motion anime uniquement le passage entre captures sombre/clair. GSAP/ScrollTrigger règle la révélation des chapitres, les cinq étapes illustratives de l'Atelier et la rotation de la scène en fonction du scroll. Lenis est réservé aux écrans de 900 px ou plus sans préférence de réduction des animations ; les changements de préférence sont pris en compte.
 - La scène Three.js / React Three Fiber est chargée **à l'approche** de sa section et seulement sur grand écran sans réduction des animations. Sur mobile, ou avec `prefers-reduced-motion`, un deck CSS statique utilise les mêmes textures de touches. WebGL fonctionne en rendu à la demande. La vidéo 1080p n'est pas préchargée ; affichage du poster, lecture automatique seulement sur grand écran visible sans réduction des animations ni économie de données, bouton lecture/pause explicite.
 - Navigation clavier, lien « aller au contenu », onglets Radix, thème illustré à boutons avec `aria-pressed`, FR/EN et menu mobile. Les images de captures comportent des textes alternatifs ; le montage 3D est annoncé comme illustratif.
@@ -46,4 +60,4 @@ Le MCP 21st n'était pas connecté à l'environnement. Son CLI a refusé une rec
 
 ## Publication
 
-**Non publiée.** Garder l'ancienne page `website/index.html` disponible jusqu'à validation humaine de la refonte. Avant la mise en ligne : fixer le domaine, vérifier les métadonnées sociales et le chemin de base réel, exécuter les tests sur l'hébergement cible et obtenir l'accord pour remplacer la page publique.
+Le site statique est destiné à GitHub Pages sur `https://hatiflash.github.io/NovyDeck/`, avec le build `NEXT_PUBLIC_SITE_BASE_PATH=/NovyDeck` depuis `website/launch/`. La branche de publication ne contient que l'export `out/` et `.nojekyll` ; la source reste dans le dépôt principal. L'ancienne page `website/index.html` reste présente. Après toute publication, vérifier en ligne l'URL, les médias, le chargement WebGL et les liens de téléchargement avant d'annoncer le site disponible.

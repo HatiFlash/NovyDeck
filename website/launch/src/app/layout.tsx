@@ -1,9 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const novyDisplay = localFont({
+  src: "../../public/fonts/InterDisplay-Bold.woff2",
+  variable: "--font-novy-display",
+  weight: "700",
+  display: "swap",
+});
+const basePath = process.env.NEXT_PUBLIC_SITE_BASE_PATH || "";
 
 export const metadata: Metadata = {
   title: "NovyDeck — Votre deck. Vos règles.",
@@ -14,11 +19,11 @@ export const metadata: Metadata = {
     description: "Le deck devient votre terrain de jeu. Touches, automatisations visuelles, thèmes et plugins.",
     type: "website",
   },
-  icons: { icon: "/assets/novydeck-logo.webp" },
+  icons: { icon: `${basePath}/assets/novydeck-logo.webp` },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#080d16" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="fr" className={cn("font-sans", geist.variable)}><body>{children}</body></html>;
+  return <html lang="fr" className={novyDisplay.variable}><body>{children}</body></html>;
 }
