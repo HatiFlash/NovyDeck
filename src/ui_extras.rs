@@ -103,6 +103,31 @@ fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str
 fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,plugins:&[crate::plugins::Plugin],advanced:bool,path:&[usize])->bool {
     let Step::PluginAction {plugin,action,settings,label}=step else{return false};
     let mut changed=false;
+    if *plugin == "com.novydeck.googlehome" && *action == "com.novydeck.googlehome.control" {
+        let mode = settings.get("mode").and_then(serde_json::Value::as_str);
+        let mut selected = match mode { Some("on") => 0, Some("off") => 1, Some("toggle") => 2, Some("brightness") => 3, _ => 4 };
+        ui.horizontal(|ui| {
+            ui.label(crate::i18n::tr("État à l’appui"));
+            egui::ComboBox::from_id_salt(ui.id().with("googlehome-mode"))
+                .selected_text(crate::i18n::tr(match selected {
+                    0 => "Allumer", 1 => "Éteindre", 2 => "Basculer",
+                    3 => "Luminosité (réglages du plugin)", _ => "À configurer",
+                }))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut selected, 0, crate::i18n::tr("Allumer"));
+                    ui.selectable_value(&mut selected, 1, crate::i18n::tr("Éteindre"));
+                    ui.selectable_value(&mut selected, 2, crate::i18n::tr("Basculer"));
+                });
+        });
+        // Do not silently turn an unconfigured or brightness action into a toggle.
+        if selected < 3 {
+            let value = ["on", "off", "toggle"][selected];
+            if mode != Some(value) {
+                settings["mode"] = serde_json::Value::String(value.into());
+                changed = true;
+            }
+        }
+    }
     if let Some(p)=plugins.iter().find(|p|p.uuid==*plugin) {
         if let Some(a)=p.actions.iter().find(|a|a.uuid==*action) {
             ui.label(format!("{} › {}",p.display_name(),if a.name.is_empty(){&a.uuid}else{&a.name}));

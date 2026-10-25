@@ -122,3 +122,72 @@ fn stale_sessions_never_write_new_block_after_reorder_or_remove() {
     h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":old,"payload":{"count":99}}));
     assert!(h.app.block_inspector.is_none());
 }
+
+#[test]
+fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets() {
+    let mut h = Harness::new();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    plugin.uuid = "com.novydeck.googlehome".into();
+    plugin.name = "Google Home témoin".into();
+    plugin.inspector = Some("inspector.html".into());
+    plugin.actions[0].uuid = "com.novydeck.googlehome.control".into();
+    let plugin_id = plugin.uuid.clone();
+    h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
+    h.app.show_workflow = true;
+    let neighbour_settings = serde_json::json!({"scope":"group","targets":["id-neighbour"],"mode":"on"});
+    h.app.config.keys_mut()[0].steps = vec![
+        Step::PluginAction {
+            plugin: plugin_id.clone(), action: "com.novydeck.googlehome.control".into(),
+            settings: serde_json::json!({}), label: "Bloc cible".into(),
+        },
+        Step::PluginAction {
+            plugin: plugin_id.clone(), action: "com.novydeck.googlehome.control".into(),
+            settings: neighbour_settings.clone(), label: "Bloc voisin".into(),
+        },
+    ];
+    // Opening the properties must not silently convert an existing brightness
+    // action or an unconfigured action to toggle.
+    if let Step::PluginAction { settings, .. } = &mut h.app.config.keys_mut()[0].steps[0] {
+        *settings = serde_json::json!({"mode":"brightness","brightness":42,"scope":"device","target":"id1"});
+    }
+    let size = vec2(1366.0, 768.0);
+    h.warm(size); // initialise the workshop's selection context
+    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0]));
+    h.warm(size);
+    assert!(matches!(&h.app.config.keys()[0].steps[0], Step::PluginAction {settings,..}
+        if settings["mode"] == "brightness" && settings["brightness"] == 42));
+    if let Step::PluginAction { settings, .. } = &mut h.app.config.keys_mut()[0].steps[0] {
+        *settings = serde_json::json!({});
+    }
+    h.warm(size);
+    assert!(matches!(&h.app.config.keys()[0].steps[0], Step::PluginAction {settings,..} if settings == &serde_json::json!({})));
+    h.app.block_inspector_open(vec![0]);
+    let context = h.app.block_inspector.as_ref().expect("googlehome block inspector opens").context.clone();
+    assert!(context.starts_with("novydeck-inspector-block-"));
+
+    // Real setSettings sent by the inspector: scope/targets/mode together.
+    let payload = serde_json::json!({"scope":"group","targets":["id1","id2"],"mode":"off"});
+    h.app.plugin_message(&plugin_id, &serde_json::json!({"event":"setSettings","context":context,"payload":payload}));
+    assert!(matches!(&h.app.config.keys()[0].steps[0],
+        Step::PluginAction {settings,..} if settings == &payload));
+    assert!(matches!(&h.app.config.keys()[0].steps[1],
+        Step::PluginAction {settings,..} if settings == &neighbour_settings));
+
+    // Persisted on disk and still intact after reload.
+    let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();
+    assert!(matches!(&saved.keys()[0].steps[0],
+        Step::PluginAction {settings,..} if settings == &payload));
+    assert!(matches!(&saved.keys()[0].steps[1],
+        Step::PluginAction {settings,..} if settings == &neighbour_settings));
+
+    // Mode change via the same setSettings path keeps targets/scope untouched.
+    let session = h.app.block_inspector.as_ref().unwrap().context.clone();
+    let switched = serde_json::json!({"scope":"group","targets":["id1","id2"],"mode":"toggle"});
+    h.app.plugin_message(&plugin_id, &serde_json::json!({"event":"setSettings","context":session,"payload":switched}));
+    let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();
+    assert!(matches!(&saved.keys()[0].steps[0],
+        Step::PluginAction {settings,..} if settings["mode"] == "toggle" && settings["targets"] == serde_json::json!(["id1","id2"]) && settings["scope"] == "group"));
+    assert!(matches!(&saved.keys()[0].steps[1],
+        Step::PluginAction {settings,..} if settings == &neighbour_settings));
+}
