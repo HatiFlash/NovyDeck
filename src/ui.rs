@@ -715,9 +715,18 @@ impl App {
             self.fail(trf("Action à corriger : {error}", &[("error", &e)]));
             return;
         }
-        if key.steps.is_empty() {
+        if key.steps.is_empty() && key.plugin.is_none() {
             self.log(tr("Cette touche n’a pas encore d’action. Ajoute une action depuis la bibliothèque.").into());
             return;
+        }
+        if key.steps.is_empty() {
+            let binding = key.plugin.as_ref().expect("checked plugin binding");
+            key.steps.push(Step::PluginAction {
+                plugin: binding.plugin.clone(),
+                action: binding.action.clone(),
+                settings: binding.settings.clone(),
+                label: String::new(),
+            });
         }
         self.engine.start(key, dry, if delayed { 3000 } else { 0 }, config.obs.clone());
     }

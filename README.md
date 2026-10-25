@@ -5,7 +5,7 @@ English · [Français](README.fr.md)
   <h1>NovyDeck</h1>
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.10.1"><img src="https://img.shields.io/badge/Release-v0.10.1-3478F6.svg" alt="Release v0.10.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/Release-v0.11.0-3478F6.svg" alt="Release v0.11.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -20,6 +20,32 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.11.0
+
+### Plugin updates and removal
+
+Open the **Plugin Store** to compare the installed and available versions. **Update** asks for confirmation, checks the archive and replaces only the selected plugin with a backup/rollback path; downgrades are refused. **Uninstall** reports keys and blocks that use it and asks for confirmation. The profiles, references, images and configuration are not deleted; unavailable actions can be reassigned after reinstalling. The installed plugin list is compact and each entry expands independently.
+
+![Installed and available versions in the store](docs/images/v011-management-store-en.png)
+![Installed plugin removal and confirmation](docs/images/v011-management-local-en.png)
+
+### A browsable plugin library and real block settings
+
+In the **Workshop**, the plugin action picker groups actions by installed plugin and category, with scrolling for compact windows and HiDPI. Click a plugin action block or its **Plugin settings** button to open that action's native plugin inspector. Each block has its own settings, including new blocks; the settings are saved and restored without copying another key. This requires a plugin that actually provides a Property Inspector.
+
+![Plugin block with its settings control](docs/images/v011-plugin-block-properties-en.png)
+
+### Plugin-reported ON/OFF faces
+
+In a key's **Appearance**, choose a direct plugin action or a plugin block as the state source, then set separate ON and OFF labels/images. The UI distinguishes a **confirmed** plugin report from a **local** state; when no valid report exists it falls back to the base face instead of falsely claiming OFF. User-selected key images take precedence and existing profiles are not rewritten. The Google Home and Wallpaper Engine plugins need their **1.0.5** updates to emit the new state signals; the 1.0.4 installations are left untouched until you choose to update.
+
+![Confirmed ON face and source selector](docs/images/v011-plugin-state-on-en.png)
+![Separate state image controls](docs/images/v011-plugin-state-editor-en.png)
+
+### Testing a direct plugin action
+
+**Test for real** also supports a key with a single direct plugin action (no macro blocks). It retains the explicit confirmation and execution delay; **Simulate** still sends no plugin command. No physical D6, Google account or Wallpaper Engine installation was exercised by the automated tests.
 
 ## What's new in 0.10.1
 
@@ -250,6 +276,7 @@ NovyDeck works offline. Local AI stays on your PC and is optional and disabled b
 
 ## Latest release
 
+- **0.11.0:** transactional plugin updates/removal, compact installed library, scrolling action picker, independent block inspectors, plugin ON/OFF faces and direct-action test.
 - **0.10.1:** cleaner deck header (texts inside the card, grouped page arrows greyed out on a single page); English fixes (Undo, library categories, step names, Add menu).
 - **0.10.0:** redesigned interface with a new design system: graphite deck stage without neon glow, outline-free buttons, clearer key inspector with underlined tabs, cleaner action library, deeper colours in all themes and Semibold titles. Profiles, media and plugins are kept.
 - **0.9.3:** security badges in the plugin store (automatic GitHub scan); official plugins 1.0.2 with logos and cleaner settings; no console during in-app updates; fixed secondary windows; ON/OFF state kept across pages.

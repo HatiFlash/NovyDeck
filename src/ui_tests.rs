@@ -447,6 +447,56 @@ fn workshop_real_run_requires_explicit_confirmation() {
 }
 
 #[test]
+fn direct_plugin_only_key_simulates_without_dispatch_then_requires_real_confirmation() {
+    let mut h = Harness::new();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("counter.js");
+    std::fs::write(&script, r#"
+const args=process.argv.slice(2),get=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${get('-port')}`);
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:get('-registerEvent'),uuid:get('-pluginUUID')})));
+ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDown')ws.send(JSON.stringify({event:'logMessage',context:v.context,payload:{message:'direct-keydown'}}));});
+"#).unwrap();
+    plugin.folder = dir.path().into();
+    plugin.runtime = crate::plugins::Runtime::Node(script);
+    let binding = PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
+    h.app.config.keys_mut()[0] = Key { plugin: Some(binding), steps: vec![], ..Key::default() };
+    h.app.applied = h.app.config.clone();
+    let mut manager = crate::plugin_runtime::Manager::new(vec![plugin]);
+    manager.sync(&h.app.applied);
+    h.app.plugins = Some(manager);
+    h.app.show_workflow = true;
+    let size=vec2(1366.0,768.0);
+    let output=h.warm(size);
+    h.click(size,text_position(&output.shapes,"Simuler").unwrap());
+    let deadline=std::time::Instant::now()+std::time::Duration::from_secs(5);
+    while h.app.engine.running.load(Ordering::SeqCst) && std::time::Instant::now()<deadline {std::thread::sleep(std::time::Duration::from_millis(20));}
+    assert!(!h.app.engine.running.load(Ordering::SeqCst));
+    assert_eq!(h.app.workshop_journal.mode,Some(true));
+    assert!(!h.app.plugins.as_ref().unwrap().rx.try_iter().any(|r|matches!(r,crate::plugin_runtime::Reply::Message(_,v) if v["payload"]["message"]=="direct-keydown")));
+    let output=h.warm(size);
+    h.click(size,text_position(&output.shapes,"Tester pour de vrai").unwrap());
+    assert!(h.app.workshop_journal.confirm_real);
+    assert!(!h.app.engine.running.load(Ordering::SeqCst));
+    let output=h.warm(size);
+    h.click(size,text_position(&output.shapes,"Confirmer l'exécution réelle").unwrap());
+    assert_eq!(h.app.workshop_journal.mode,Some(false));
+    let rx=&h.app.plugins.as_ref().unwrap().rx;
+    let deadline=std::time::Instant::now()+std::time::Duration::from_secs(12);
+    loop {
+        match rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+            Ok(crate::plugin_runtime::Reply::Message(_,v)) if v["payload"]["message"]=="direct-keydown"=>break,
+            Ok(crate::plugin_runtime::Reply::Error(_,error))=>panic!("plugin error: {error}"),
+            Ok(_)=>(),
+            Err(e)=>panic!("no plugin keyDown after confirmation: {e}"),
+        }
+    }
+    assert!(h.app.config.keys()[0].steps.is_empty(),"testing must not rewrite the saved key");
+}
+
+#[test]
 fn real_widgets_assign_catalog_bind_swap_keys_and_undo() {
     let size = vec2(1380.0, 900.0);
     let mut h = Harness::new();

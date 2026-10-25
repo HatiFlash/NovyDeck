@@ -926,7 +926,16 @@ impl App {
     pub(super) fn start_workshop_run(&mut self, dry: bool) {
         if self.engine.running.load(Ordering::SeqCst) { return; }
         let mut key = self.config.keys()[self.selected].clone();
-        if key.steps.is_empty() { self.fail(crate::i18n::tr("Ajoute un bloc avant de tester.").into()); return; }
+        if key.steps.is_empty() && key.plugin.is_none() { self.fail(crate::i18n::tr("Ajoute un bloc avant de tester.").into()); return; }
+        if key.steps.is_empty() {
+            let binding = key.plugin.as_ref().expect("checked plugin binding");
+            key.steps.push(Step::PluginAction {
+                plugin: binding.plugin.clone(),
+                action: binding.action.clone(),
+                settings: binding.settings.clone(),
+                label: String::new(),
+            });
+        }
         if let Err(e) = validate_key(&key, &self.config) { self.fail(crate::i18n::trf("Action à corriger : {e}", &[("e", &(e))] )); return; }
         key.runtime_id = Some(crate::engine::identity(&self.config.profiles[self.config.active].name, &self.config.page, self.selected));
         // A workshop run never queues behind another macro; no real side effect on dry mode.
