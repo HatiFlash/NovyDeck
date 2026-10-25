@@ -1034,6 +1034,8 @@
     "Réglages": "Settings",
     "Réglages JSON (objet)": "JSON settings (object)",
     "Réglages du plugin": "Plugin settings",
+    "Inspecteur du plugin indisponible": "Plugin inspector unavailable",
+    "Inspecteur indisponible : {error}": "Inspector unavailable: {error}",
     "Réglages du plugin non sauvegardés : {error}": "Plugin settings not saved: {error}",
     "Réglages globaux non sauvegardés : {error}": "Global settings not saved: {error}",
     "Réglages — {device}": "Settings — {device}",

@@ -100,7 +100,7 @@ fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str
     });
     chosen
 }
-fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,plugins:&[crate::plugins::Plugin],advanced:bool)->bool {
+fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,plugins:&[crate::plugins::Plugin],advanced:bool,path:&[usize])->bool {
     let Step::PluginAction {plugin,action,settings,label}=step else{return false};
     let mut changed=false;
     if let Some(p)=plugins.iter().find(|p|p.uuid==*plugin) {
@@ -108,6 +108,11 @@ fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,pl
             ui.label(format!("{} › {}",p.display_name(),if a.name.is_empty(){&a.uuid}else{&a.name}));
         } else {ui.colored_label(theme::palette(ui.ctx()).warning,crate::i18n::tr("Action de plugin introuvable"));}
     } else {ui.colored_label(theme::palette(ui.ctx()).warning,crate::i18n::tr("Plugin introuvable"));}
+    let available=plugins.iter().any(|p|p.uuid==*plugin && p.prerequisite.is_none()
+        && p.actions.iter().any(|a|a.uuid==*action && a.inspector.as_ref().or(p.inspector.as_ref()).is_some()));
+    if ui.add_enabled(available,egui::Button::new(crate::i18n::tr("Réglages du plugin")))
+        .on_disabled_hover_text(crate::i18n::tr("Inspecteur du plugin indisponible"))
+        .clicked() {ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.to_vec()));}
     ui.menu_button(crate::i18n::tr("Copier les réglages d'une touche…"), |ui| {
         for (index,key) in config.keys().iter().enumerate() {
             if let Some(binding)=key.plugin.as_ref().filter(|b|b.plugin==*plugin && b.action==*action) {
@@ -539,6 +544,7 @@ pub(super) fn block_editor(
                         let summary = named_summary(step, plugins);
                         if ui.selectable_label(!folded, if summary.starts_with(step_label(step)) { summary.clone() } else { format!("{} · {}", step_label(step), summary) })
                             .on_hover_text(format!("{} — {}", step_label(step), summary)).clicked() {
+                            if matches!(step.active(),Step::PluginAction { .. }) {ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.clone()));}
                             ui.data_mut(|d| d.insert_temp(folded_id, !folded));
                             if parent.is_empty() {
                                 ui.data_mut(|d| d.insert_temp(egui::Id::new("workshop_selected"), i));
@@ -569,7 +575,7 @@ pub(super) fn block_editor(
                     let mut capture = false;
                     let mut icon = None;
                     if matches!(step.active(), Step::PluginAction { .. }) {
-                        changed |= plugin_fields(ui, step.active_mut(), config, plugins, advanced);
+                        changed |= plugin_fields(ui, step.active_mut(), config, plugins, advanced, &path);
                     } else if simple_fields_visible(step.active(), advanced) {
                         match step.active_mut() {
                             Step::Launch { program, .. } if !advanced => {
@@ -789,7 +795,12 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], selection
                         let label = ui.add(egui::Button::new(egui::RichText::new(title)).selected(chosen)
                             .truncate().sense(egui::Sense::click_and_drag()))
                             .on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.", &[("name", &step_label(step)), ("summary", &summary)]));
-                        if label.clicked() { *selection = if chosen { None } else { Some(path.clone()) }; }
+                        if label.clicked() {
+                            *selection = if chosen { None } else { Some(path.clone()) };
+                            if matches!(step.active(),Step::PluginAction { .. }) {
+                                ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.clone()));
+                            }
+                        }
                         if label.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_drag"), path.clone())); }
                         if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
                         ui.menu_button("...", |ui| {
@@ -1115,7 +1126,7 @@ impl App {
                                 changed |= edit_step(ui, step, &profiles, &pages, &mut capture, &self.audio, &mut icon,
                                     &dialog_tx, &(target.0, target.1.clone(), target.2, path.clone()));
                                 if matches!(step.active(), Step::PluginAction { .. }) {
-                                    changed |= plugin_fields(ui, step.active_mut(), &validation_config, &installed_plugins, false);
+                                    changed |= plugin_fields(ui, step.active_mut(), &validation_config, &installed_plugins, false, &path);
                                 }
                                 if capture { record = Some(path.clone()); }
                                 if let Some(state) = icon { pick_audio = Some((path.clone(), state)); }
@@ -1250,8 +1261,22 @@ impl App {
             self.open_icon_gallery(Some(target));
         }
         if changed {
+            self.block_inspector_close();
             ctx.data_mut(|d| d.remove::<Vec<(Vec<usize>, String)>>(trace_id));
             self.edited();
+        }
+        let open_id = egui::Id::new("plugin_block_open");
+        let open = ctx.data_mut(|d|d.remove::<Vec<usize>>(open_id));
+        if let Some(path) = open {
+            if !ctx.data(|d|d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some()
+                && (self.preferences.workshop_advanced || ctx.data(|d|d.get_temp::<Vec<usize>>(path_id)).as_ref()==Some(&path)) {
+                self.block_inspector_open(path);
+            }
+        } else if self.block_inspector.is_some() {
+            let selected_path = ctx.data(|d|d.get_temp::<Vec<usize>>(path_id));
+            if !self.block_inspector_valid() || (!self.preferences.workshop_advanced && self.block_inspector.as_ref().is_some_and(|s|selected_path.as_ref()!=Some(&s.path))) {
+                self.block_inspector_close();
+            }
         }
         if let Some(path) = record {
             self.recording = Some((

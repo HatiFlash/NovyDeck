@@ -45,6 +45,8 @@ pub(crate) use plugin_validation_harness::{validate_restart_persistence, validat
 
 #[path = "ui_workshop_chat.rs"]
 mod workshop_chat_ui;
+#[path = "ui_plugin_blocks.rs"]
+mod plugin_blocks;
 
 #[derive(Default,Clone)]
 struct PluginFace { title:String, image_bytes:Option<Vec<u8>>, state:u8, flash:Option<(bool,Instant)>, version:u64 }
@@ -195,6 +197,8 @@ pub struct App {
     last_key: Option<(usize, Instant)>,
     key_previews: key_preview::Cache,
     plugins: Option<crate::plugin_runtime::Manager>,
+    block_inspector: Option<plugin_blocks::BlockInspector>,
+    block_inspector_nonce: u64,
     plugin_faces: HashMap<String, PluginFace>,
     plugin_errors: HashMap<String,String>,
     /// Demandes externes capturées dans une App de validation ; jamais exécutées.
@@ -430,6 +434,8 @@ impl App {
             last_key: None,
             key_previews: key_preview::Cache::default(),
             plugin_faces: HashMap::new(),
+            block_inspector: None,
+            block_inspector_nonce: 0,
             plugin_errors: HashMap::new(),
             plugin_external_effects: isolated.then(Vec::new),
             plugin_report_cache: HashMap::new(),
@@ -4695,6 +4701,7 @@ impl App {
         }}
     }
     fn plugin_message(&mut self,plugin:&str,message:&serde_json::Value){
+        if self.block_inspector_message(plugin,message) { return; }
         use serde_json::json;
         let name=message["event"].as_str().unwrap_or("");
         let context=message["context"].as_str().unwrap_or("");
