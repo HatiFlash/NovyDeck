@@ -83,7 +83,7 @@ fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str
                             let title=if action.name.is_empty(){action.uuid.as_str()}else{action.name.as_str()};
                             ui.push_id(&action.uuid,|ui|ui.horizontal(|ui|{
                                 if let Some(texture)=action.icon.as_ref().or(plugin.icon.as_ref()).and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())) {ui.image((texture.id(),egui::vec2(16.0,16.0)));}
-                                if ui.button(title).clicked(){chosen=Some(plugin_step(plugin,action));}
+                                if ui.add(egui::Button::new(title).wrap()).on_hover_text(title).clicked(){chosen=Some(plugin_step(plugin,action));}
                             }));
                         }
                     });
