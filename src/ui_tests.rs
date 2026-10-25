@@ -2608,9 +2608,21 @@ fn navigation_fixture(name: &str, id: &str, count: usize) -> crate::plugins::Plu
 fn navigation_seek(h: &mut Harness, size: egui::Vec2, label: &str, at: egui::Pos2, delta: f32) -> egui::Pos2 {
     for _ in 0..80 {
         let output = h.warm(size);
-        if let Some(position) = text_position(&output.shapes, label) { return position; }
+        let mut scroll_delta = delta;
+        if let Some(position) = text_position(&output.shapes, label) {
+            if let Some((bounds,clip)) = output.shapes.iter().find_map(|shape| {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    if text.galley.job.text == label && bounds.center().distance(position) < 1.0 {return Some((bounds,shape.clip_rect));}
+                }
+                None
+            }) {
+                if clip.expand(1.0).contains_rect(bounds) {return position;}
+                scroll_delta = if bounds.min.y < clip.min.y {24.0} else {-24.0};
+            }
+        }
         h.frame(size, vec![Input::PointerMoved(at), Input::MouseWheel {
-            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, delta), modifiers: Modifiers::NONE,
+            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, scroll_delta), modifiers: Modifiers::NONE,
         }]);
     }
     let output = h.warm(size);
@@ -2627,9 +2639,10 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         crate::i18n::set_language("fr");
         h.ctx.set_pixels_per_point(dpi);
         let size = physical / dpi;
-        let plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
+        let mut plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
             navigation_fixture("B · Autre plugin", "test.navigation.b", 2),
             navigation_fixture("Z · Dernier plugin", "test.navigation.z", 55)];
+        plugins[2].actions.last_mut().unwrap().name = "ZZ action finale · Z · Dernier plugin · un intitulé suffisamment long pour vérifier la largeur réelle de la palette".into();
         let last = plugins[2].clone();
         let expected_action = last.actions.last().unwrap().uuid.clone();
         h.app.plugins = Some(crate::plugin_runtime::Manager::new(plugins));
