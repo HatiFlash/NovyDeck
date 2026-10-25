@@ -81,6 +81,17 @@ pub fn source(config: &Config, index: usize, target: &PluginStateTarget) -> Opti
 #[derive(Default)]
 pub struct Cache { values: HashMap<String, (Source, Observation)> }
 impl Cache {
+    /// Observe only a source selected on the currently visible configuration.
+    /// A stale/foreign context is never interpreted as a new instance.
+    pub fn observe(&mut self, config: &Config, owner: &str, message: &Value) -> Option<(usize, Observation)> {
+        let context = message["context"].as_str()?;
+        let (index, current) = config.keys().iter().enumerate().find_map(|(index, key)| {
+            let target = key.plugin_state.as_ref()?;
+            let current = source(config, index, target)?;
+            (current.context == context && current.plugin == owner).then_some((index, current))
+        })?;
+        Some((index, self.record(&current, owner, message)))
+    }
     /// Call with the current, trusted source (not fields copied from a plugin message).
     /// Unexpected owner, action or context cannot overwrite a previous observation.
     pub fn record(&mut self, source: &Source, owner: &str, message: &Value) -> Observation {
@@ -139,6 +150,9 @@ mod tests {
     #[test] fn serde_opt_in_and_faces_reload() {
         let (config, key) = fixture();
         let mut legacy = serde_json::to_value(&key).unwrap(); legacy.as_object_mut().unwrap().remove("plugin_state");
+        let legacy_bytes = serde_json::to_string(&Key::default()).unwrap();
+        assert!(!legacy_bytes.contains("plugin_state"));
+        assert_eq!(serde_json::to_string(&serde_json::from_str::<Key>(&legacy_bytes).unwrap()).unwrap(), legacy_bytes);
         assert!(serde_json::from_value::<Key>(legacy.clone()).unwrap().plugin_state.is_none());
         assert_eq!(serde_json::to_value(serde_json::from_value::<Key>(legacy).unwrap()).unwrap().get("plugin_state"), None);
         let loaded: Config = serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
@@ -150,6 +164,8 @@ mod tests {
         assert_eq!(cache.apply(&config, 0, &key).image, "custom.png");
         let msg = |state: Value, origin: Option<&str>| { let mut v = json!({"event":"setState","context":s.context,"action":s.action,"payload":{"state":state}}); if let Some(origin) = origin { v["payload"]["novydeckStateSource"] = json!(origin); } v };
         assert_eq!(cache.record(&s, "owner", &msg(json!(1), Some("confirmed"))), Observation::Confirmed(true));
+        assert_eq!(cache.observe(&config, "other", &msg(json!(0), None)), None);
+        assert_eq!(cache.observe(&config, "owner", &msg(json!(1), Some("confirmed"))), Some((0, Observation::Confirmed(true))));
         assert_eq!(cache.apply(&config, 0, &key).image, "on.png");
         assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("local"))), Observation::Local(false));
         let off = cache.apply(&config, 0, &key);
