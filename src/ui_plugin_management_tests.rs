@@ -57,3 +57,113 @@ fn management_fixture_update_and_removal_preserve_unrelated_and_user_data() {
     assert_eq!(std::fs::read(backup.join("settings.json")).unwrap(),b"private");
     assert_eq!(std::fs::read(other.join("main.js")).unwrap(),b"1.0");
 }
+
+struct ManagementMarketReset;
+impl Drop for ManagementMarketReset {
+    fn drop(&mut self) {
+        super::plugin_market_ui::test_close();
+        *super::plugin_store_ui::community_state().lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
+    }
+}
+
+fn local_fixture(h: &Harness) -> crate::plugins::Plugin {
+    let folder = fixture(h.dir.path(), "local.sdPlugin", "test.a", "1.0");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    plugin.name = "Plugin local de test".into();
+    plugin
+}
+
+#[test]
+fn management_store_widgets_show_installed_versions_and_refuse_downgrades_in_both_languages() {
+    let _reset = ManagementMarketReset;
+    let size = vec2(1600.0, 1000.0);
+    for lang in ["fr", "en"] {
+        let mut h = Harness::new();
+        crate::i18n::set_language(lang);
+        let local = local_fixture(&h);
+        let registry = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme/registry.json");
+        let mut entry = crate::community_plugins::parse(&std::fs::read(registry).unwrap()).unwrap().remove(0);
+        entry.uuid = Some(local.uuid.clone());
+        entry.version = "2.0".into();
+        entry.compatible = true;
+        entry.name = "Plugin de test du magasin".into();
+        entry.icon = None;
+        entry.screenshots.clear();
+        {
+            let mut state = super::plugin_store_ui::community_state().lock().unwrap();
+            *state = Default::default();
+            state.consent = true;
+            state.entries = vec![entry.clone()];
+        }
+        for version in ["1.0", "2.0", "3.0"] {
+            let mut plugin = local.clone();
+            plugin.version = version.into();
+            h.app.plugin_inventory = Some(std::sync::Arc::new(super::plugin_store_ui::Inventory { installed: vec![plugin], ..Default::default() }));
+            super::plugin_market_ui::test_view(Some(&entry.id));
+            let output = h.warm(size);
+            if version == "1.0" {
+                if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+                    h.png(size, output.clone(), &PathBuf::from(out).join(format!("management-store-{lang}.png")));
+                }
+                assert!(text_position(&output.shapes, crate::i18n::tr("Mettre à jour")).is_some(), "update button {lang}");
+            } else {
+                assert!(text_position(&output.shapes, crate::i18n::tr("Mettre à jour")).is_none(), "no same-version update or downgrade {lang}/{version}");
+            }
+            let installed = crate::i18n::trf("Version installée : {version}", &[("version", &version)]);
+            let available = crate::i18n::trf("Version disponible : {version}", &[("version", &"2.0")]);
+            assert!(text_position(&output.shapes, &installed).is_some(), "installed version {lang}/{version}");
+            assert!(text_position(&output.shapes, &available).is_some(), "available version {lang}");
+        }
+        super::plugin_market_ui::test_close();
+    }
+}
+
+#[test]
+fn management_local_uninstall_is_visible_and_cancel_preserves_everything_in_both_languages() {
+    let _reset = ManagementMarketReset;
+    super::plugin_market_ui::test_close();
+    let size = vec2(1366.0, 768.0);
+    for lang in ["fr", "en"] {
+        let mut h = Harness::new();
+        crate::i18n::set_language(lang);
+        let local = local_fixture(&h);
+        let folder = local.folder.clone();
+        h.app.plugin_inventory = Some(std::sync::Arc::new(super::plugin_store_ui::Inventory { installed: vec![local.clone()], ..Default::default() }));
+        h.app.catalog_tab = 3;
+        let before = serde_json::to_value(&h.app.config).unwrap();
+        h.warm(size);
+        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog")).unwrap().rect;
+        super::navigation_seek(&mut h, size, crate::i18n::tr("Désinstaller"), panel.center(), -80.0);
+        let output = h.warm(size);
+        if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+            h.png(size, output.clone(), &PathBuf::from(out).join(format!("management-local-{lang}.png")));
+        }
+        let button = text_position(&output.shapes, crate::i18n::tr("Désinstaller")).expect("uninstall is reachable in the compact local card");
+        for shape in &output.shapes {
+            if let egui::Shape::Text(text) = &shape.shape {
+                if text.galley.job.text == crate::i18n::tr("Désinstaller") {
+                    let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    assert!(bounds.min.x >= shape.clip_rect.min.x && bounds.max.x + h.ctx.style().spacing.button_padding.x <= shape.clip_rect.max.x + 1.0, "uninstall button clipped horizontally: {bounds:?} in {:?}", shape.clip_rect);
+                }
+            }
+        }
+        h.click(size, button);
+        let output = h.warm(size);
+        assert!(matches!(&h.app.plugin_management.confirmation, Some(plugin_management_ui::Request::Remove{id,..}) if id == &local.uuid));
+        assert!(text_position(&output.shapes, crate::i18n::tr("Confirmer la désinstallation")).is_some());
+        let cancel = output.shapes.iter().filter_map(|shape| {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let pos = text.pos + text.galley.size() * 0.5;
+                if text.galley.job.text == crate::i18n::tr("Annuler") && shape.clip_rect.contains(pos) { return Some(pos); }
+            }
+            None
+        }).max_by(|a,b| a.y.total_cmp(&b.y)).expect("cancel confirmation, not the Undo control in the header");
+        h.click(size, cancel);
+        h.warm(size);
+        assert!(h.app.plugin_management.confirmation.is_none());
+        assert!(h.app.plugin_management.working.is_none());
+        assert_eq!(serde_json::to_value(&h.app.config).unwrap(), before);
+        assert!(folder.join("manifest.json").is_file(), "cancel never removes the plugin");
+    }
+}
+
