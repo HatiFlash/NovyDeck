@@ -366,6 +366,36 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     // Host::drop termine tout l'arbre de chaque processus.
 }
 #[cfg(test)]mod tests {use super::*;use crate::model::{Config,PluginBinding};
+    #[test] fn pause_targets_one_plugin_and_blocks_virtual_restart() {
+        let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let first=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let mut second=first.clone();second.uuid="test.other.fixture".into();
+        let mut manager=Manager::new(vec![first.clone(),second.clone()]);
+        let mut config=Config::default();
+        for (index,p) in [first.clone(),second.clone()].iter().enumerate(){
+            config.keys_mut()[index].plugin=Some(PluginBinding{plugin:p.uuid.clone(),action:p.actions[0].uuid.clone(),settings:json!({}),state:0});
+        }
+        manager.sync(&config);
+        let until=Instant::now()+Duration::from_secs(20);let mut registered=0;
+        while registered<2 && Instant::now()<until {
+            if let Ok(Reply::Message(_,value))=manager.rx.recv_timeout(Duration::from_millis(200)){
+                if value["event"]=="registerPlugin" {registered+=1;}
+            }
+        }
+        assert_eq!(registered,2,"both fixtures must be active before pause");
+        let control=manager.control();control.pause_plugin(&first.uuid).unwrap();
+        let first_visible=manager.visible().values().find(|v|v.plugin==first.uuid).unwrap().clone();
+        let second_visible=manager.visible().values().find(|v|v.plugin==second.uuid).unwrap().clone();
+        manager.tx.send(Request::Virtual(first_visible)).unwrap();
+        assert!(matches!(manager.rx.recv_timeout(Duration::from_secs(3)),Ok(Reply::Error(id,e)) if id==first.uuid && e.contains("suspendu")));
+        manager.tx.send(Request::Virtual(second_visible)).unwrap();
+        let until=Instant::now()+Duration::from_secs(6);let mut survived=false;
+        while Instant::now()<until {if let Ok(Reply::Message(id,value))=manager.rx.recv_timeout(Duration::from_millis(200)) {
+            if id==second.uuid && value["event"]=="setTitle" {survived=true;break;}
+        }}
+        assert!(survived,"other plugin must keep responding");
+        control.resume_plugin(&first.uuid).unwrap();
+    }
     #[test]fn applications_launch_and_terminate_once(){
         let watch=vec!["OBS64.exe".to_string(),"Spotify.exe".to_string()];
         let (now,events)=application_events(&watch,&["obs64.exe".into(),"explorer.exe".into()],&Default::default());

@@ -294,8 +294,8 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
 impl Drop for Host {fn drop(&mut self){self.stop.store(true,Ordering::Relaxed);
  #[cfg(windows)] self.job.close();
  if let Ok(mut children)=self.inspector_children.lock(){for child in children.iter_mut(){let _=child.kill();let _=child.wait();}children.clear();}
- let _=self.child.kill();let _=self.child.wait(); // Le thread se termine au timeout de lecture et fermeture du canal.
- let _=self.worker.take();
+ let _=self.child.kill();let _=self.child.wait();
+ if let Some(worker)=self.worker.take(){let _=worker.join();} // Acquittement seulement après fermeture des sockets ciblés.
 }}
 #[cfg(windows)] use std::os::windows::process::CommandExt;
 #[cfg(test)] mod tests {use super::*;

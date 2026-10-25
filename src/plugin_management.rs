@@ -38,6 +38,9 @@ pub fn replace_staged(root:&Path,id:&str,source:&Path)->Result<PathBuf>{replace_
 fn replace_staged_impl(root:&Path,id:&str,source:&Path,fail_commit:bool)->Result<PathBuf>{
     let (old,previous)=local(root,id)?;no_links(source)?;
     let incoming=crate::plugin_import::validated_folder(source)?;
+    let bytes=fs::read(source.join("manifest.json"))?;
+    let manifest:serde_json::Value=serde_json::from_slice(bytes.strip_prefix(&[239,187,191]).unwrap_or(&bytes))?;
+    anyhow::ensure!(manifest["UUID"].as_str()==Some(id),"UUID explicite requis dans le manifeste de mise à jour");
     uuid(&incoming.uuid)?;
     anyhow::ensure!(incoming.uuid==id && newer(&incoming.version,&previous.version)?,"UUID différent ou version non supérieure");
     // Copy into a private sibling first, with the importer's file-count/size limits.
@@ -76,11 +79,16 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
     }
     #[test] fn update_preserves_unknown_files_in_backup_and_external_state() {
         let d=tempfile::tempdir().unwrap();let installed=d.path().join("plugins");fixture(&installed,"a.sdPlugin","test.a","1.0.0");
-        let old=installed.join("a.sdPlugin");fs::write(old.join("custom.data"),"keep").unwrap();fs::create_dir_all(d.path().join("profiles")).unwrap();fs::write(d.path().join("profiles/settings.json"),"saved").unwrap();
+        let old=installed.join("a.sdPlugin");fs::write(old.join("custom.data"),"keep").unwrap();
+        fs::create_dir(old.join("images")).unwrap();fs::write(old.join("images/user.png"),b"image").unwrap();
+        fs::write(old.join("config.json"),b"configuration").unwrap();
+        fs::create_dir_all(d.path().join("profiles")).unwrap();fs::write(d.path().join("profiles/settings.json"),"saved").unwrap();
         let staged=d.path().join("staging");fixture(&staged,"a.sdPlugin","test.a","2.0.0");
         let backup=replace_staged(&installed,"test.a",&staged.join("a.sdPlugin")).unwrap();
         assert_eq!(fs::read_to_string(installed.join("a.sdPlugin/main.js")).unwrap(),"2.0.0");
         assert_eq!(fs::read_to_string(backup.join("custom.data")).unwrap(),"keep");
+        assert_eq!(fs::read(backup.join("images/user.png")).unwrap(),b"image");
+        assert_eq!(fs::read(backup.join("config.json")).unwrap(),b"configuration");
         assert!(!installed.join("a.sdPlugin/custom.data").exists());
         assert_eq!(fs::read_to_string(d.path().join("profiles/settings.json")).unwrap(),"saved");
     }
