@@ -73,6 +73,8 @@ impl App {
         let Some(request)=self.plugin_management.confirmation.take() else{return};
         if self.plugin_management.working.is_some(){return;}
         let Some(control)=self.plugins.as_ref().map(|m|m.control()) else {self.plugin_management.message=crate::i18n::tr("Runtime indisponible : opération annulée.").into();return};
+        self.plugin_management.message.clear();
+        super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner()).message.clear();
         let images=image_paths(&self.config);
         let (tx,rx)=mpsc::channel();self.plugin_management.working=Some(rx);
         let ctx=ctx.clone();std::thread::spawn(move||{

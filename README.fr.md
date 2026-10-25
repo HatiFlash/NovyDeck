@@ -5,7 +5,7 @@
   <h1>NovyDeck</h1>
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/Release-v0.11.0-3478F6.svg" alt="Version 0.11.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1"><img src="https://img.shields.io/badge/Release-v0.11.1-3478F6.svg" alt="Version 0.11.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -20,6 +20,18 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.11.1
+
+### Mise à jour des plugins du magasin
+
+La version 0.11.0 refusait les archives officielles dont le manifeste n'a pas de champ `UUID` à la racine : après confirmation, l'ancienne version restait installée et le bouton **Mettre à jour** demeurait actif. Le remplacement accepte maintenant leur dossier canonique `{identifiant}.sdPlugin` **uniquement si l'identité et la version correspondent** ; les contrôles SHA-256, la sauvegarde, la protection des données locales et le retour arrière restent en place. Après le remplacement, l'application relit le plugin réellement installé avant d'afficher **À jour** ; un échec n'est pas annoncé comme une réussite. Sur la VM, les archives publiques Home Assistant 1.0.3 et Google Home 1.0.5 ont été mises à jour depuis des installations témoins 1.0.2 et 1.0.4 dans des dossiers temporaires, sans toucher aux plugins du PC ni au D6.
+
+### Magasin plus lisible
+
+La grille s'adapte à la largeur et au HiDPI, limite le nombre de colonnes, sépare les versions des badges et évite les libellés verticaux ou tronqués. Les contrôles de rendu couvrent 2614 × 1534 et 1366 × 768 en français et en anglais.
+
+![Magasin de plugins réorganisé, capture de test hors écran](docs/images/v0111-store-fr.png)
 
 ## Nouveautés 0.11.0
 

@@ -5,7 +5,7 @@ English · [Français](README.fr.md)
   <h1>NovyDeck</h1>
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.0"><img src="https://img.shields.io/badge/Release-v0.11.0-3478F6.svg" alt="Release v0.11.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1"><img src="https://img.shields.io/badge/Release-v0.11.1-3478F6.svg" alt="Release v0.11.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -20,6 +20,18 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.11.1
+
+### Store plugin updates
+
+Version 0.11.0 rejected official archives whose manifest has no root-level `UUID` field. The previous version therefore remained installed and **Update** stayed active after confirmation. Replacement now accepts their canonical `{id}.sdPlugin` folder **only when the identity and version match**. SHA-256 checks, backups, local-data protection and rollback remain in place. The app rereads the committed plugin before showing **Up to date**; it does not report a failed update as successful. On the lab VM, public Home Assistant 1.0.3 and Google Home 1.0.5 archives upgraded temporary 1.0.2 and 1.0.4 fixtures. Neither the user's PC/plugins nor the physical D6 were touched.
+
+### Readable plugin store
+
+The card grid adapts to window width and HiDPI, limits its column count, separates versions from security badges and prevents labels from collapsing into vertical letters. Off-screen layout checks cover 2614 × 1534 and 1366 × 768 in both languages.
+
+![Reflowed plugin store, off-screen test capture](docs/images/v0111-store-en.png)
 
 ## What's new in 0.11.0
 

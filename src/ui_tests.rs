@@ -2782,7 +2782,7 @@ fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
 }
 
 #[test]
-fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
+fn plugin_store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
     struct Reset;
     impl Drop for Reset { fn drop(&mut self) {
         super::plugin_market_ui::test_close();
