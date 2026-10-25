@@ -138,6 +138,29 @@ pub fn image(url: &str, icon: bool) -> Result<eframe::egui::ColorImage> {
     Ok(eframe::egui::ColorImage::from_rgba_unmultiplied([w as usize,h as usize], decoded.as_raw()))
 }
 
+/// Appel explicite après consentement UI, sur thread de travail uniquement. Aucune mutation de l'installation.
+/// Le répertoire temporaire propriétaire doit rester vivant jusqu'au remplacement.
+pub fn stage_verified_update(entry:&Entry, root:&Path) -> Result<(tempfile::TempDir,std::path::PathBuf)> {
+    anyhow::ensure!(entry.compatible,"Version de NovyDeck insuffisante");
+    let url=https_url(&entry.download)?;
+    anyhow::ensure!(url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"),"Archive non prise en charge");
+    let bytes=crate::https_get::get(&entry.download,ARCHIVE_LIMIT)?;
+    stage_verified_bytes(&bytes,&entry.sha256,entry.uuid.as_deref().context("UUID du catalogue absent")?,&entry.version,root)
+}
+fn stage_verified_bytes(bytes:&[u8],expected_hash:&str,id:&str,version:&str,root:&Path)->Result<(tempfile::TempDir,std::path::PathBuf)> {
+    anyhow::ensure!(format!("{:x}",Sha256::digest(bytes))==expected_hash,"Empreinte SHA-256 différente");
+    let staged=tempfile::Builder::new().prefix(".verified-").tempdir_in(root)?;
+    let archive=staged.path().join("archive.zip");fs::write(&archive,bytes)?;
+    let extracted=staged.path().join("extracted");
+    anyhow::ensure!(crate::plugin_import::import_archive(&archive,&extracted)?,"Archive non importée");
+    let mut entries=fs::read_dir(&extracted)?;
+    let folder=entries.next().context("Archive vide")??.path();
+    anyhow::ensure!(entries.next().is_none(),"Plusieurs plugins dans l'archive");
+    let plugin=crate::plugin_import::validated_folder(&folder)?;
+    anyhow::ensure!(plugin.uuid==id,"UUID du catalogue différent");
+    anyhow::ensure!(plugin.version==version,"Version du manifeste différente du catalogue");
+    Ok((staged,folder))
+}
 /// Le fichier temporaire vérifié est passé à l'importeur local existant, puis effacé même en cas d'erreur.
 pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
     anyhow::ensure!(entry.compatible, "Version de NovyDeck insuffisante pour ce plugin");
@@ -155,6 +178,20 @@ pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
 
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn verified_update_staging_rejects_hash_identity_and_version_without_installation() {
+        use std::io::Write;
+        let dir=tempfile::tempdir().unwrap();let mut file=std::io::Cursor::new(Vec::new());
+        {let mut zip=zip::ZipWriter::new(&mut file);
+            for (name,bytes) in [("fixture.sdPlugin/manifest.json",br#"{"UUID":"test.fixture","Version":"2.0","CodePath":"main.js"}"#.as_slice()),("fixture.sdPlugin/main.js",b"fixture".as_slice())] {
+                zip.start_file(name,zip::write::SimpleFileOptions::default()).unwrap();zip.write_all(bytes).unwrap();
+            }zip.finish().unwrap();}
+        let bytes=file.into_inner();let hash=format!("{:x}",Sha256::digest(&bytes));
+        assert!(stage_verified_bytes(&bytes,&"0".repeat(64),"test.fixture","2.0",dir.path()).is_err());
+        assert!(stage_verified_bytes(&bytes,&hash,"test.other","2.0",dir.path()).is_err());
+        assert!(stage_verified_bytes(&bytes,&hash,"test.fixture","1.0",dir.path()).is_err());
+        let (_owner,folder)=stage_verified_bytes(&bytes,&hash,"test.fixture","2.0",dir.path()).unwrap();
+        assert!(folder.join("main.js").is_file());assert!(!dir.path().join("fixture.sdPlugin").exists());
+    }
     fn entry() -> serde_json::Value {
         serde_json::json!({"id":"com.author.myplugin","name":"My Plugin","author":"Author","version":"1.2.0","description":"English", "description_fr":"Français", "homepage":"https://github.com/author/plugin", "download":"https://github.com/author/plugin/releases/download/v1/plugin.streamDeckPlugin", "sha256":"a".repeat(64),"license":"MIT","tested_decks":["FIFINE D6"],"min_novydeck":"0.8.12"})
     }

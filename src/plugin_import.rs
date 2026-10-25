@@ -8,6 +8,8 @@ fn safe_relative(path:&Path)->bool {
  !path.as_os_str().is_empty() && path.components().all(|c|matches!(c,std::path::Component::Normal(_)))
  && !path.to_string_lossy().contains([':', '\0'])
 }
+pub(crate) fn validated_folder(folder:&Path)->anyhow::Result<Plugin> {validate(folder)}
+pub(crate) fn copy_verified_tree(source:&Path,target:&Path)->anyhow::Result<()> {let mut total=0;let mut count=0;copy_tree(source,target,&mut total,&mut count,0)}
 fn validate(folder:&Path)->anyhow::Result<Plugin> {
  anyhow::ensure!(!fs::symlink_metadata(folder)?.file_type().is_symlink(),"Lien symbolique refusé");
  let manifest=folder.join("manifest.json");
