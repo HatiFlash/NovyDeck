@@ -35,6 +35,8 @@ mod appearance;
 mod plugin_store_ui;
 #[path = "ui_plugin_market.rs"]
 mod plugin_market_ui;
+#[path = "ui_plugin_management.rs"]
+mod plugin_management_ui;
 #[path = "ui_plugin_validation.rs"]
 mod plugin_validation_harness;
 pub(crate) use plugin_validation_harness::validate_oracle;
@@ -201,6 +203,7 @@ pub struct App {
     plugin_oracle_cache: HashMap<String, Option<crate::plugin_validation::OracleFile>>,
     plugin_real_confirmation: Option<crate::plugins::Plugin>,
     plugin_inventory: Option<std::sync::Arc<plugin_store_ui::Inventory>>,
+    plugin_management: plugin_management_ui::State,
     assistant: Option<crate::mcp_server::Server>,
     proposals: crate::assistant::Proposals,
     assistant_cache: HashMap<String, Result<serde_json::Value, String>>,
@@ -433,6 +436,7 @@ impl App {
             plugin_oracle_cache: HashMap::new(),
             plugin_real_confirmation: None,
             plugin_inventory: None,
+            plugin_management: Default::default(),
             plugins: if isolated || smoke { None } else { Some(crate::plugin_runtime::Manager::new(crate::plugin_import::installed_root().map(|root|crate::plugin_import::inventory(&root)).unwrap_or_default())) },
             assistant,
             proposals: Default::default(),
@@ -4485,6 +4489,7 @@ impl App {
         let history_before = self.config.clone();
         self.replaying = false;
         self.dialog_results();
+        self.management_poll(ctx);
         self.record_trigger(ctx);
         self.record_events(ctx);
         self.events();
@@ -4565,6 +4570,7 @@ impl App {
         self.extras(ctx);
         self.windows(ctx);
         self.assistant_window(ctx);
+        self.management_modal(ctx);
         self.key_previews.end_frame(ctx);
         self.record_history(history_before, ctx);
         if self.gate.dirty

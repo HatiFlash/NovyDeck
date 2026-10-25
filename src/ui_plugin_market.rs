@@ -129,7 +129,8 @@ impl App {
     ui.add_space(12.0);
     egui::ScrollArea::vertical().id_salt("market_content").auto_shrink([false,false]).show(ui,|ui|{
      if let Some(entry)=view.selected.as_ref().and_then(|id|state.entries.iter().find(|entry|&entry.id==id)).cloned(){
-      let installed=entry.uuid.as_ref().is_some_and(|uuid|self.plugin_inventory().installed.iter().any(|p|&p.uuid==uuid));
+      let local=entry.uuid.as_ref().and_then(|uuid|self.plugin_inventory().installed.iter().find(|p|&p.uuid==uuid).cloned());
+      let action=super::plugin_management_ui::choice(&entry.version,local.as_ref().map(|p|p.version.as_str()),entry.compatible);
       theme::panel_frame(p).show(ui,|ui|{
        ui.horizontal(|ui|{
         thumbnail(ui,entry.icon.as_deref(),true,egui::vec2(96.0,96.0));
@@ -141,14 +142,22 @@ impl App {
          if header_badges.official||header_badges.scanned||header_badges.tested||header_badges.warning{ui.horizontal_wrapped(|ui|badge_pills(ui,header_badges,false));}
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
-         if ui.add_enabled_ui(entry.compatible && !installed && state.installing.is_none(),|ui|ui.add_sized([120.0,44.0],theme::primary(if installed{tr("Installé")}else{tr("Installer")}))).inner.clicked(){state.confirmation=Some(entry.clone());}
+         use super::plugin_management_ui::{Choice,Request};
+         let label=match action {Choice::Install=>tr("Installer"),Choice::Update=>tr("Mettre à jour"),Choice::Installed=>tr("À jour"),Choice::Invalid=>tr("Version invalide")};
+         if ui.add_enabled(matches!(action,Choice::Install|Choice::Update) && state.installing.is_none() && self.plugin_management.working.is_none(),theme::primary(label)).clicked(){
+          if let Some(local)=&local {self.plugin_management.confirmation=Some(Request::Update{entry:entry.clone(),old:local.version.clone(),folder:local.folder.clone()});}
+          else {state.confirmation=Some(entry.clone());}
+         }
+         if let Some(local)=&local {if ui.add_enabled(self.plugin_management.working.is_none(),egui::Button::new(tr("Désinstaller"))).clicked(){self.plugin_management.confirmation=Some(Request::Remove{id:local.uuid.clone(),name:local.display_name().to_owned(),version:local.version.clone()});}}
          if !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
         });
        });
       });
       ui.add_space(16.0);
       ui.horizontal_wrapped(|ui|{
-       meta(ui,trf("Version : {version}",&[("version",&entry.version)]));
+       meta(ui,trf("Version disponible : {version}",&[("version",&entry.version)]));
+       if let Some(local)=&local {meta(ui,trf("Version installée : {version}",&[("version",&local.version)]));}
+       if action==super::plugin_management_ui::Choice::Invalid && local.is_some(){ui.label(tr("Version invalide : mise à jour refusée."));}
        meta(ui,trf("Licence : {license}",&[("license",&entry.license)]));
        meta(ui,trf("NovyDeck minimum : {version}",&[("version",&entry.min_novydeck)]));
        if !entry.tested_decks.is_empty(){meta(ui,trf("Decks testés : {decks}",&[("decks",&entry.tested_decks.join(", "))]));}
@@ -216,8 +225,11 @@ impl App {
         ui.horizontal_wrapped(|ui|{
          theme::pill(ui,category_name(entry.category.as_deref().unwrap_or("")),p.accent);
          badge_pills(ui,community_plugins::badges(entry,&state.scans),true);
-         let installed=entry.uuid.as_ref().is_some_and(|uuid|self.plugin_inventory().installed.iter().any(|item|&item.uuid==uuid));
-         if installed{theme::pill(ui,tr("Installé"),p.success);}else if !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
+         let local=entry.uuid.as_ref().and_then(|uuid|self.plugin_inventory().installed.iter().find(|item|&item.uuid==uuid).cloned());
+         let choice=super::plugin_management_ui::choice(&entry.version,local.as_ref().map(|p|p.version.as_str()),entry.compatible);
+         if let Some(local)=&local {theme::pill(ui,&trf("Installée : {version}",&[("version",&local.version)]),p.success);}
+         theme::pill(ui,&trf("Disponible : {version}",&[("version",&entry.version)]),p.accent);
+         if choice==super::plugin_management_ui::Choice::Update {theme::pill(ui,tr("Mettre à jour"),p.accent);}else if local.is_none() && !entry.compatible{theme::pill(ui,tr("Incompatible"),p.warning);}
         });
         ui.add_space(8.0);
         if ui.link(tr("Voir la fiche")).clicked(){view.selected=Some(entry.id.clone());}

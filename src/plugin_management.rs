@@ -6,7 +6,7 @@ fn version(s:&str)->Result<Vec<u64>> {
     anyhow::ensure!(!s.is_empty() && s.len()<=64 && s.split('.').count()<=8,"Version absente ou invalide");
     s.split('.').map(|n| {anyhow::ensure!(!n.is_empty() && n.bytes().all(|c|c.is_ascii_digit()),"Version invalide");Ok(n.parse::<u64>()?)}).collect()
 }
-fn newer(next:&str,old:&str)->Result<bool>{let mut a=version(next)?;let mut b=version(old)?;let size=a.len().max(b.len());a.resize(size,0);b.resize(size,0);Ok(a>b)}
+pub(crate) fn newer(next:&str,old:&str)->Result<bool>{let mut a=version(next)?;let mut b=version(old)?;let size=a.len().max(b.len());a.resize(size,0);b.resize(size,0);Ok(a>b)}
 fn uuid(id:&str)->Result<()> {
     anyhow::ensure!(!id.is_empty() && id.len()<=128 && id.bytes().all(|c|c.is_ascii_lowercase()||c.is_ascii_digit()||matches!(c,b'.'|b'-')) && !id.starts_with('.') && !id.ends_with('.') && !id.contains(".."),"UUID invalide");Ok(())
 }
