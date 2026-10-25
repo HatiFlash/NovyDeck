@@ -41,6 +41,7 @@ mod plugin_http;
 mod plugin_inspector;
 mod plugin_inspector_proxy;
 mod plugin_runtime;
+mod plugin_state_display;
 mod plugin_validation;
 #[cfg(test)]
 #[allow(dead_code)]

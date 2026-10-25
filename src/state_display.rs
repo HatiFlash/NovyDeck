@@ -9,6 +9,10 @@ pub fn changed(previous: &mut Option<bool>, observed: bool) -> bool {
     if *previous == Some(observed) { false } else { *previous = Some(observed); true }
 }
 
+pub fn should_poll(key: &Key) -> bool {
+    key.plugin_state.is_none() && key.state_display.as_ref().is_some_and(|display| !display.toggle)
+}
+
 pub fn spawn(events: Sender<Event>) -> Sender<Command> {
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || monitor(rx, events));
@@ -22,7 +26,8 @@ fn monitor(rx: Receiver<Command>, events: Sender<Event>) {
             Ok(Command::Page(id, page)) => {
                 generation = id;
                 keys = page.into_iter().enumerate().filter_map(|(index,key)| {
-                    key.state_display.filter(|display| !display.toggle).map(|display| (index, display.condition,
+                    if !should_poll(&key) { return None; }
+                    key.state_display.map(|display| (index, display.condition,
                         Duration::from_millis(display.poll_ms.max(250)), Instant::now(), None))
                 }).collect();
             }
@@ -52,5 +57,15 @@ mod tests {
         assert!(!changed(&mut state, false));
         assert!(changed(&mut state, true));
         assert!(!changed(&mut state, true));
+    }
+    #[test] fn plugin_sources_never_poll_conditions() {
+        use crate::model::{PluginBinding, PluginStateTarget, StateDisplay};
+        let mut key = Key { state_display: Some(StateDisplay::default()), plugin: Some(PluginBinding { plugin: "p".into(), action: "a".into(), settings: serde_json::json!({}), state: 0 }), ..Key::default() };
+        assert!(should_poll(&key));
+        key.plugin_state = Some(PluginStateTarget::Direct);
+        assert!(!should_poll(&key));
+        key.plugin_state = None;
+        key.state_display.as_mut().unwrap().toggle = true;
+        assert!(!should_poll(&key));
     }
 }
