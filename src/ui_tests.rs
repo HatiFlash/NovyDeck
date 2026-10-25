@@ -2815,6 +2815,7 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
             for shape in &output.shapes {
                 if let egui::Shape::Text(text)=&shape.shape {
                     let content=text.galley.job.text.as_str();
+                    if content.contains("Disponible") || content.contains("Installée") || content.contains("Mettre") {eprintln!("STORE TEXT {content:?} rows={} at {:?}",text.galley.rows.len(),text.pos);}
                     if [crate::i18n::tr("Mettre à jour"),crate::i18n::tr("Installée : 0.9.0"),crate::i18n::tr("Disponible : 1.0.0")].contains(&content) || content.starts_with(crate::i18n::tr("Disponible :")) || content.starts_with(crate::i18n::tr("Installée :")) {
                         let bounds=egui::Rect::from_min_size(text.pos,text.galley.size());
                         assert!(text.galley.rows.len()<=2 && bounds.height()<=35.0,"badge vertical {content:?}: {bounds:?} rows={} at {physical:?}/{dpi}",text.galley.rows.len());
