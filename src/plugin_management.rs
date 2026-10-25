@@ -120,6 +120,8 @@ fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[Pa
     let canonical=format!("{id}.sdPlugin");
     anyhow::ensure!(match explicit {Some(value)=>value==id,None=>source.file_name().is_some_and(|name|name==canonical.as_str())},
         "UUID explicite ou dossier canonique requis dans la mise à jour");
+    if explicit.is_none(){anyhow::ensure!(old.file_name().is_some_and(|name|name==canonical.as_str()),
+        "Dossier installé non canonique pour une archive sans UUID : conserver les chemins utilisateur impose une intervention manuelle");}
     uuid(&incoming.uuid)?;
     anyhow::ensure!(incoming.uuid==id && newer(&incoming.version,&previous.version)?,"UUID différent ou version non supérieure");
     // Copy into a private sibling first, with the importer's file-count/size limits.
@@ -235,16 +237,19 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
     }
     #[test] fn implicit_identity_uses_only_exact_canonical_directory() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");
-        fixture(&root,"legacy.sdPlugin","test.a","1.0");
+        fixture(&root,"test.a.sdPlugin","test.a","1.0");
         let stage=d.path().join("stage");
         let candidate=fixture_without_uuid(&stage,"test.a.sdPlugin","2.0");
         // This is how the published first-party archives identify their plugin.
         let wrong=stage.join("other.sdPlugin");fs::rename(&candidate,&wrong).unwrap();
         assert!(replace_staged(&root,"test.a",&wrong).is_err());
-        assert_eq!(fs::read_to_string(root.join("legacy.sdPlugin/main.js")).unwrap(),"1.0");
+        assert_eq!(fs::read_to_string(root.join("test.a.sdPlugin/main.js")).unwrap(),"1.0");
         fs::rename(&wrong,&candidate).unwrap();
+        let legacy=d.path().join("legacy-root");fixture(&legacy,"legacy.sdPlugin","test.a","1.0");
+        assert!(replace_staged(&legacy,"test.a",&candidate).unwrap_err().to_string().contains("non canonique"));
+        assert_eq!(fs::read_to_string(legacy.join("legacy.sdPlugin/main.js")).unwrap(),"1.0");
         let backup=replace_staged(&root,"test.a",&candidate).unwrap();
-        assert_eq!(fs::read_to_string(root.join("legacy.sdPlugin/main.js")).unwrap(),"2.0");
+        assert_eq!(fs::read_to_string(root.join("test.a.sdPlugin/main.js")).unwrap(),"2.0");
         assert_eq!(fs::read_to_string(backup.join("main.js")).unwrap(),"1.0");
     }
     fn fixture_without_uuid(root:&Path,name:&str,version:&str)->PathBuf {
