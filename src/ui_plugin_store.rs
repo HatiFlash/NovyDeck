@@ -49,7 +49,18 @@ impl App {
    {for plugin in inventory.installed.iter(){
     if !format!("{} {}",plugin.display_name(),plugin.uuid).to_lowercase().contains(search) && !plugin.actions.iter().any(|a|a.name.to_lowercase().contains(search)){continue;}
     let ty=match plugin.runtime{Runtime::Exe(_)|Runtime::Node(_)=>crate::i18n::tr("programme"),Runtime::Html(_)=>crate::i18n::tr("web"),Runtime::Protected=>crate::i18n::tr("protégé"),Runtime::Unsupported=>crate::i18n::tr("indisponible")};
-    ui.group(|ui|{ui.label(RichText::new(format!("{} · v{}",plugin.display_name(),plugin.version)).strong());
+    let expanded_id=egui::Id::new("installed_plugin_expanded").with(&plugin.uuid);
+    let expanded=ui.ctx().data(|d|d.get_persisted::<bool>(expanded_id)).unwrap_or(false);
+    ui.group(|ui|{
+     ui.horizontal(|ui|{
+      if let Some(icon)=plugin.icon.as_ref().and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())){ui.image((icon.id(),egui::vec2(24.0,24.0)));}
+      ui.vertical(|ui|{
+       ui.label(RichText::new(format!("{} · v{}",plugin.display_name(),plugin.version)).strong());
+       ui.label(crate::i18n::trf("{count} actions · {status}", &[("count", &(plugin.actions.len())), ("status", &(self.plugin_errors.get(&plugin.uuid).map(String::as_str).unwrap_or(crate::i18n::tr("arrêté"))))] ));
+      });
+      if ui.button(if expanded {crate::i18n::tr("Réduire")}else{crate::i18n::tr("Étendre")}).clicked(){ui.ctx().data_mut(|d|d.insert_persisted(expanded_id,!expanded));}
+     });
+     if !expanded{return;}
      ui.label(crate::i18n::trf("Auteur : {author} · Origine : import local", &[("author", &(if plugin.author.trim().is_empty(){crate::i18n::tr("inconnu")}else{&plugin.author}))] ));
      ui.label(crate::i18n::trf("Runtime : {ty} · Windows · Compatibilité : non vérifiée · Installé / inactif si aucune touche liée", &[("ty", &(ty))] ));
      if let Some(reason)=&plugin.prerequisite {ui.colored_label(egui::Color32::YELLOW,crate::i18n::trf("Prérequis manquant : {reason}", &[("reason", &(reason))] ));}

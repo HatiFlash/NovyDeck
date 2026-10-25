@@ -66,19 +66,30 @@ fn plugin_step(plugin: &crate::plugins::Plugin, action: &crate::plugins::Action)
 }
 fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str) -> Option<Step> {
     let mut chosen=None;
+    let needle=search.trim().to_lowercase();
+    let eligible=plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime,crate::plugins::Runtime::Exe(_)|crate::plugins::Runtime::Node(_)|crate::plugins::Runtime::Html(_))).collect::<Vec<_>>();
+    if eligible.is_empty(){return None;}
     egui::CollapsingHeader::new(crate::i18n::tr("Plugins")).default_open(!search.is_empty()).show(ui,|ui| {
-        for plugin in plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime,crate::plugins::Runtime::Exe(_)|crate::plugins::Runtime::Node(_)|crate::plugins::Runtime::Html(_))) {
-            for action in &plugin.actions {
-                let title=format!("{} › {}",plugin.display_name(),if action.name.is_empty(){&action.uuid}else{&action.name});
-                if !search.is_empty() && !title.to_lowercase().contains(&search.to_lowercase()){continue;}
-                ui.horizontal(|ui| {
-                    if let Some(texture)=action.icon.as_ref().or(plugin.icon.as_ref()).and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())) {
-                        ui.image((texture.id(),egui::vec2(16.0,16.0)));
-                    }
-                    if ui.button(&title).clicked(){chosen=Some(plugin_step(plugin,action));}
+        egui::ScrollArea::vertical().id_salt("workshop_plugin_choices_scroll").max_height(ui.available_height().max(120.0).min(420.0)).show(ui,|ui| {
+            for plugin in eligible {
+                let plugin_name=plugin.display_name();
+                let mut actions=plugin.actions.iter().collect::<Vec<_>>();
+                actions.sort_by(|a,b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(||a.uuid.cmp(&b.uuid)));
+                let matching=actions.into_iter().filter(|a| needle.is_empty() || format!("{} {} {}",plugin_name,a.name,a.uuid).to_lowercase().contains(&needle)).collect::<Vec<_>>();
+                if matching.is_empty(){continue;}
+                ui.push_id(&plugin.uuid,|ui|{
+                    egui::CollapsingHeader::new(plugin_name).id_salt(("workshop_plugin",&plugin.uuid)).default_open(!search.is_empty()).show(ui,|ui|{
+                        for action in matching {
+                            let title=if action.name.is_empty(){action.uuid.as_str()}else{action.name.as_str()};
+                            ui.push_id(&action.uuid,|ui|ui.horizontal(|ui|{
+                                if let Some(texture)=action.icon.as_ref().or(plugin.icon.as_ref()).and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())) {ui.image((texture.id(),egui::vec2(16.0,16.0)));}
+                                if ui.button(title).clicked(){chosen=Some(plugin_step(plugin,action));}
+                            }));
+                        }
+                    });
                 });
             }
-        }
+        });
     });
     chosen
 }
