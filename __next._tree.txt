@@ -1,0 +1,4 @@
+:HL["/NovyDeck/_next/static/chunks/03zxm_otl48hl.css","style"]
+:HL["/NovyDeck/_next/static/media/InterDisplay_Bold-s.p.1u44n0kuknc28.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+1:[["children",{"s":"__PAGE__","h":160}]]
+0:{"b":"Dl_XoMX5Qz1ZdQGsJ02vf","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
