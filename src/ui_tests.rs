@@ -2781,6 +2781,55 @@ fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
     }
 }
 
+#[test]
+fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
+    struct Reset;
+    impl Drop for Reset { fn drop(&mut self) {
+        super::plugin_market_ui::test_close();
+        *super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner())=Default::default();
+    }}
+    let _reset=Reset;
+    let fixtures=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme/registry.json");
+    for (physical,dpi) in [(vec2(2614.0,1534.0),1.0),(vec2(1366.0,768.0),1.25)] {
+        for lang in ["fr","en"] {
+            let mut h=Harness::new();crate::i18n::set_language(lang);
+            h.ctx.set_pixels_per_point(dpi);
+            let mut entries=crate::community_plugins::parse(&std::fs::read(fixtures.join("registry.json")).unwrap()).unwrap();
+            for e in &mut entries {e.compatible=true;e.icon=None;e.screenshots.clear();}
+            for suffix in ["extra-a","extra-b"] {
+                let mut e=entries[0].clone();e.id=format!("com.test.{suffix}");e.uuid=Some(e.id.clone());e.name=format!("Plugin with a long name {suffix}");entries.push(e);
+            }
+            let mut installed=Vec::new();
+            for (i,e) in entries.iter().enumerate() {
+                if i%2==0 {
+                    let mut local=navigation_fixture(&e.name,e.uuid.as_deref().unwrap_or(&e.id),1);
+                    local.version=if i==0 {"0.9.0"}else{"1.0.0"}.into();installed.push(local);
+                }
+            }
+            h.app.plugin_inventory=Some(std::sync::Arc::new(super::plugin_store_ui::Inventory{installed,..Default::default()}));
+            {let mut s=super::plugin_store_ui::community_state().lock().unwrap();*s=Default::default();s.consent=true;s.entries=entries;}
+            super::plugin_market_ui::test_view(None);
+            let size=physical/dpi;
+            let output=h.warm(size);
+            if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output.clone(),&PathBuf::from(dir).join(format!("store-grid-{lang}-{}-{}.png",physical.x as u32,(dpi*100.0) as u32)));}
+            let mut checked=0;
+            for shape in &output.shapes {
+                if let egui::Shape::Text(text)=&shape.shape {
+                    let content=text.galley.job.text.as_str();
+                    if [crate::i18n::tr("Mettre à jour"),crate::i18n::tr("Installée : 0.9.0"),crate::i18n::tr("Disponible : 1.0.0")].contains(&content) || content.starts_with(crate::i18n::tr("Disponible :")) || content.starts_with(crate::i18n::tr("Installée :")) {
+                        let bounds=egui::Rect::from_min_size(text.pos,text.galley.size());
+                        assert!(text.galley.rows.len()<=2 && bounds.height()<=35.0,"badge vertical {content:?}: {bounds:?} rows={} at {physical:?}/{dpi}",text.galley.rows.len());
+                        assert!(bounds.right()<=size.x+1.0 && shape.clip_rect.expand(1.0).contains_rect(bounds),"badge rogné {content:?}: {bounds:?} in {:?} at {physical:?}/{dpi}",shape.clip_rect);
+                        checked+=1;
+                    }
+                }
+            }
+            assert!(checked>=6,"les versions et mises à jour doivent être visibles, {checked}");
+            super::plugin_market_ui::test_close();
+        }
+    }
+}
+
 /// Captures du README (FR et EN) : ne s'exécute que si NOVYDECK_UI_OUTPUT est défini.
 #[test]
 fn readme_captures_plugin_store_workshop_and_startup() {
