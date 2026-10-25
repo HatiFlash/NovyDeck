@@ -2789,12 +2789,11 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
         *super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner())=Default::default();
     }}
     let _reset=Reset;
-    let fixtures=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme/registry.json");
     for (physical,dpi) in [(vec2(2614.0,1534.0),1.0),(vec2(1366.0,768.0),1.25)] {
         for lang in ["fr","en"] {
             let mut h=Harness::new();crate::i18n::set_language(lang);
             h.ctx.set_pixels_per_point(dpi);
-            let mut entries=crate::community_plugins::parse(&std::fs::read(fixtures.join("registry.json")).unwrap_or_else(|e|panic!("read {}: {e}",fixtures.display()))).unwrap();
+            let mut entries=crate::community_plugins::parse(include_bytes!("../tests/fixtures/readme/registry.json")).unwrap();
             for e in &mut entries {e.compatible=true;e.icon=None;e.screenshots.clear();}
             for suffix in ["extra-a","extra-b"] {
                 let mut e=entries[0].clone();e.id=format!("com.test.{suffix}");e.uuid=Some(e.id.clone());e.name=format!("Plugin with a long name {suffix}");entries.push(e);
