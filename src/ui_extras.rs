@@ -1266,7 +1266,8 @@ impl App {
             self.edited();
         }
         let open_id = egui::Id::new("plugin_block_open");
-        let open = ctx.data_mut(|d|d.remove::<Vec<usize>>(open_id));
+        let open = ctx.data(|d|d.get_temp::<Vec<usize>>(open_id));
+        ctx.data_mut(|d|d.remove::<Vec<usize>>(open_id));
         if let Some(path) = open {
             if !ctx.data(|d|d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some()
                 && (self.preferences.workshop_advanced || ctx.data(|d|d.get_temp::<Vec<usize>>(path_id)).as_ref()==Some(&path)) {
