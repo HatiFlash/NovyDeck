@@ -461,7 +461,7 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
 "#).unwrap();
     plugin.folder = dir.path().into();
     plugin.runtime = crate::plugins::Runtime::Node(script);
-    let binding = PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
+    let binding = crate::model::PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
     h.app.config.keys_mut()[0] = Key { plugin: Some(binding), steps: vec![], ..Key::default() };
     h.app.applied = h.app.config.clone();
     let mut manager = crate::plugin_runtime::Manager::new(vec![plugin]);
