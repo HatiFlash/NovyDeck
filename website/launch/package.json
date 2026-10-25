@@ -1,0 +1,41 @@
+{
+  "name": "novydeck-launch",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-tabs": "1.1.13",
+    "@react-three/fiber": "9.8.2",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.0",
+    "gsap": "3.15.0",
+    "lenis": "1.3.27",
+    "lucide-react": "0.548.0",
+    "motion": "14.6.0",
+    "next": "16.4.3",
+    "radix-ui": "^1.8.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "shadcn": "^4.22.1",
+    "three": "0.181.2",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.9.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@types/three": "0.181.0",
+    "playwright": "1.64.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  }
+}

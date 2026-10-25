@@ -1,5 +1,7 @@
 # Site vitrine NovyDeck
 
+> **Refonte premium en cours :** la nouvelle expérience Next.js est dans [`launch/`](launch/README.md). Elle est testée localement, mais **ni publiée ni substituée** à cette page statique. Les captures, les composants 3D illustratifs, les dépendances et les commandes de validation sont documentés dans son README.
+
 Page statique autonome pour présenter NovyDeck, inspirée par la **structure** du site Nusa (aperçu, fonctions, compatibilité, téléchargement), mais réalisée avec l'identité visuelle et les captures réelles de NovyDeck. Aucun code, texte, logo ou image de Nusa n'est repris.
 
 ## Voir le site en local
