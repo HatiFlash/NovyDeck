@@ -547,4 +547,45 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
         assert!(msg["payload"]["titleParameters"].is_object());
     }
     #[test]fn event_coordinates(){let v=Visible{context:"ctx".into(),plugin:"p".into(),action:"a".into(),index:7,settings:json!({"x":1}),state:2};let message=event("keyDown",&v,&Device::virtual_device());assert_eq!(message["payload"]["coordinates"],json!({"column":2,"row":1}));assert_eq!(message["context"],"ctx");}
+    #[test] fn reported_state_survives_sync_and_virtual_until_unknown() {
+        let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let mut plugin=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let temp=tempfile::tempdir().unwrap();
+        let script=temp.path().join("plugin.js");
+        std::fs::write(&script,r#"
+const args=process.argv.slice(2), value=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${value('-port')}`);
+let count=0;
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:value('-registerEvent'),uuid:value('-pluginUUID')})));
+ws.addEventListener('message',m=>{const msg=JSON.parse(m.data);if(msg.event!=='keyDown')return;
+ count++;const context=msg.context;
+ ws.send(JSON.stringify({event:'setTitle',context,payload:{title:`state-${count}-${msg.payload.state}`}}));
+ if(count===1)ws.send(JSON.stringify({event:'setState',context,action:msg.action,payload:{state:1,novydeckStateSource:'local'}}));
+ if(count===2){ws.send(JSON.stringify({event:'novydeckStateUnknown',context:'foreign-context'}));ws.send(JSON.stringify({event:'novydeckStateUnknown',context,action:'foreign-action'}));ws.send(JSON.stringify({event:'novydeckStateUnknown',context}));}
+});
+"#).unwrap();
+        plugin.folder=temp.path().into();plugin.runtime=crate::plugins::Runtime::Node(script);
+        let mut manager=Manager::new(vec![plugin.clone()]);
+        let mut config=Config::default();config.keys_mut()[0].plugin=Some(PluginBinding{plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),settings:json!({}),state:0});
+        manager.sync(&config);
+        let context=manager.visible().values().next().unwrap().context.clone();
+        let await_message=|manager:&Manager,name:&str|->Value{
+            let deadline=Instant::now()+Duration::from_secs(15);
+            loop {match manager.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect(name){
+                Reply::Message(_,v) if v["event"]==name=>return v,
+                Reply::Error(_,error)=>panic!("unexpected reply: {error}"),
+                _=>{}
+            }}
+        };
+        manager.key(0,true);
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-1-0");
+        assert_eq!(await_message(&manager,"setState")["payload"]["state"],1);
+        manager.sync(&config);
+        let v=manager.visible()[&context].clone();manager.tx.send(Request::Virtual(v)).unwrap();
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-2-1");
+        let unknown=await_message(&manager,"novydeckStateUnknown");
+        assert_eq!(unknown["context"],context);
+        manager.key(0,true);
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-3-0");
+    }
 }
