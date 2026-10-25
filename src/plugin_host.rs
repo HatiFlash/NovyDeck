@@ -129,7 +129,8 @@ fn inspector_exe()->anyhow::Result<std::path::PathBuf>{
  #[cfg(test)] if let Some(exe)=std::env::var_os("DECKFORGE_TEST_APP_EXE"){return Ok(exe.into());}
  Ok(std::env::current_exe()?)
 }
-pub struct Host { #[cfg(windows)] job:Job, pub incoming:Receiver<Value>, outgoing:SyncSender<Value>, feedback:Sender<Value>, pub ws_port:u16, pub http_port:Option<u16>, pub inspectors:Option<crate::plugin_http::Inspectors>, pub folder:std::path::PathBuf, pub uuid:String, child:Child, worker:Option<thread::JoinHandle<()>>, stop:Arc<AtomicBool>, inspector_children:Mutex<Vec<Child>>, _http:Option<crate::plugin_http::HtmlServer> }
+struct InspectorChild {id:String,child:Child,#[cfg(windows)] job:Job}
+pub struct Host { #[cfg(windows)] job:Job, pub incoming:Receiver<Value>, outgoing:SyncSender<Value>, feedback:Sender<Value>, pub ws_port:u16, pub http_port:Option<u16>, pub inspectors:Option<crate::plugin_http::Inspectors>, pub folder:std::path::PathBuf, pub uuid:String, child:Child, worker:Option<thread::JoinHandle<()>>, stop:Arc<AtomicBool>, inspector_children:Mutex<Vec<InspectorChild>>, #[cfg(test)] simulated_inspectors:AtomicBool, _http:Option<crate::plugin_http::HtmlServer> }
 impl Host {
  pub fn start(plugin:&Plugin,device:&crate::plugin_runtime::Device)->anyhow::Result<Self>{
   if let Some(reason)=&plugin.prerequisite {anyhow::bail!("Prérequis manquant : {reason}");}
@@ -176,7 +177,7 @@ impl Host {
   let trace=Trace::open(&plugin.uuid);
   let origin=http.as_ref().map(|s|format!("http://127.0.0.1:{}",s.port));
   let worker=thread::spawn(move||socket_loop_traced(listener,commands,messages,stopped,registry,trace,origin));
-  Ok(Self{#[cfg(windows)] job,incoming,outgoing,feedback,ws_port:port,http_port:http.as_ref().map(|h|h.port),inspectors:http.as_ref().map(|h|h.inspectors.clone()),folder:plugin.folder.clone(),uuid:plugin.uuid.clone(),child,worker:Some(worker),stop,inspector_children:Mutex::new(Vec::new()),_http:http})
+  Ok(Self{#[cfg(windows)] job,incoming,outgoing,feedback,ws_port:port,http_port:http.as_ref().map(|h|h.port),inspectors:http.as_ref().map(|h|h.inspectors.clone()),folder:plugin.folder.clone(),uuid:plugin.uuid.clone(),child,worker:Some(worker),stop,inspector_children:Mutex::new(Vec::new()),#[cfg(test)] simulated_inspectors:AtomicBool::new(false),_http:http})
  }
  pub fn open_inspector(&self,path:&str,action_info:Value)->anyhow::Result<String> {
   self.open_inspector_with_title(path,action_info,crate::i18n::tr("Réglages du plugin"))
@@ -193,18 +194,37 @@ impl Host {
   let url=session_url(server,&self.uuid,path,&id);
   anyhow::ensure!(crate::plugin_inspector::allowed_initial(&url),"Chemin PI non pris en charge (encodage ou identifiant ambigu)");
   let mut children=self.inspector_children.lock().map_err(|_|anyhow::anyhow!("Inspecteurs indisponibles"))?;
-  children.retain_mut(|child|child.try_wait().ok().flatten().is_none());
-  anyhow::ensure!(children.len()<4,"Limite de quatre inspecteurs actifs");
+  children.retain_mut(|entry|{let active=entry.child.try_wait().ok().flatten().is_none();if !active {registry.lock().unwrap().remove(&entry.id);}active});
+  #[cfg(test)] let simulated=self.simulated_inspectors.load(Ordering::Relaxed);
+  #[cfg(not(test))] let simulated=false;
+  let count=children.len()+if simulated {registry.lock().unwrap().len()}else{0};
+  anyhow::ensure!(count<4,"Limite de quatre inspecteurs actifs");
   registry.lock().unwrap().insert(id.clone(),format!("JSON.stringify({})",action_info));
-  let result=(||->anyhow::Result<Child>{
+  if simulated {return Ok(id);}
+  let result=(||->anyhow::Result<InspectorChild>{
+   #[cfg(windows)] let job=Job::new()?;
    let mut inspector=Command::new(inspector_exe()?).arg("--isolated-inspector")
        .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
-   #[cfg(windows)] if let Err(e)=self.job.assign(&inspector){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
+   #[cfg(windows)] if let Err(e)=job.assign(&inspector){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
    if let Err(e)=inspector.stdin.take().unwrap().write_all(format!("{url}\n{}\n{title}\n{}\n{}\n",self.ws_port,MAIN_WINDOW.load(Ordering::Relaxed),std::process::id()).as_bytes()){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
-   Ok(inspector)
+   Ok(InspectorChild{id:id.clone(),child:inspector,#[cfg(windows)] job})
   })();
   match result {Ok(child)=>{children.push(child);Ok(id)},Err(e)=>{registry.lock().unwrap().remove(&id);Err(e)}}
  }
+ /// Invalidates the exact session and closes only its owned WebView process.
+ pub fn close_inspector(&self,id:&str){
+  if let Some(registry)=&self.inspectors {registry.lock().unwrap().remove(id);}
+  let _=self.outgoing.try_send(json!({"__close_pi":id}));
+  if let Ok(mut children)=self.inspector_children.lock(){
+   if let Some(index)=children.iter().position(|entry|entry.id==id){
+    let mut entry=children.swap_remove(index);
+    #[cfg(windows)] entry.job.close();
+    let _=entry.child.kill();let _=entry.child.wait();
+   }
+  }
+ }
+ pub fn inspector_active(&self,id:&str)->bool {self.inspectors.as_ref().is_some_and(|r|r.lock().unwrap().contains_key(id))}
+ #[cfg(test)] pub(crate) fn simulate_inspectors(&self){self.simulated_inspectors.store(true,Ordering::Relaxed);}
  pub fn exited(&mut self)->bool{self.child.try_wait().ok().flatten().is_some()}
  pub fn send(&self,message:Value)->Result<(),TrySendError<Value>>{let result=self.outgoing.try_send(message);if result.is_err(){host_error(&self.feedback,"File de commandes plugin pleine ou arrêtée");}result}
 }
@@ -274,7 +294,10 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
             }
         }
         while let Some((at,_))=queued.front(){if at.elapsed()<Duration::from_secs(3){break;}queued.pop_front();trace_stage(&mut trace,"command_expired_no_register");host_error(&messages,"Commande plugin expirée sans enregistrement WebSocket");}
-        while let Ok(cmd)=commands.try_recv(){ if queued.len()<64 {queued.push_back((Instant::now(),cmd));}else{trace_stage(&mut trace,"command_queue_full");host_error(&messages,"File de commandes plugin pleine sans enregistrement WebSocket");} }
+        while let Ok(cmd)=commands.try_recv(){
+            if let Some(id)=cmd["__close_pi"].as_str(){inspectors.remove(id);queued.retain(|(_,m)|m["__pi"].as_str()!=Some(id));continue;}
+            if queued.len()<64 {queued.push_back((Instant::now(),cmd));}else{trace_stage(&mut trace,"command_queue_full");host_error(&messages,"File de commandes plugin pleine sans enregistrement WebSocket");}
+        }
         while plugin.is_some() && !queued.is_empty() {
             let (_,mut cmd)=queued.pop_front().unwrap();
             let target=cmd.get("__pi").and_then(Value::as_str).map(str::to_owned);
@@ -283,9 +306,9 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
             if let Some(id)=target{if let Some(ws)=inspectors.get_mut(&id){if !send_traced(ws,&cmd,&messages,&mut trace){inspectors.remove(&id);if let Some(r)=&registry{r.lock().unwrap().remove(&id);}let _=messages.send(json!({"event":"propertyInspectorDidDisappear","__pi":id}));}}else{host_error(&messages,"Inspecteur WebSocket indisponible");}}
             else if let Some(ws)=plugin.as_mut(){if !send_traced(ws,&cmd,&messages,&mut trace){plugin=None;}}
         }
-        if let Some(ws)=plugin.as_mut(){match ws.read(){Ok(tungstenite::Message::Text(text))=>{match serde_json::from_str::<Value>(&text){Ok(value)=>{trace_message(&mut trace,"plugin->host",&value,!supported_command(&value));let _=messages.send(value);},Err(e)=>{let _=messages.send(json!({"event":"__hostError","reason":format!("Message JSON malformé : {e}")}));}}},Ok(tungstenite::Message::Close(_))=>{trace_stage(&mut trace,"socket_closed_plugin");plugin=None;},Err(tungstenite::Error::Io(ref e)) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(e)=>{trace_ws_error(&mut trace,"socket_error_plugin",&e);plugin=None;},_=>{}}}
+        if let Some(ws)=plugin.as_mut(){match ws.read(){Ok(tungstenite::Message::Text(text))=>{match serde_json::from_str::<Value>(&text){Ok(mut value)=>{if let Some(obj)=value.as_object_mut(){obj.remove("__pi");}trace_message(&mut trace,"plugin->host",&value,!supported_command(&value));let _=messages.send(value);},Err(e)=>{let _=messages.send(json!({"event":"__hostError","reason":format!("Message JSON malformé : {e}")}));}}},Ok(tungstenite::Message::Close(_))=>{trace_stage(&mut trace,"socket_closed_plugin");plugin=None;},Err(tungstenite::Error::Io(ref e)) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(e)=>{trace_ws_error(&mut trace,"socket_error_plugin",&e);plugin=None;},_=>{}}}
         let mut gone=Vec::new();
-        for (id,ws) in &mut inspectors {match ws.read(){Ok(tungstenite::Message::Text(text))=>{if text.len()>64*1024 {gone.push(id.clone());continue;}if let Ok(mut value)=serde_json::from_str::<Value>(&text){if let Some(obj)=value.as_object_mut(){obj.insert("__pi".into(),json!(id));let _=messages.send(value);}}},Ok(tungstenite::Message::Close(_))=>gone.push(id.clone()),Err(tungstenite::Error::Io(ref e)) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(_)=>gone.push(id.clone()),_=>{}}}
+        for (id,ws) in &mut inspectors {if !registry.as_ref().is_some_and(|r|r.lock().unwrap().contains_key(id)){gone.push(id.clone());continue;}match ws.read(){Ok(tungstenite::Message::Text(text))=>{if text.len()>64*1024 {gone.push(id.clone());continue;}if let Ok(mut value)=serde_json::from_str::<Value>(&text){if let Some(obj)=value.as_object_mut(){obj.insert("__pi".into(),json!(id));let _=messages.send(value);}}},Ok(tungstenite::Message::Close(_))=>gone.push(id.clone()),Err(tungstenite::Error::Io(ref e)) if matches!(e.kind(),std::io::ErrorKind::WouldBlock|std::io::ErrorKind::TimedOut)=>{},Err(_)=>gone.push(id.clone()),_=>{}}}
         for id in gone {inspectors.remove(&id);if let Some(r)=&registry{r.lock().unwrap().remove(&id);}let _=messages.send(json!({"event":"propertyInspectorDidDisappear","__pi":id}));}
         thread::sleep(Duration::from_millis(10));
     }
@@ -293,7 +316,7 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
 }
 impl Drop for Host {fn drop(&mut self){self.stop.store(true,Ordering::Relaxed);
  #[cfg(windows)] self.job.close();
- if let Ok(mut children)=self.inspector_children.lock(){for child in children.iter_mut(){let _=child.kill();let _=child.wait();}children.clear();}
+ if let Ok(mut children)=self.inspector_children.lock(){for entry in children.iter_mut(){#[cfg(windows)] entry.job.close();let _=entry.child.kill();let _=entry.child.wait();}children.clear();}
  let _=self.child.kill();let _=self.child.wait();
  if let Some(worker)=self.worker.take(){let _=worker.join();} // Acquittement seulement après fermeture des sockets ciblés.
 }}

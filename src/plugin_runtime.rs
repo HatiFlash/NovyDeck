@@ -34,6 +34,20 @@ pub fn visible(config: &Config) -> HashMap<String, Visible> {
 fn same_instance(a:&Visible,b:&Visible)->bool {
     a.context==b.context && a.plugin==b.plugin && a.action==b.action && a.index==b.index
 }
+/// `configured` records binding defaults, never plugin reports. A report survives a
+/// redundant config sync only for the same action/settings/default; a changed binding resets it.
+fn reconcile_state(next:&mut Visible,old:Option<&Visible>,configured:&mut HashMap<String,Visible>) {
+    let previous=configured.get(&next.context);
+    let keep=old.zip(previous).is_some_and(|(old,previous)|
+        same_instance(old,next) && old.settings==next.settings && previous.settings==next.settings
+        && previous.state==next.state);
+    if keep {next.state=old.unwrap().state;}
+    configured.insert(next.context.clone(),Visible{state:if keep {previous.unwrap().state}else{next.state},..next.clone()});
+}
+fn state_owner<'a>(current:&'a HashMap<String,Visible>,plugin:&str,value:&Value)->Option<&'a Visible>{
+    current.get(value["context"].as_str()?).filter(|v|v.plugin==plugin &&
+        value.get("action").is_none_or(|action|action.as_str()==Some(&v.action)))
+}
 pub fn diff(old:&HashMap<String,Visible>,new:&HashMap<String,Visible>) -> (Vec<Visible>,Vec<Visible>) {
     let gone=old.iter().filter(|(id,v)|!new.get(*id).is_some_and(|next|same_instance(v,next))).map(|(_,v)|v.clone()).collect();
     let added=new.iter().filter(|(id,v)|!old.get(*id).is_some_and(|before|same_instance(before,v))).map(|(_,v)|v.clone()).collect();
@@ -75,7 +89,7 @@ pub(crate) fn application_events(watch:&[String],running:&[String],before:&std::
     for app in before.difference(&now){events.push(json!({"event":"applicationDidTerminate","payload":{"application":app}}));}
     (now,events)
 }
-enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
+enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), OpenVirtualInspector(Visible), CloseVirtualInspector(String), #[cfg(test)] SimulateInspectors(Sender<()>), #[cfg(test)] TestSessions(Sender<Vec<(String,String,u16)>>), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
 static VIRTUAL_SENDER: std::sync::OnceLock<std::sync::Mutex<Option<Sender<Request>>>> = std::sync::OnceLock::new();
 fn virtual_sender() -> &'static std::sync::Mutex<Option<Sender<Request>>> {
     VIRTUAL_SENDER.get_or_init(|| std::sync::Mutex::new(None))
@@ -195,11 +209,26 @@ impl Manager {
     pub fn open_inspector(&self,index:usize){if let Some(v)=self.visible.values().find(|v|v.index==index){let _=self.tx.send(Request::Open(v.context.clone()));}}
     pub fn send(&self,plugin:&str,value:Value){let _=self.tx.send(Request::Send(plugin.to_owned(),value));}
     pub fn virtual_settings(&self,context:&str,settings:Value){let _=self.tx.send(Request::VirtualSettings(context.to_owned(),settings));}
+    /// Enqueues a new block's PI; success does not imply that the WebView opened.
+    /// The caller owns the unique `novydeck-inspector-block-` context until close.
+    pub fn open_virtual_inspector(&self,v:Visible)->Result<(),String>{
+        if !v.context.starts_with("novydeck-inspector-block-") || v.context.len()<"novydeck-inspector-block-".len()+1 || v.index>=Device::virtual_device().columns*Device::virtual_device().rows {
+            return Err("Contexte d'inspecteur de bloc invalide".into());
+        }
+        self.tx.send(Request::OpenVirtualInspector(v)).map_err(|_|"Runtime arrêté".into())
+    }
+    pub fn close_virtual_inspector(&self,context:&str)->Result<(),String>{
+        if !context.starts_with("novydeck-inspector-block-"){return Err("Contexte d'inspecteur de bloc invalide".into());}
+        self.tx.send(Request::CloseVirtualInspector(context.into())).map_err(|_|"Runtime arrêté".into())
+    }
     pub fn visible(&self)->&HashMap<String,Visible>{&self.visible}
 }
 impl Drop for Manager {fn drop(&mut self){let _=self.tx.send(Request::Stop);}}
 fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     let mut hosts:HashMap<String,Host>=HashMap::new();let mut current:HashMap<String,Visible>=HashMap::new();
+    let mut configured:HashMap<String,Visible>=HashMap::new();
+    let mut drafts:HashMap<String,Visible>=HashMap::new();
+    #[cfg(test)] let mut simulate_inspectors=false;
     let mut device=Device::virtual_device();
     let mut inspectors:HashMap<String,Visible>=HashMap::new();
     let mut idle:HashMap<String,Instant>=HashMap::new();
@@ -212,6 +241,9 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             Ok(Request::Pause(id,ack,cancelled))=>{
                 if cancelled.load(std::sync::atomic::Ordering::SeqCst) {continue;}
                 paused.insert(id.clone());
+                drafts.retain(|_,v|v.plugin!=id);
+                current.retain(|ctx,v| !ctx.starts_with("novydeck-inspector-block-") || v.plugin!=id);
+                configured.retain(|ctx,_|current.contains_key(ctx));
                 inspectors.retain(|_,v|v.plugin!=id);
                 monitored.remove(&id);idle.remove(&id);restarts.remove(&id);
                 drop(hosts.remove(&id)); // Targeted child and inspectors only.
@@ -240,14 +272,56 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 }
                 let _=ack.send(result);
             }
+            #[cfg(test)] Ok(Request::SimulateInspectors(ack))=>{simulate_inspectors=true;for host in hosts.values(){host.simulate_inspectors();}let _=ack.send(());}
+            #[cfg(test)] Ok(Request::TestSessions(ack))=>{let _=ack.send(inspectors.iter().filter_map(|(id,v)|hosts.get(&v.plugin).map(|h|(id.clone(),v.context.clone(),h.ws_port))).collect());}
+            Ok(Request::OpenVirtualInspector(mut v))=>{
+                if !v.context.starts_with("novydeck-inspector-block-") || v.context.len()<"novydeck-inspector-block-".len()+1 || v.index>=device.columns*device.rows || current.contains_key(&v.context) && !drafts.contains_key(&v.context) {
+                    let _=reply.send(Reply::Error(v.plugin.clone(),"Contexte de brouillon invalide ou déjà utilisé".into()));continue;
+                }
+                if paused.contains(&v.plugin){let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin suspendu".into()));continue;}
+                let Some(p)=plugins.iter().find(|p|p.uuid==v.plugin) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin installé introuvable".into()));continue;};
+                let Some(action)=p.actions.iter().find(|a|a.uuid==v.action) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Action introuvable".into()));continue;};
+                let Some(path)=action.inspector.as_ref().or(p.inspector.as_ref()) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Action sans inspecteur".into()));continue;};
+                if let Some(previous)=drafts.get(&v.context) {
+                    if previous.plugin!=v.plugin || previous.action!=v.action {let _=reply.send(Reply::Error(v.plugin.clone(),"Contexte déjà réservé à une autre action".into()));continue;}
+                    // The active WebView already owns this context. Do not overwrite its settings.
+                    if inspectors.iter().any(|(id,seen)|seen.context==v.context && hosts.get(&v.plugin).is_some_and(|h|h.inspector_active(id))) {continue;}
+                    v.settings=previous.settings.clone();v.state=current.get(&v.context).map_or(v.state,|old|old.state);
+                }
+                if !hosts.contains_key(&v.plugin){match Host::start(p,&device){
+                    Ok(h)=>{#[cfg(test)] if simulate_inspectors {h.simulate_inspectors();}let _=h.send(device.event("deviceDidConnect"));hosts.insert(v.plugin.clone(),h);},
+                    Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),format!("Plugin indisponible : {e}")));continue;}
+                }}
+                let host=&hosts[&v.plugin];
+                let info=json!({"action":v.action,"context":v.context,"device":device.id,"payload":{"settings":v.settings,"coordinates":{"column":v.index%device.columns,"row":v.index/device.columns}}});
+                let title=crate::plugin_host::inspector_title(&p.name,&action.name);
+                match host.open_inspector_with_title(path,info,&title){
+                    Ok(id)=>{
+                        if !current.contains_key(&v.context){reconcile_state(&mut v,None,&mut configured);let _=host.send(event("willAppear",&v,&device));}
+                        idle.remove(&v.plugin);current.insert(v.context.clone(),v.clone());drafts.insert(v.context.clone(),v.clone());inspectors.insert(id,v);
+                    },Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),format!("Inspecteur : {e}")));}
+                }
+            }
+            Ok(Request::CloseVirtualInspector(context))=>{
+                if let Some(v)=drafts.remove(&context){
+                    if let Some(host)=hosts.get(&v.plugin){for (id,_) in inspectors.iter().filter(|(_,seen)|seen.context==context){host.close_inspector(id);}let _=host.send(event("willDisappear",&v,&device));}
+                    inspectors.retain(|_,seen|seen.context!=context);current.remove(&context);configured.remove(&context);
+                    if !current.values().any(|seen|seen.plugin==v.plugin){idle.insert(v.plugin,Instant::now());}
+                }
+            }
             Ok(Request::Title(context,title))=>{if let Some(v)=current.get(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(title_event(v,&device,&title));}}}
             Ok(Request::Device(next))=>{if next!=device {for host in hosts.values(){let _=host.send(device.event("deviceDidDisconnect"));let _=host.send(next.event("deviceDidConnect"));}device=next;}}
             Ok(Request::Sync(mut next,bindings,origin))=>{
                 for (context,(plugin,action,settings)) in bindings {
                     if let Some(v)=current.get(&context).filter(|v|v.plugin==plugin && v.action==action) {
-                        let mut v=v.clone();v.settings=settings;next.insert(context,v);
+                        let mut v=v.clone();v.settings=settings;
+                        v.state=configured.get(&context).map_or(v.state,|c|c.state);
+                        next.insert(context,v);
                     }
                 }
+                for (context,v) in &drafts {next.insert(context.clone(),current.get(context).cloned().unwrap_or_else(||v.clone()));}
+                for v in next.values_mut(){let context=v.context.clone();reconcile_state(v,current.get(&context),&mut configured);}
+                configured.retain(|context,_|next.contains_key(context));
                 let notifications=settings_notifications(&current,&next,&inspectors,&device,origin.as_ref().map(|(id,from_pi)|(id.as_str(),*from_pi)));
                 let (gone,added)=diff(&current,&next);
                 for v in gone {if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willDisappear",&v,&device));}}
@@ -257,7 +331,8 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 }
                 if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willAppear",&v,&device));}}
                 current=next;
-                inspectors.retain(|_,v|current.get(&v.context).is_some_and(|now|same_instance(v,now)));
+                let stale=inspectors.iter().filter(|(_,v)|!current.get(&v.context).is_some_and(|now|same_instance(v,now))).map(|(id,v)|(id.clone(),v.plugin.clone())).collect::<Vec<_>>();
+                for (id,plugin) in stale {if let Some(host)=hosts.get(&plugin){host.close_inspector(&id);}inspectors.remove(&id);}
                 for v in inspectors.values_mut(){if let Some(now)=current.get(&v.context){*v=now.clone();}}
                 for (plugin,message) in notifications {if let Some(host)=hosts.get(&plugin){let _=host.send(message);}}
                 for plugin in hosts.keys(){if current.values().any(|v|&v.plugin==plugin){idle.remove(plugin);}else{idle.entry(plugin.clone()).or_insert_with(Instant::now);}}
@@ -277,7 +352,11 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 if let Some(old)=old.as_ref().filter(|old|old.plugin!=v.plugin || old.action!=v.action) {
                     if let Some(host)=hosts.get(&old.plugin){let _=host.send(event("willDisappear",old,&device));}
                 }
-                if let Some(old)=old.as_ref().filter(|old|old.plugin==v.plugin && old.action==v.action) {v.settings=old.settings.clone();}
+                if let Some(old)=old.as_ref().filter(|old|old.plugin==v.plugin && old.action==v.action) {
+                    v.settings=old.settings.clone();
+                    v.state=configured.get(&v.context).map_or(v.state,|c|c.state);
+                }
+                reconcile_state(&mut v,old.as_ref(),&mut configured);
                 let host=&hosts[&v.plugin];
                 if !old.as_ref().is_some_and(|old|same_instance(old,&v)) {let _=host.send(event("willAppear",&v,&device));}
                 for name in ["keyDown","keyUp"] {
@@ -287,7 +366,16 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 current.insert(v.context.clone(),v);
             }
             Ok(Request::VirtualSettings(context,settings))=>{
-                if let Some(v)=current.get_mut(&context) {v.settings=settings;}
+                if let Some(v)=current.get_mut(&context) {
+                    let before=v.clone();
+                    if v.settings!=settings {v.state=configured.get(&context).map_or(v.state,|c|c.state);}
+                    v.settings=settings.clone();
+                    if let Some(default)=configured.get_mut(&context){default.settings=settings;}
+                    if drafts.contains_key(&context) {
+                        drafts.insert(context.clone(),v.clone());
+                        for (plugin,message) in settings_notifications(&HashMap::from([(context.clone(),before)]),&HashMap::from([(context.clone(),v.clone())]),&inspectors,&device,None){if let Some(host)=hosts.get(&plugin){let _=host.send(message);}}
+                    }
+                }
             }
             Ok(Request::Open(context))=>{if let Some(v)=current.get(&context){if let (Some(p),Some(host))=(plugins.iter().find(|p|p.uuid==v.plugin),hosts.get(&v.plugin)){
                 let path=p.actions.iter().find(|a|a.uuid==v.action).and_then(|a|a.inspector.as_ref()).or(p.inspector.as_ref());
@@ -318,35 +406,73 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             if name=="__hostError" {let _=reply.send(Reply::Error(plugin.clone(),value["reason"].as_str().unwrap_or("Message invalide").into()));continue;}
             // Commandes des molettes/écrans tactiles : sans objet pour une touche, ignorées sans erreur.
             if matches!(name.as_str(),"setFeedback"|"setFeedbackLayout"|"setTriggerDescription") {continue;}
-            if !matches!(name.as_str(),"registerPlugin"|"logMessage"|"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"|"openUrl") {
+            if !matches!(name.as_str(),"registerPlugin"|"logMessage"|"setTitle"|"setImage"|"setState"|"novydeckStateUnknown"|"showOk"|"showAlert"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"|"openUrl") {
                 let _=reply.send(Reply::Error(plugin.clone(),format!("Evenement plugin non pris en charge : {name}")));continue;
             }
             if let Some(id)=value["__pi"].as_str().map(str::to_owned){
-                let Some(v)=inspectors.get(&id).filter(|v|v.plugin==*plugin).cloned() else {continue};
+                let Some(v)=inspectors.get(&id).filter(|v|v.plugin==*plugin && host.inspector_active(&id)).cloned() else {inspectors.remove(&id);continue};
+                if !value.get("action").is_none_or(|action|action.as_str()==Some(&v.action)) {
+                    let _=reply.send(Reply::Error(plugin.clone(),"Action étrangère".into()));continue;
+                }
                 if name=="propertyInspectorDidDisappear" {inspectors.remove(&id);}
                 if name=="propertyInspectorDidAppear" {
                     // Comme Stream Dock/Stream Deck : le PI reçoit tout de suite les réglages de sa touche.
                     let _=host.send(json!({"event":"didReceiveSettings","action":v.action,"context":v.context,"device":device.id,"__pi":id,
                         "payload":event("didReceiveSettings",&v,&device)["payload"]}));
                 }
-                if !matches!(name.as_str(),"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"){continue;}
+                if !matches!(name.as_str(),"setState"|"novydeckStateUnknown"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"){continue;}
                 value["context"]=json!(v.context);value["action"]=json!(v.action);
                 if name=="sendToPlugin" || name.starts_with("propertyInspectorDid"){
                     let mut command=value.clone();if let Some(obj)=command.as_object_mut(){obj.remove("__pi");}
                     let _=host.send(command);continue;
                 }
             } else if name=="sendToPropertyInspector" {
-                if let Some(ctx)=value["context"].as_str(){for (id,v) in &inspectors {if v.context==ctx && v.plugin==*plugin {let mut message=value.clone();message["__pi"]=json!(id);let _=host.send(message);}}}continue;
+                if let Some(ctx)=value["context"].as_str(){if current.get(ctx).is_some_and(|v|v.plugin==*plugin && value.get("action").is_none_or(|a|a.as_str()==Some(&v.action))){for (id,v) in &inspectors {if v.context==ctx && v.plugin==*plugin && host.inspector_active(id) {let mut message=value.clone();message["action"]=json!(v.action);message["__pi"]=json!(id);let _=host.send(message);}}}}continue;
             }
             // PI messages carry a session ID, not necessarily a canonical action context.
             // Validate that session and rewrite its context above BEFORE checking ownership.
-            if matches!(name.as_str(),"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings")
+            if matches!(name.as_str(),"setTitle"|"setImage"|"setState"|"novydeckStateUnknown"|"showOk"|"showAlert"|"setSettings"|"getSettings")
                 && !current.get(value["context"].as_str().unwrap_or("")).is_some_and(|v:&Visible|v.plugin==*plugin) {
                 let _=reply.send(Reply::Error(plugin.clone(),"Contexte étranger ou absent".into()));continue;
+            }
+            if name=="getSettings" {
+                if let Some(v)=current.get(value["context"].as_str().unwrap_or("")) {
+                    let mut message=event("didReceiveSettings",v,&device);
+                    if let Some(id)=value["__pi"].as_str(){message["__pi"]=json!(id);}
+                    let _=host.send(message);
+                }
+            }
+            if name=="setSettings" {
+                if let Some(context)=value["context"].as_str().map(str::to_owned) {
+                    if drafts.contains_key(&context){
+                        if let Some(v)=current.get_mut(&context){
+                            let before=v.clone();v.settings=value["payload"].clone();
+                            if before.settings!=v.settings{v.state=configured.get(&context).map_or(v.state,|c|c.state);}
+                            if let Some(default)=configured.get_mut(&context){default.settings=v.settings.clone();}
+                            drafts.insert(context.clone(),v.clone());
+                            let origin=value.get("__pi").map(|_|(context.as_str(),true)).or(Some((context.as_str(),false)));
+                            for (owner,message) in settings_notifications(&HashMap::from([(context.clone(),before)]),&HashMap::from([(context.clone(),v.clone())]),&inspectors,&device,origin){if let Some(h)=hosts.get(&owner){let _=h.send(message);}}
+                        }
+                    }
+                }
+            }
+            if matches!(name.as_str(),"setState"|"novydeckStateUnknown") {
+                let Some(v)=state_owner(&current,plugin,&value) else {
+                    let _=reply.send(Reply::Error(plugin.clone(),"Action ou contexte étranger".into()));continue;
+                };
+                let context=v.context.clone();
+                if name=="novydeckStateUnknown" {
+                    if let (Some(now),Some(default))=(current.get_mut(&context),configured.get(&context)) {now.state=default.state;}
+                } else if let Some(state)=value["payload"]["state"].as_u64().filter(|s|*s<=u8::MAX as u64) {
+                    if let Some(now)=current.get_mut(&context){now.state=state as u8;}
+                }
             }
             if name=="switchToProfile" {let _=reply.send(Reply::Error(plugin.clone(),"switchToProfile non pris en charge : profil non vérifié".into()));continue;}
             let _=reply.send(Reply::Message(plugin.clone(),value));
         }}
+        // A draft is alive only while one of its PI sessions remains valid.
+        let invalid=drafts.iter().filter(|(context,v)|!inspectors.iter().any(|(id,seen)|seen.context==**context && hosts.get(&v.plugin).is_some_and(|host|host.inspector_active(id)))).map(|(context,_)|context.clone()).collect::<Vec<_>>();
+        for context in invalid {if let Some(v)=drafts.remove(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willDisappear",&v,&device));}inspectors.retain(|_,seen|seen.context!=context);current.remove(&context);configured.remove(&context);}}
         let exited=hosts.iter_mut().filter_map(|(id,host)|{
             if current.values().any(|v|v.plugin==*id) && host.exited() {Some(id.clone())}else{None}
         }).collect::<Vec<_>>();
@@ -389,6 +515,62 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     // Host::drop termine tout l'arbre de chaque processus.
 }
 #[cfg(test)]mod tests {use super::*;use crate::model::{Config,PluginBinding};
+    #[test] fn draft_inspectors_are_independent_and_survive_sync_without_keypress() {
+        use tungstenite::Message;
+        let fixture=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let mut plugin=crate::plugins::parse(&fixture,&std::fs::read(fixture.join("manifest.json")).unwrap()).unwrap();
+        let dir=tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pi.html"),"<html></html>").unwrap();
+        std::fs::write(dir.path().join("witness.js"),r#"
+const args=process.argv.slice(2),val=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${val('-port')}`);
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:val('-registerEvent'),uuid:val('-pluginUUID')})));
+ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willAppear'||v.event==='willDisappear'||v.event==='keyDown'||v.event==='didReceiveSettings')ws.send(JSON.stringify({event:'logMessage',context:v.context,payload:{message:v.event,settings:v.payload.settings}}));});
+"#).unwrap();
+        plugin.folder=dir.path().into();plugin.runtime=crate::plugins::Runtime::Node(dir.path().join("witness.js"));plugin.actions[0].inspector=Some("pi.html".into());
+        let manager=Manager::new(vec![plugin.clone()]);
+        let (ack,wait)=mpsc::channel();manager.tx.send(Request::SimulateInspectors(ack)).unwrap();wait.recv_timeout(Duration::from_secs(2)).unwrap();
+        let contexts=["novydeck-inspector-block-a","novydeck-inspector-block-b"];
+        let sessions=||{let (tx,rx)=mpsc::channel();manager.tx.send(Request::TestSessions(tx)).unwrap();rx.recv_timeout(Duration::from_secs(3)).unwrap()};
+        for (i,ctx) in contexts.iter().enumerate(){manager.open_virtual_inspector(Visible{context:(*ctx).into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:i,settings:if i==0 {Value::Null}else{json!({"value":2})},state:0}).unwrap();}
+        let initial=sessions();assert_eq!(initial.len(),2);
+        let (first,_,port)=initial.iter().find(|(_,ctx,_)|ctx==contexts[0]).unwrap().clone();
+        let (second,_,_)=initial.iter().find(|(_,ctx,_)|ctx==contexts[1]).unwrap().clone();
+        // A test seam simulates ONLY WebView spawn; real Host HTTP path, registry, random sessions and sockets are used.
+        let mut peers=Vec::new();
+        for id in [&first,&second] {let (mut ws,_)=tungstenite::connect(format!("ws://127.0.0.1:{port}")).unwrap();ws.send(Message::Text(json!({"event":"registerPropertyInspector","uuid":id}).to_string().into())).unwrap();peers.push(ws);}
+        peers[0].send(Message::Text(json!({"event":"setSettings","action":"foreign.action","payload":{"rejected":true}}).to_string().into())).unwrap();
+        for (index,settings) in [(0,json!({"x":10})),(1,json!({"x":20}))] {
+            peers[index].send(Message::Text(json!({"event":"setSettings","context":"wrong","payload":settings}).to_string().into())).unwrap();
+        }
+        let until=Instant::now()+Duration::from_secs(12);let mut changed=HashMap::new();let mut appeared=HashSet::new();let mut foreign_rejected=false;
+        while Instant::now()<until && (changed.len()<2 || appeared.len()<2 || !foreign_rejected) {
+            match manager.rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(Reply::Message(_,v)) if v["event"]=="setSettings"=>{changed.insert(v["context"].as_str().unwrap().to_owned(),v["payload"].clone());},
+                Ok(Reply::Message(_,v)) if v["event"]=="logMessage" && v["payload"]["message"]=="willAppear"=>{appeared.insert(v["context"].as_str().unwrap().to_owned());},
+                Ok(Reply::Message(_,v)) if v["event"]=="logMessage"=>{assert_ne!(v["payload"]["message"],"keyDown");},
+                Ok(Reply::Error(_,e)) if e.contains("Action étrangère")=>{foreign_rejected=true;},
+                Ok(Reply::Error(_,e))=>panic!("unexpected: {e}"),_=>{}
+            }
+        }
+        assert!(foreign_rejected);assert_eq!(appeared.len(),2);assert_eq!(changed[contexts[0]],json!({"x":10}));assert_eq!(changed[contexts[1]],json!({"x":20}));
+        let mut config=Config::default();manager.tx.send(Request::Sync(visible(&config),virtual_bindings(&config),None)).unwrap();
+        assert_eq!(sessions().len(),2,"sync with no applied blocks must preserve drafts");
+        manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
+        assert_eq!(sessions().len(),2,"repeated open must reuse existing PI");
+        manager.close_virtual_inspector(contexts[0]).unwrap();assert_eq!(sessions().len(),1);
+        peers[0].send(Message::Text(json!({"event":"setSettings","payload":{"stale":true}}).to_string().into())).ok();
+        manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
+        let reopened=sessions();assert_eq!(reopened.len(),2);assert!(!reopened.iter().any(|(id,_,_)|id==&first));assert!(reopened.iter().any(|(id,_,_)|id==&second));
+        for i in 2..4 {manager.open_virtual_inspector(Visible{context:format!("novydeck-inspector-block-{i}"),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:i,settings:Value::Null,state:0}).unwrap();}
+        assert_eq!(sessions().len(),4);
+        manager.open_virtual_inspector(Visible{context:"novydeck-inspector-block-overflow".into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:4,settings:Value::Null,state:0}).unwrap();
+        assert_eq!(sessions().len(),4);
+        let deadline=Instant::now()+Duration::from_secs(4);let mut limited=false;
+        while Instant::now()<deadline {if let Ok(Reply::Error(_,e))=manager.rx.recv_timeout(Duration::from_millis(100)){if e.contains("quatre inspecteurs"){limited=true;break;}}}
+        assert!(limited);
+        config.page="main".into(); // no applied plugin binding or physical key was required
+    }
     #[test] fn pause_targets_one_plugin_and_blocks_virtual_restart() {
         let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
         let first=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
@@ -547,4 +729,69 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
         assert!(msg["payload"]["titleParameters"].is_object());
     }
     #[test]fn event_coordinates(){let v=Visible{context:"ctx".into(),plugin:"p".into(),action:"a".into(),index:7,settings:json!({"x":1}),state:2};let message=event("keyDown",&v,&Device::virtual_device());assert_eq!(message["payload"]["coordinates"],json!({"column":2,"row":1}));assert_eq!(message["context"],"ctx");}
+    #[test] fn configured_state_resets_on_binding_changes_and_rejects_other_owner() {
+        let mut defaults=HashMap::new();
+        let base=Visible{context:"ctx".into(),plugin:"p".into(),action:"a".into(),index:0,settings:json!({"x":0}),state:0};
+        let mut initial=base.clone();reconcile_state(&mut initial,None,&mut defaults);
+        let mut reported=initial.clone();reported.state=1;
+        let mut same=base.clone();reconcile_state(&mut same,Some(&reported),&mut defaults);assert_eq!(same.state,1);
+        for changed in [Visible{state:2,..base.clone()},Visible{settings:json!({"x":1}),..base.clone()},Visible{action:"b".into(),..base.clone()},Visible{plugin:"other".into(),..base.clone()}] {
+            let mut config=HashMap::from([("ctx".into(),base.clone())]);
+            let mut next=changed.clone();reconcile_state(&mut next,Some(&reported),&mut config);
+            assert_eq!(next.state,changed.state);
+        }
+        let current=HashMap::from([("ctx".into(),base)]);
+        assert!(state_owner(&current,"p",&json!({"context":"ctx"})).is_some());
+        for (id,message) in [("other",json!({"context":"ctx"})),("p",json!({"context":"missing"})),("p",json!({"context":"ctx","action":"b"}))] {
+            assert!(state_owner(&current,id,&message).is_none());
+        }
+    }
+    #[test] fn reported_state_survives_sync_and_virtual_until_unknown() {
+        let folder=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+        let mut plugin=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let temp=tempfile::tempdir().unwrap();
+        let script=temp.path().join("plugin.js");
+        std::fs::write(&script,r#"
+const args=process.argv.slice(2), value=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${value('-port')}`);
+let count=0;
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:value('-registerEvent'),uuid:value('-pluginUUID')})));
+ws.addEventListener('message',m=>{const msg=JSON.parse(m.data);if(msg.event!=='keyDown')return;
+ count++;const context=msg.context;
+ ws.send(JSON.stringify({event:'setTitle',context,payload:{title:`state-${count}-${msg.payload.state}`}}));
+ if(count===1)ws.send(JSON.stringify({event:'setState',context,action:msg.action,payload:{state:1,novydeckStateSource:'local'}}));
+ if(count===2){ws.send(JSON.stringify({event:'novydeckStateUnknown',context:'foreign-context'}));ws.send(JSON.stringify({event:'novydeckStateUnknown',context,action:'foreign-action'}));ws.send(JSON.stringify({event:'novydeckStateUnknown',context}));}
+});
+"#).unwrap();
+        plugin.folder=temp.path().into();plugin.runtime=crate::plugins::Runtime::Node(script);
+        let mut manager=Manager::new(vec![plugin.clone()]);
+        let mut config=Config::default();config.keys_mut()[0].plugin=Some(PluginBinding{plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),settings:json!({}),state:0});
+        manager.sync(&config);
+        let context=manager.visible().values().next().unwrap().context.clone();
+        let await_message=|manager:&Manager,name:&str|->Value{
+            let deadline=Instant::now()+Duration::from_secs(15);
+            loop {match manager.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect(name){
+                Reply::Message(_,v) if v["event"]==name=>return v,
+                Reply::Error(_,error)=>panic!("unexpected reply: {error}"),
+                _=>{}
+            }}
+        };
+        manager.key(0,true);
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-1-0");
+        assert_eq!(await_message(&manager,"setState")["payload"]["state"],1);
+        manager.sync(&config);
+        let v=manager.visible()[&context].clone();manager.tx.send(Request::Virtual(v)).unwrap();
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-2-1");
+        let unknown={
+            let deadline=Instant::now()+Duration::from_secs(15);let mut rejected=0;
+            loop {match manager.rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("unknown") {
+                Reply::Error(id,_) if id==plugin.uuid=>rejected+=1,
+                Reply::Message(_,v) if v["event"]=="novydeckStateUnknown"=>{assert_eq!(rejected,2,"foreign context and action rejected");break v},
+                _=>{}
+            }}
+        };
+        assert_eq!(unknown["context"],context);
+        manager.key(0,true);
+        assert_eq!(await_message(&manager,"setTitle")["payload"]["title"],"state-3-0");
+    }
 }
