@@ -76,10 +76,10 @@ fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
             if ty.is_dir(){visit(base,candidate,&path,protected,count)?;continue;}
             anyhow::ensure!(ty.is_file(),"Type local refusé");
             let target=candidate.join(&path);let explicit=protected.iter().any(|p|p==&path);
+            if !packaged(&path) && !explicit && !mutable(&path) && target.exists(){anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());}
             let keep=!packaged(&path) && (explicit || mutable(&path) || !target.exists());
             if !keep {continue;}
             if target.exists(){anyhow::ensure!(metadata(&target)?.is_file(),"Conflit fichier/dossier : {}",path.display());}
-            if !explicit && !mutable(&path) && target.exists(){anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());}
             anyhow::ensure!(ty.len()<=100*1024*1024,"Donnée locale trop volumineuse");
             fs::create_dir_all(target.parent().context("Parent absent")?)?;
             fs::copy(entry.path(),target)?;
