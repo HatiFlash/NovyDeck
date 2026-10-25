@@ -470,6 +470,9 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             if name=="switchToProfile" {let _=reply.send(Reply::Error(plugin.clone(),"switchToProfile non pris en charge : profil non vérifié".into()));continue;}
             let _=reply.send(Reply::Message(plugin.clone(),value));
         }}
+        // A draft is alive only while one of its PI sessions remains valid.
+        let invalid=drafts.iter().filter(|(context,v)|!inspectors.iter().any(|(id,seen)|seen.context==**context && hosts.get(&v.plugin).is_some_and(|host|host.inspector_active(id)))).map(|(context,_)|context.clone()).collect::<Vec<_>>();
+        for context in invalid {if let Some(v)=drafts.remove(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willDisappear",&v,&device));}inspectors.retain(|_,seen|seen.context!=context);current.remove(&context);configured.remove(&context);}}
         let exited=hosts.iter_mut().filter_map(|(id,host)|{
             if current.values().any(|v|v.plugin==*id) && host.exited() {Some(id.clone())}else{None}
         }).collect::<Vec<_>>();
@@ -536,19 +539,21 @@ ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willApp
         // A test seam simulates ONLY WebView spawn; real Host HTTP path, registry, random sessions and sockets are used.
         let mut peers=Vec::new();
         for id in [&first,&second] {let (mut ws,_)=tungstenite::connect(format!("ws://127.0.0.1:{port}")).unwrap();ws.send(Message::Text(json!({"event":"registerPropertyInspector","uuid":id}).to_string().into())).unwrap();peers.push(ws);}
+        peers[0].send(Message::Text(json!({"event":"setSettings","action":"foreign.action","payload":{"rejected":true}}).to_string().into())).unwrap();
         for (index,settings) in [(0,json!({"x":10})),(1,json!({"x":20}))] {
             peers[index].send(Message::Text(json!({"event":"setSettings","context":"wrong","payload":settings}).to_string().into())).unwrap();
         }
-        let until=Instant::now()+Duration::from_secs(12);let mut changed=HashMap::new();let mut appeared=HashSet::new();
-        while Instant::now()<until && (changed.len()<2 || appeared.len()<2) {
+        let until=Instant::now()+Duration::from_secs(12);let mut changed=HashMap::new();let mut appeared=HashSet::new();let mut foreign_rejected=false;
+        while Instant::now()<until && (changed.len()<2 || appeared.len()<2 || !foreign_rejected) {
             match manager.rx.recv_timeout(Duration::from_millis(200)) {
                 Ok(Reply::Message(_,v)) if v["event"]=="setSettings"=>{changed.insert(v["context"].as_str().unwrap().to_owned(),v["payload"].clone());},
                 Ok(Reply::Message(_,v)) if v["event"]=="logMessage" && v["payload"]["message"]=="willAppear"=>{appeared.insert(v["context"].as_str().unwrap().to_owned());},
                 Ok(Reply::Message(_,v)) if v["event"]=="logMessage"=>{assert_ne!(v["payload"]["message"],"keyDown");},
+                Ok(Reply::Error(_,e)) if e.contains("Action étrangère")=>{foreign_rejected=true;},
                 Ok(Reply::Error(_,e))=>panic!("unexpected: {e}"),_=>{}
             }
         }
-        assert_eq!(appeared.len(),2);assert_eq!(changed[contexts[0]],json!({"x":10}));assert_eq!(changed[contexts[1]],json!({"x":20}));
+        assert!(foreign_rejected);assert_eq!(appeared.len(),2);assert_eq!(changed[contexts[0]],json!({"x":10}));assert_eq!(changed[contexts[1]],json!({"x":20}));
         let mut config=Config::default();manager.tx.send(Request::Sync(visible(&config),virtual_bindings(&config),None)).unwrap();
         assert_eq!(sessions().len(),2,"sync with no applied blocks must preserve drafts");
         manager.open_virtual_inspector(Visible{context:contexts[0].into(),plugin:plugin.uuid.clone(),action:plugin.actions[0].uuid.clone(),index:0,settings:Value::Null,state:0}).unwrap();
