@@ -98,5 +98,8 @@ fn state_source_picker_and_three_faces_are_visible_in_both_languages_at_hidpi() 
             if let Some(out)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output.clone(),&PathBuf::from(out).join(format!("plugin-state-{name}-{lang}.png")));}
             assert!(text_position(&output.shapes,crate::i18n::tr(label)).is_some());
         }
+        super::navigation_seek(&mut h,size,crate::i18n::tr("Désactivé"),area,-60.0);
+        let output=h.warm(size);
+        if let Some(out)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join(format!("plugin-state-editor-{lang}.png")));}
     }
 }

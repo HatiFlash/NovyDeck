@@ -52,6 +52,47 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
 }
 
 #[test]
+fn same_action_different_settings_reorder_and_profile_replacement_invalidate_session() {
+    let (mut h,plugin,_) = setup();
+    for (index,step) in h.app.config.keys_mut()[0].steps.iter_mut().enumerate() {
+        if let Step::PluginAction {settings,label,..}=step {*settings=serde_json::json!({"id":index});*label="Identical label".into();}
+    }
+    h.app.block_inspector_open(vec![0]);let old=h.app.block_inspector.as_ref().unwrap().context.clone();
+    h.app.config.keys_mut()[0].steps.swap(0,1);let before=h.app.config.keys()[0].steps.clone();
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":old,"payload":{"id":99}}));
+    assert!(h.app.block_inspector.is_none());assert_eq!(h.app.config.keys()[0].steps,before);
+    h.app.block_inspector_open(vec![0]);let old=h.app.block_inspector.as_ref().unwrap().context.clone();
+    h.app.config.profiles[0].name="Replacement profile".into();
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":old,"payload":{"id":99}}));
+    assert!(h.app.block_inspector.is_none());assert_eq!(h.app.config.keys()[0].steps,before);
+}
+
+#[test]
+fn own_settings_refresh_signature_but_malformed_action_cannot_write() {
+    let (mut h,plugin,action)=setup();let applied=h.app.applied.clone();
+    h.app.block_inspector_open(vec![0]);let context=h.app.block_inspector.as_ref().unwrap().context.clone();
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"payload":{"value":1}}));
+    assert!(h.app.block_inspector_valid());assert!(h.app.gate.dirty);assert_eq!(h.app.applied,applied);
+    let before=h.app.config.keys()[0].steps.clone();
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"action":42,"payload":{"value":99}}));
+    assert_eq!(h.app.config.keys()[0].steps,before);
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"action":action,"payload":{"value":2}}));
+    assert!(h.app.block_inspector_valid());
+    let loaded=crate::store::load(&h.app.path).unwrap();
+    assert!(matches!(&loaded.keys()[0].steps[0],Step::PluginAction{settings,..} if settings["value"]==2));
+}
+
+#[test]
+fn valid_block_inspectors_preserve_global_settings_protocol() {
+    let (mut h,plugin,_)=setup();h.app.block_inspector_open(vec![0]);
+    let context=h.app.block_inspector.as_ref().unwrap().context.clone();
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setGlobalSettings","context":context,"payload":{"test_global":17}}));
+    let data:serde_json::Value=serde_json::from_slice(&std::fs::read(h.app.path.with_file_name("plugin-settings.json")).unwrap()).unwrap();
+    assert_eq!(data[&plugin]["test_global"],17);
+    assert!(!h.app.block_inspector_message(&plugin,&serde_json::json!({"event":"getGlobalSettings","context":context})),"valid global requests must reach the existing SDK handler");
+}
+
+#[test]
 fn stale_sessions_never_write_new_block_after_reorder_or_remove() {
     let (mut h,plugin,_) = setup();
     h.app.block_inspector_open(vec![0]);
