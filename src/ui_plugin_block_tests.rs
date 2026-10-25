@@ -215,3 +215,31 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
     assert!(matches!(&saved.keys()[0].steps[1],
         Step::PluginAction {settings,..} if settings == &neighbour_settings));
 }
+
+#[test]
+fn googlehome_block_properties_english_capture() {
+    let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
+    let mut h = Harness::new();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    plugin.uuid = "com.novydeck.googlehome".into();
+    plugin.name = "Google Home demo".into();
+    plugin.actions[0].uuid = "com.novydeck.googlehome.control".into();
+    h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
+    h.app.show_workflow = true;
+    h.app.config.keys_mut()[0].steps = vec![Step::PluginAction {
+        plugin: "com.novydeck.googlehome".into(),
+        action: "com.novydeck.googlehome.control".into(),
+        settings: serde_json::json!({"mode":"off","scope":"group","targets":["demo-1","demo-2"]}),
+        label: "Demo group (offline)".into(),
+    }];
+    crate::i18n::set_language("en");
+    h.app.preferences.language = "en".into();
+    let size = vec2(1366.0, 768.0);
+    h.warm(size);
+    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize]));
+    let output = h.warm(size);
+    assert!(text_position(&output.shapes, crate::i18n::tr("État à l’appui")).is_some());
+    assert!(text_position(&output.shapes, crate::i18n::trf("Groupe : {count} appareils", &[("count", &2)])).is_some());
+    h.png(size, output, &PathBuf::from(dir).join("googlehome-block-properties-en.png"));
+}

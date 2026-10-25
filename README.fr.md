@@ -22,6 +22,20 @@
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
 
+## Nouveautés 0.12.0 (préparation de la version)
+
+### Sélecteur d'état Google Home dans les blocs
+
+Dans l'**Atelier**, sélectionnez un bloc d'action de commande Google Home. Ses propriétés proposent **Allumer**, **Éteindre** ou **Basculer** pour l'état à l'appui. Un réglage de luminosité existant reste intact et se modifie dans l'inspecteur du plugin ; ouvrir les propriétés d'un bloc non configuré ne le configure pas tout seul.
+
+### Choisir un groupe
+
+Depuis les **Réglages du plugin** du bloc sélectionné, utilisez **Commander → Groupe** dans l'inspecteur du plugin pour choisir les appareils. De retour dans les propriétés du bloc, NovyDeck indique le nombre d'appareils sélectionnés. Chaque bloc conserve ses propres réglages ; changer l'état garde les cibles choisies. Les captures éventuelles montrent un plugin témoin hors ligne, pas un compte réel ni un plugin installé.
+
+### Plugins séparés
+
+Économiseur OLED et SignalRGB ne sont pas installés automatiquement avec NovyDeck. Installez ou mettez à jour les plugins compatibles séparément si nécessaire, selon leur disponibilité et leurs prérequis. Ces tests d'interface ne prouvent aucun effet sur des appareils Google Home, des écrans ou un deck physique. Voir les [notes 0.12.0](docs/RELEASE-0.12.0.md) ; le badge en tête renvoie encore à la dernière version publiée jusqu'à la publication de 0.12.0.
+
 ## Nouveautés 0.11.1
 
 ### Mise à jour des plugins du magasin
