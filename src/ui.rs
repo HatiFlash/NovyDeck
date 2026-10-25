@@ -710,7 +710,7 @@ impl App {
             Err(e) => self.fail(trf("Sauvegarde impossible : {error}", &[("error", &e)])),
         }
     }
-    fn execute_key(&mut self, key: Key, dry: bool, delayed: bool, config: &Config) {
+    fn execute_key(&mut self, mut key: Key, dry: bool, delayed: bool, config: &Config) {
         if let Err(e) = validate_key(&key, config) {
             self.fail(trf("Action à corriger : {error}", &[("error", &e)]));
             return;
