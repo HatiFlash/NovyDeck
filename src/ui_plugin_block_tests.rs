@@ -72,7 +72,7 @@ fn own_settings_refresh_signature_but_malformed_action_cannot_write() {
     let (mut h,plugin,action)=setup();let applied=h.app.applied.clone();
     h.app.block_inspector_open(vec![0]);let context=h.app.block_inspector.as_ref().unwrap().context.clone();
     h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"payload":{"value":1}}));
-    assert!(h.app.block_inspector_valid());assert!(h.app.gate.dirty);assert_eq!(h.app.applied,applied);
+    assert!(h.app.block_inspector_valid());assert!(h.app.gate.dirty);assert_eq!(serde_json::to_value(&h.app.applied).unwrap(),serde_json::to_value(&applied).unwrap());
     let before=h.app.config.keys()[0].steps.clone();
     h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"action":42,"payload":{"value":99}}));
     assert_eq!(h.app.config.keys()[0].steps,before);
