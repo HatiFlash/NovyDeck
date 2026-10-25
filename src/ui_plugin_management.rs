@@ -118,10 +118,11 @@ impl App {
                 std::thread::spawn(move||{let resume=control.resume_plugin(&id);let _=tx.send(JobResult::Resume{result:resume,disk:result,remove});ctx.request_repaint();});
             }
             JobResult::Resume{result,disk,remove}=>{
-                let outcome=match disk {Ok(backup)=>format!("{} · {}: {}",if remove {crate::i18n::tr("Plugin désinstallé")}else{crate::i18n::tr("Plugin mis à jour")},crate::i18n::tr("Sauvegarde"),backup.display()),Err(error)=>format!("{}: {error}",crate::i18n::tr("Opération impossible"))};
+                let outcome=match &disk {Ok(backup)=>format!("{} · {}: {}",if remove {crate::i18n::tr("Plugin désinstallé")}else{crate::i18n::tr("Plugin mis à jour")},crate::i18n::tr("Sauvegarde"),backup.display()),Err(error)=>format!("{}: {error}",crate::i18n::tr("Opération impossible"))};
                 let resume=match result {
+                    Ok(()) if remove && disk.is_ok()=>format!(" · {}",crate::i18n::tr("Références conservées ; plugin indisponible. Réinstallez-le ou réaffectez les touches.")),
                     Ok(())=>String::new(),
-                    Err(error) if remove && disk.is_ok() && error=="Plugin installé introuvable"=>String::new(),
+                    Err(error) if remove && disk.is_ok() && error=="Plugin installé introuvable"=>format!(" · {}",crate::i18n::tr("Références conservées ; plugin indisponible. Réinstallez-le ou réaffectez les touches.")),
                     Err(error)=>format!(" · {}: {error}",crate::i18n::tr("Remise en route non confirmée")),
                 };
                 self.plugin_management.message=format!("{outcome}{resume}");
@@ -131,11 +132,13 @@ impl App {
     pub(super) fn management_modal(&mut self,ctx:&egui::Context){
         let active=self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some();
         if !active{return;}
-        let backdrop=egui::LayerId::new(egui::Order::Middle,egui::Id::new("plugin_management_backdrop"));
-        ctx.memory_mut(|memory|memory.set_modal_layer(Some(backdrop)));
+        egui::Area::new(egui::Id::new("plugin_management_block")).order(egui::Order::Middle).fixed_pos(ctx.screen_rect().min).show(ctx,|ui|{
+            let rect=ctx.screen_rect();ui.allocate_rect(rect,egui::Sense::click());
+            ui.painter().rect_filled(rect,0.0,egui::Color32::from_black_alpha(110));
+        });
         if let Some(request)=self.plugin_management.confirmation.clone(){
             let mut open=true;let mut confirm=false;let mut cancel=false;
-            crate::theme::fixed_window(crate::i18n::tr("Confirmer la gestion du plugin")).open(&mut open).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).default_width(440.0).show(ctx,|ui|{
+            let shown=crate::theme::fixed_window(crate::i18n::tr("Confirmer la gestion du plugin")).id(egui::Id::new("plugin_management_confirmation")).order(egui::Order::Foreground).open(&mut open).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).default_width(440.0).show(ctx,|ui|{
                 ui.label(RichText::new(request.name()).strong());
                 match &request {
                     Request::Update{entry,old,..}=>{ui.label(format!("{old} → {}",entry.version));ui.label(crate::i18n::tr("Ce plugin exécute du code avec vos droits utilisateur."));if community_plugins::badges(entry,&super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner()).scans).warning {ui.label(crate::i18n::tr("Analyse de sécurité à examiner avant mise à jour."));}},
@@ -150,21 +153,12 @@ impl App {
                 ui.horizontal(|ui|{if ui.button(crate::i18n::tr("Annuler")).clicked(){cancel=true;}
                     if ui.button(if matches!(request,Request::Remove{..}){crate::i18n::tr("Confirmer la désinstallation")}else{crate::i18n::tr("Confirmer la mise à jour")}).clicked(){confirm=true;}});
             });
+            if let Some(shown)=shown {let layer=shown.response.layer_id;ctx.move_to_top(layer);ctx.memory_mut(|memory|memory.set_modal_layer(layer));}
             if !open || cancel {self.plugin_management.confirmation=None;}else if confirm {self.management_start(ctx);}
         }
         if self.plugin_management.working.is_some(){
-            // Keep the modal backdrop below the native-style window so its controls remain usable.
-            egui::Area::new(egui::Id::new("plugin_management_block")).order(egui::Order::Middle).fixed_pos(ctx.screen_rect().min).show(ctx,|ui|{
-                let rect=ctx.screen_rect();ui.allocate_rect(rect,egui::Sense::click());
-                ui.painter().rect_filled(rect,0.0,egui::Color32::from_black_alpha(110));
-            });
-            let layer=egui::LayerId::new(egui::Order::Foreground,egui::Id::new("plugin_management_progress"));
-            ctx.move_to_top(layer);
-            crate::theme::fixed_window(crate::i18n::tr("Gestion du plugin en cours")).id(layer.id).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui|{ui.horizontal(|ui|{ui.spinner();ui.label(crate::i18n::tr("Veuillez patienter : préparation, sauvegarde et reprise du plugin."));});});
-        }else if self.plugin_management.confirmation.is_some(){
-            let layer=egui::LayerId::new(egui::Order::Foreground,egui::Id::new("plugin_management_confirmation"));
-            ctx.move_to_top(layer);
-            ctx.memory_mut(|memory|memory.set_modal_layer(Some(layer)));
+            let shown=crate::theme::fixed_window(crate::i18n::tr("Gestion du plugin en cours")).id(egui::Id::new("plugin_management_progress")).order(egui::Order::Foreground).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui|{ui.horizontal(|ui|{ui.spinner();ui.label(crate::i18n::tr("Veuillez patienter : préparation, sauvegarde et reprise du plugin."));});});
+            if let Some(shown)=shown {let layer=shown.response.layer_id;ctx.move_to_top(layer);ctx.memory_mut(|memory|memory.set_modal_layer(layer));}
         }
     }
 }
