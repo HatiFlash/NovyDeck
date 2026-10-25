@@ -93,6 +93,26 @@ fn management_disconnected_worker_does_not_leave_interface_blocked() {
     assert!(!h.app.plugin_management.message.is_empty(),"the interrupted operation must be reported, not silently accepted");
 }
 
+#[test]
+fn management_confirmation_and_progress_block_background_edits() {
+    for working in [false,true] {
+        let mut h=Harness::new();
+        crate::i18n::set_language("fr");
+        let size=vec2(1366.0,768.0);
+        let initial=h.warm(size);
+        let theme=text_position(&initial.shapes,"Thème clair").or_else(||text_position(&initial.shapes,"Thème sombre")).expect("theme control in header");
+        let dark=h.app.preferences.dark;
+        let (_sender,rx)=std::sync::mpsc::channel::<plugin_management_ui::JobResult>();
+        if working {h.app.plugin_management.working=Some(rx);} else {
+            h.app.plugin_management.confirmation=Some(plugin_management_ui::Request::Remove{id:"test.a".into(),name:"Test".into(),version:"1.0".into()});
+        }
+        h.warm(size);
+        h.click(size,theme);
+        h.warm(size);
+        assert_eq!(h.app.preferences.dark,dark,"background editing must be blocked during confirmation/progress, working={working}");
+    }
+}
+
 struct ManagementMarketReset;
 impl Drop for ManagementMarketReset {
     fn drop(&mut self) {
