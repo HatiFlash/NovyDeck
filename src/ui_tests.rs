@@ -2626,9 +2626,10 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         crate::i18n::set_language("fr");
         h.ctx.set_pixels_per_point(dpi);
         let size = physical / dpi;
-        let plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
+        let mut plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
             navigation_fixture("B · Autre plugin", "test.navigation.b", 2),
             navigation_fixture("Z · Dernier plugin", "test.navigation.z", 55)];
+        plugins[2].actions.last_mut().unwrap().name = "ZZ action finale · Z · Dernier plugin · un intitulé suffisamment long pour vérifier la largeur réelle de la palette".into();
         let last = plugins[2].clone();
         let expected_action = last.actions.last().unwrap().uuid.clone();
         h.app.plugins = Some(crate::plugin_runtime::Manager::new(plugins));
