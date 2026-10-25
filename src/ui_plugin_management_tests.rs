@@ -153,10 +153,16 @@ fn management_successful_update_refreshes_disk_inventory_and_disables_button() {
     let backup = plugin_management_ui::disk_operation(&root, "test.a", Operation::Update {source:incoming, protected:vec![]}).unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
     h.app.plugin_management.working = Some(rx);
-    tx.send(plugin_management_ui::JobResult::Disk{id:"test.a".into(),remove:false,paused:true,result:Ok(backup),control}).unwrap();
+    let installed_plugin=crate::plugin_import::validated_folder(&installed).unwrap();
+    tx.send(plugin_management_ui::JobResult::Disk{id:"test.a".into(),remove:false,paused:true,result:Ok((backup,Some(installed_plugin))),control}).unwrap();
     h.app.management_poll(&h.ctx);
     let on_disk = crate::plugin_import::inventory(&root);
     assert_eq!(on_disk.iter().find(|plugin|plugin.uuid=="test.a").unwrap().version,"2.0");
+    for _ in 0..40 {if h.app.plugin_management.working.is_none(){break;}std::thread::sleep(std::time::Duration::from_millis(10));h.app.management_poll(&h.ctx);}
+    assert!(h.app.plugin_management.working.is_none(),"le runtime doit reprendre");
+    assert!(h.app.plugin_management.message.contains("Plugin mis à jour"),"{}",h.app.plugin_management.message);
+    let cached=h.app.plugin_inventory.as_ref().unwrap();
+    assert_eq!(cached.installed.iter().find(|p|p.uuid=="test.a").unwrap().version,"2.0");
     let mut state = super::plugin_store_ui::community_state().lock().unwrap();
     *state = Default::default();
     state.consent = true;

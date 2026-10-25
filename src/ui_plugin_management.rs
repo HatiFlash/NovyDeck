@@ -1,6 +1,6 @@
 //! Explicit plugin lifecycle confirmation and off-UI disk work.
 use super::App;
-use crate::{community_plugins::{self,Entry}, model::{Config,Step}, plugin_runtime::PluginControl};
+use crate::{community_plugins::{self,Entry}, model::{Config,Step}, plugin_runtime::PluginControl, plugins::Plugin};
 use eframe::egui::{self,RichText};
 use std::{path::{Path,PathBuf},sync::mpsc::{self,Receiver}};
 
@@ -66,7 +66,7 @@ fn protected_images(folder:&Path,images:&[String])->Vec<PathBuf>{
         (absolute.is_file() && !relative.as_os_str().is_empty()).then(||relative.to_path_buf())
     }).collect()
 }
-pub(super) enum JobResult { Disk {id:String,remove:bool,paused:bool,result:Result<PathBuf,String>,control:PluginControl}, Resume {result:Result<(),String>,disk:Result<PathBuf,String>,remove:bool} }
+pub(super) enum JobResult { Disk {id:String,remove:bool,paused:bool,result:Result<(PathBuf,Option<Plugin>),String>,control:PluginControl}, Resume {result:Result<(),String>,disk:Result<PathBuf,String>,remove:bool} }
 #[derive(Default)] pub(super) struct State {pub confirmation:Option<Request>,pub working:Option<Receiver<JobResult>>,pub message:String}
 impl App {
     pub(super) fn management_start(&mut self,ctx:&egui::Context){
@@ -78,17 +78,23 @@ impl App {
         let ctx=ctx.clone();std::thread::spawn(move||{
             let id=request.id().to_owned();let remove=matches!(request,Request::Remove{..});
             let result=control.pause_plugin(&id).and_then(|_|{
-                let outcome=(||->anyhow::Result<PathBuf>{
+                let outcome=(||->anyhow::Result<(PathBuf,Option<Plugin>)>{
                     let root=crate::plugin_import::installed_root()?;
-                    let operation=match request {
+                    match request {
                         Request::Update{entry,folder,..}=>{
                             let (_staging,source)=community_plugins::stage_verified_update(&entry,&root)?;
                             let protected=protected_images(&folder,&images);
-                            return disk_operation(&root,&id,Operation::Update{source,protected});
+                            let backup=disk_operation(&root,&id,Operation::Update{source,protected})?;
+                            // Trust the on-disk manifest after commit, not an old inventory
+                            // snapshot or an optimistic change of the button's label.
+                            let installed=crate::plugin_import::validated_folder(&folder)
+                                .map_err(|e|anyhow::anyhow!("Installation à vérifier (sauvegarde {}) : {e}",backup.display()))?;
+                            anyhow::ensure!(installed.uuid==id && installed.version==entry.version,
+                                "Version après mise à jour différente ; sauvegarde {}",backup.display());
+                            Ok((backup,Some(installed)))
                         }
-                        Request::Remove{..}=>Operation::Remove,
-                    };
-                    disk_operation(&root,&id,operation)
+                        Request::Remove{..}=>disk_operation(&root,&id,Operation::Remove).map(|backup|(backup,None)),
+                    }
                 })();
                 Ok(outcome.map_err(|e|e.to_string()))
             });
@@ -113,10 +119,13 @@ impl App {
             JobResult::Disk{id,remove,paused,result,control}=>{
                 if !paused {self.plugin_management.message=format!("{}",result.unwrap_err());return;}
                 self.plugin_states.clear_plugin(&id);
-                // Never restart against an obsolete catalog. Even a failed disk transaction may have rolled back.
-                self.refresh_plugin_catalog();
+                // Failed transactions may have rolled back. On success use the exact
+                // installed version revalidated after commit, not a cached scan.
+                let (disk,updated)=match result {Ok((backup,updated))=>(Ok(backup),updated),Err(error)=>(Err(error),None)};
+                if let Some(plugin)=updated {self.refresh_plugin_catalog_observed(plugin);}
+                else {self.refresh_plugin_catalog();}
                 let (tx,rx)=mpsc::channel();self.plugin_management.working=Some(rx);let ctx=ctx.clone();
-                std::thread::spawn(move||{let resume=control.resume_plugin(&id);let _=tx.send(JobResult::Resume{result:resume,disk:result,remove});ctx.request_repaint();});
+                std::thread::spawn(move||{let resume=control.resume_plugin(&id);let _=tx.send(JobResult::Resume{result:resume,disk,remove});ctx.request_repaint();});
             }
             JobResult::Resume{result,disk,remove}=>{
                 let outcome=match &disk {Ok(backup)=>format!("{} · {}: {}",if remove {crate::i18n::tr("Plugin désinstallé")}else{crate::i18n::tr("Plugin mis à jour")},crate::i18n::tr("Sauvegarde"),backup.display()),Err(error)=>format!("{}: {error}",crate::i18n::tr("Opération impossible"))};
