@@ -1026,6 +1026,8 @@
     "Règle uniquement les sessions audio de l’application ciblée.": "Adjust only the target app's audio sessions.",
     "Réactiver": "Re-enable",
     "Réduire": "Minimize",
+    "Replier": "Collapse",
+    "Étendre": "Expand",
     "Réduire les animations": "Reduce animations",
     "Réduire les autres fenêtres": "Minimize other windows",
     "Réduire toutes les autres fenêtres (garder {who})": "Minimize all other windows (keep {who})",

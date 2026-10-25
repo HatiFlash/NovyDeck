@@ -64,14 +64,22 @@ fn plugin_step(plugin: &crate::plugins::Plugin, action: &crate::plugins::Action)
     Step::PluginAction { plugin:plugin.uuid.clone(), action:action.uuid.clone(),
         settings:serde_json::json!({}), label:action.name.clone() }
 }
+fn plugin_choices_menu(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str) -> Option<Step> {
+    let height=(ui.ctx().screen_rect().height()*0.6).clamp(1.0,420.0);
+    egui::ScrollArea::vertical().id_salt("workshop_plugin_choices_scroll").max_height(height).show(ui,|ui| {
+        ui.set_max_width(ui.available_width().min(320.0));
+        plugin_choices(ui,plugins,search)
+    }).inner
+}
 fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str) -> Option<Step> {
     let mut chosen=None;
     let needle=search.trim().to_lowercase();
     let eligible=plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime,crate::plugins::Runtime::Exe(_)|crate::plugins::Runtime::Node(_)|crate::plugins::Runtime::Html(_))).collect::<Vec<_>>();
     if eligible.is_empty(){return None;}
     egui::CollapsingHeader::new(crate::i18n::tr("Plugins")).default_open(!search.is_empty()).show(ui,|ui| {
-        egui::ScrollArea::vertical().id_salt("workshop_plugin_choices_scroll").max_height(ui.available_height().max(120.0).min(420.0)).show(ui,|ui| {
-            for plugin in eligible {
+        // The workshop palette already owns its bounded scroll viewport.
+        // A second nested viewport clips wrapped action labels near the bottom.
+        for plugin in eligible {
                 let plugin_name=plugin.display_name();
                 let mut actions=plugin.actions.iter().collect::<Vec<_>>();
                 actions.sort_by(|a,b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(||a.uuid.cmp(&b.uuid)));
@@ -89,7 +97,6 @@ fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str
                     });
                 });
             }
-        });
     });
     chosen
 }
@@ -489,7 +496,7 @@ pub(super) fn block_editor(
                             }
                         });
                     }
-                    if let Some(plugin_step) = plugin_choices(ui, plugins, "") {
+                    if let Some(plugin_step) = plugin_choices_menu(ui, plugins, "") {
                         insertion = Some((i, plugin_step));
                         ui.close_menu();
                     }
@@ -1166,7 +1173,7 @@ impl App {
                                 }
                             });
                         }
-                        if let Some(step) = plugin_choices(ui, &installed_plugins, "") { add_plugin = Some(step); }
+                        if let Some(step) = plugin_choices_menu(ui, &installed_plugins, "") { add_plugin = Some(step); }
                     });
                 });
             }

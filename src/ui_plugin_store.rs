@@ -58,7 +58,7 @@ impl App {
        ui.label(RichText::new(format!("{} · v{}",plugin.display_name(),plugin.version)).strong());
        ui.label(crate::i18n::trf("{count} actions · {status}", &[("count", &(plugin.actions.len())), ("status", &(self.plugin_errors.get(&plugin.uuid).map(String::as_str).unwrap_or(crate::i18n::tr("arrêté"))))] ));
       });
-      if ui.button(if expanded {crate::i18n::tr("Réduire")}else{crate::i18n::tr("Étendre")}).clicked(){ui.ctx().data_mut(|d|d.insert_persisted(expanded_id,!expanded));}
+      if ui.button(if expanded {crate::i18n::tr("Replier")}else{crate::i18n::tr("Étendre")}).clicked(){ui.ctx().data_mut(|d|d.insert_persisted(expanded_id,!expanded));}
      });
      if !expanded{return;}
      ui.label(crate::i18n::trf("Auteur : {author} · Origine : import local", &[("author", &(if plugin.author.trim().is_empty(){crate::i18n::tr("inconnu")}else{&plugin.author}))] ));

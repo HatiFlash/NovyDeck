@@ -2607,9 +2607,21 @@ fn navigation_fixture(name: &str, id: &str, count: usize) -> crate::plugins::Plu
 fn navigation_seek(h: &mut Harness, size: egui::Vec2, label: &str, at: egui::Pos2, delta: f32) -> egui::Pos2 {
     for _ in 0..80 {
         let output = h.warm(size);
-        if let Some(position) = text_position(&output.shapes, label) { return position; }
+        let mut scroll_delta = delta;
+        if let Some(position) = text_position(&output.shapes, label) {
+            if let Some((bounds,clip)) = output.shapes.iter().find_map(|shape| {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    if text.galley.job.text == label && bounds.center().distance(position) < 1.0 {return Some((bounds,shape.clip_rect));}
+                }
+                None
+            }) {
+                if clip.expand(1.0).contains_rect(bounds) {return position;}
+                scroll_delta = if bounds.min.y < clip.min.y {24.0} else {-24.0};
+            }
+        }
         h.frame(size, vec![Input::PointerMoved(at), Input::MouseWheel {
-            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, delta), modifiers: Modifiers::NONE,
+            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, scroll_delta), modifiers: Modifiers::NONE,
         }]);
     }
     let output = h.warm(size);
@@ -2703,7 +2715,7 @@ fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
         navigation_seek(&mut h, size, &action, panel.center(), -80.0);
         navigation_seek(&mut h, size, &label, panel.center(), 100.0);
         let output = h.warm(size);
-        let collapse = text_position(&output.shapes, "Réduire").expect("bouton Réduire atteignable");
+        let collapse = text_position(&output.shapes, "Replier").expect("bouton Replier atteignable");
         h.click(size, collapse);
         let output = h.warm(size);
         assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(false));
