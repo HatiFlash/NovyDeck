@@ -715,6 +715,11 @@ impl App {
             self.fail(trf("Action à corriger : {error}", &[("error", &e)]));
             return;
         }
+        if key.steps.is_empty() && key.plugin.is_some() && !dry && !delayed {
+            // Physical plugin keys are already sent through Manager::key from the HID event.
+            // Do not dispatch a second virtual keyDown from the macro engine.
+            return;
+        }
         if key.steps.is_empty() && key.plugin.is_none() {
             self.log(tr("Cette touche n’a pas encore d’action. Ajoute une action depuis la bibliothèque.").into());
             return;
