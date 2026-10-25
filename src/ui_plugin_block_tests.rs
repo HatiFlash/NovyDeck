@@ -240,6 +240,6 @@ fn googlehome_block_properties_english_capture() {
     h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize]));
     let output = h.warm(size);
     assert!(text_position(&output.shapes, crate::i18n::tr("État à l’appui")).is_some());
-    assert!(text_position(&output.shapes, crate::i18n::trf("Groupe : {count} appareils", &[("count", &2)])).is_some());
+    assert!(text_position(&output.shapes, &crate::i18n::trf("Groupe : {count} appareils", &[("count", &2)])).is_some());
     h.png(size, output, &PathBuf::from(dir).join("googlehome-block-properties-en.png"));
 }
