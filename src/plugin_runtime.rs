@@ -1,5 +1,5 @@
 //! Cycle de vie des actions Stream Deck visibles (aucun I/O dans le verrou App).
-use std::{collections::HashMap, sync::mpsc::{self, Receiver, Sender}, thread, time::{Duration, Instant}};
+use std::{collections::{HashMap,HashSet}, sync::mpsc::{self, Receiver, Sender}, thread, time::{Duration, Instant}};
 use serde_json::{json, Value};
 use crate::{model::Config, plugin_host::Host, plugins::Plugin};
 
@@ -75,7 +75,7 @@ pub(crate) fn application_events(watch:&[String],running:&[String],before:&std::
     for app in before.difference(&now){events.push(json!({"event":"applicationDidTerminate","payload":{"application":app}}));}
     (now,events)
 }
-enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Stop }
+enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>), Resume(String,Sender<Result<(),String>>), Stop }
 static VIRTUAL_SENDER: std::sync::OnceLock<std::sync::Mutex<Option<Sender<Request>>>> = std::sync::OnceLock::new();
 fn virtual_sender() -> &'static std::sync::Mutex<Option<Sender<Request>>> {
     VIRTUAL_SENDER.get_or_init(|| std::sync::Mutex::new(None))
@@ -137,6 +137,20 @@ pub fn virtual_step_path(config:&Config,context:&str) -> Option<(usize,Vec<usize
     None
 }
 pub enum Reply { Message(String,Value), Error(String,String) }
+/// Handle clonable pour l'opération disque sur un thread de travail. Ne garde pas le gestionnaire UI verrouillé.
+#[derive(Clone)] pub struct PluginControl {tx:Sender<Request>}
+impl PluginControl {
+    fn command(&self,id:&str,pause:bool)->Result<(),String>{
+        if id.is_empty(){return Err("UUID vide".into());}
+        let (tx,rx)=mpsc::channel();
+        self.tx.send(if pause{Request::Pause(id.into(),tx)}else{Request::Resume(id.into(),tx)}).map_err(|_|"Runtime arrêté".to_string())?;
+        rx.recv_timeout(Duration::from_secs(10)).map_err(|_|"Acquittement runtime absent : ne pas modifier le disque".to_string())?
+    }
+    /// Succès = processus ciblé et inspecteurs terminés ; échec/timeout = AUCUNE mutation disque permise.
+    pub fn pause_plugin(&self,id:&str)->Result<(),String>{self.command(id,true)}
+    /// À appeler après set_catalog (ou rollback), pour reprendre uniquement ce plugin.
+    pub fn resume_plugin(&self,id:&str)->Result<(),String>{self.command(id,false)}
+}
 pub struct Manager { tx:Sender<Request>,pub rx:Receiver<Reply>,visible:HashMap<String,Visible>,titles:HashMap<String,String>,pub catalog:Vec<Plugin> }
 impl Manager {
     pub fn new(plugins:Vec<Plugin>)->Self {
@@ -145,6 +159,9 @@ impl Manager {
         if let Ok(mut sender) = virtual_sender().lock() { *sender = Some(tx.clone()); }
         Self{tx,rx,visible:HashMap::new(),titles:HashMap::new(),catalog}
     }
+    pub fn control(&self)->PluginControl{PluginControl{tx:self.tx.clone()}}
+    pub fn pause_plugin(&self,id:&str)->Result<(),String>{self.control().pause_plugin(id)}
+    pub fn resume_plugin(&self,id:&str)->Result<(),String>{self.control().resume_plugin(id)}
     pub fn device(&self,device:Device){let _=self.tx.send(Request::Device(device));}
     /// Plugins importés pendant l'exécution : visibles sans redémarrer NovyDeck.
     pub fn set_catalog(&mut self,plugins:Vec<Plugin>){self.catalog=plugins.clone();let _=self.tx.send(Request::Catalog(plugins));}
@@ -177,9 +194,29 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     let mut idle:HashMap<String,Instant>=HashMap::new();
     let mut restarts:HashMap<String,Vec<Instant>>=HashMap::new();
     let mut monitored:HashMap<String,std::collections::BTreeSet<String>>=HashMap::new();let mut last_poll:Option<Instant>=None;
+    let mut paused=HashSet::<String>::new();
     loop {
         match requests.recv_timeout(Duration::from_millis(50)) {
             Ok(Request::Stop)|Err(mpsc::RecvTimeoutError::Disconnected)=>break,
+            Ok(Request::Pause(id,ack))=>{
+                paused.insert(id.clone());
+                inspectors.retain(|_,v|v.plugin!=id);
+                monitored.remove(&id);idle.remove(&id);restarts.remove(&id);
+                drop(hosts.remove(&id)); // Host closes its Windows Job and waits for the targeted child and inspectors.
+                let _=ack.send(Ok(()));
+            }
+            Ok(Request::Resume(id,ack))=>{
+                if !paused.remove(&id){let _=ack.send(Err("Plugin non suspendu".into()));continue;}
+                if current.values().any(|v|v.plugin==id){
+                    if let Some(p)=plugins.iter().find(|p|p.uuid==id){
+                        match Host::start(p,&device){
+                            Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));for v in current.values().filter(|v|v.plugin==id){let _=h.send(event("willAppear",v,&device));}hosts.insert(id.clone(),h);},
+                            Err(e)=>{let _=reply.send(Reply::Error(id.clone(),e.to_string()));}
+                        }
+                    }
+                }
+                let _=ack.send(Ok(()));
+            }
             Ok(Request::Title(context,title))=>{if let Some(v)=current.get(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(title_event(v,&device,&title));}}}
             Ok(Request::Device(next))=>{if next!=device {for host in hosts.values(){let _=host.send(device.event("deviceDidDisconnect"));let _=host.send(next.event("deviceDidConnect"));}device=next;}}
             Ok(Request::Sync(mut next,bindings,origin))=>{
@@ -191,7 +228,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 let notifications=settings_notifications(&current,&next,&inspectors,&device,origin.as_ref().map(|(id,from_pi)|(id.as_str(),*from_pi)));
                 let (gone,added)=diff(&current,&next);
                 for v in gone {if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willDisappear",&v,&device));}}
-                for v in added {if !hosts.contains_key(&v.plugin){
+                for v in added {if paused.contains(&v.plugin){continue;}if !hosts.contains_key(&v.plugin){
                     if let Some(p)=plugins.iter().find(|p|p.uuid==v.plugin){match Host::start(p,&device){Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));hosts.insert(v.plugin.clone(),h);},Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),e.to_string()));}}}
                     else{let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin installé introuvable".into()));}
                 }
@@ -203,6 +240,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 for plugin in hosts.keys(){if current.values().any(|v|&v.plugin==plugin){idle.remove(plugin);}else{idle.entry(plugin.clone()).or_insert_with(Instant::now);}}
             }
             Ok(Request::Virtual(mut v))=>{
+                if paused.contains(&v.plugin){let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin suspendu".into()));continue;}
                 let Some(p)=plugins.iter().find(|p|p.uuid==v.plugin && p.actions.iter().any(|a|a.uuid==v.action)) else {
                     let _=reply.send(Reply::Error(v.plugin.clone(),format!("Action de plugin introuvable ou désactivée : {}",v.action)));continue;
                 };
@@ -244,7 +282,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             Ok(Request::Catalog(next))=>{
                 plugins=next;
                 // Une touche liée avant l'import démarre maintenant, avec son willAppear.
-                let waiting=current.values().filter(|v|!hosts.contains_key(&v.plugin)).map(|v|v.plugin.clone()).collect::<std::collections::BTreeSet<_>>();
+                let waiting=current.values().filter(|v|!paused.contains(&v.plugin) && !hosts.contains_key(&v.plugin)).map(|v|v.plugin.clone()).collect::<std::collections::BTreeSet<_>>();
                 for id in waiting {if let Some(p)=plugins.iter().find(|p|p.uuid==id){match Host::start(p,&device){
                     Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));for v in current.values().filter(|v|v.plugin==id){let _=h.send(event("willAppear",v,&device));}hosts.insert(id,h);},
                     Err(e)=>{let _=reply.send(Reply::Error(id,e.to_string()));}

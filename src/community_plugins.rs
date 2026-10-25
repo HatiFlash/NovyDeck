@@ -138,6 +138,26 @@ pub fn image(url: &str, icon: bool) -> Result<eframe::egui::ColorImage> {
     Ok(eframe::egui::ColorImage::from_rgba_unmultiplied([w as usize,h as usize], decoded.as_raw()))
 }
 
+/// Appel explicite après consentement UI, sur thread de travail uniquement. Aucune mutation de l'installation.
+/// Le répertoire temporaire propriétaire doit rester vivant jusqu'au remplacement.
+pub fn stage_verified_update(entry:&Entry, root:&Path) -> Result<(tempfile::TempDir,std::path::PathBuf)> {
+    anyhow::ensure!(entry.compatible,"Version de NovyDeck insuffisante");
+    let url=https_url(&entry.download)?;
+    anyhow::ensure!(url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"),"Archive non prise en charge");
+    let bytes=crate::https_get::get(&entry.download,ARCHIVE_LIMIT)?;
+    anyhow::ensure!(format!("{:x}",Sha256::digest(&bytes))==entry.sha256,"Empreinte SHA-256 différente");
+    let staged=tempfile::Builder::new().prefix(".verified-").tempdir_in(root)?;
+    let archive=staged.path().join("archive.zip");fs::write(&archive,bytes)?;
+    let extracted=staged.path().join("extracted");
+    anyhow::ensure!(crate::plugin_import::import_archive(&archive,&extracted)?,"Archive non importée");
+    let mut entries=fs::read_dir(&extracted)?;
+    let folder=entries.next().context("Archive vide")??.path();
+    anyhow::ensure!(entries.next().is_none(),"Plusieurs plugins dans l'archive");
+    let plugin=crate::plugin_import::validated_folder(&folder)?;
+    anyhow::ensure!(entry.uuid.as_deref()==Some(plugin.uuid.as_str()),"UUID du catalogue absent ou différent");
+    anyhow::ensure!(plugin.version==entry.version,"Version du manifeste différente du catalogue");
+    Ok((staged,folder))
+}
 /// Le fichier temporaire vérifié est passé à l'importeur local existant, puis effacé même en cas d'erreur.
 pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
     anyhow::ensure!(entry.compatible, "Version de NovyDeck insuffisante pour ce plugin");
