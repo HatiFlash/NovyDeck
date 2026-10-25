@@ -2794,7 +2794,7 @@ fn store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
         for lang in ["fr","en"] {
             let mut h=Harness::new();crate::i18n::set_language(lang);
             h.ctx.set_pixels_per_point(dpi);
-            let mut entries=crate::community_plugins::parse(&std::fs::read(fixtures.join("registry.json")).unwrap()).unwrap();
+            let mut entries=crate::community_plugins::parse(&std::fs::read(fixtures.join("registry.json")).unwrap_or_else(|e|panic!("read {}: {e}",fixtures.display()))).unwrap();
             for e in &mut entries {e.compatible=true;e.icon=None;e.screenshots.clear();}
             for suffix in ["extra-a","extra-b"] {
                 let mut e=entries[0].clone();e.id=format!("com.test.{suffix}");e.uuid=Some(e.id.clone());e.name=format!("Plugin with a long name {suffix}");entries.push(e);
