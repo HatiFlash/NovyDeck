@@ -2574,7 +2574,7 @@ fn workshop_plugin_catalogue_adds_action_card_and_capture() {
     let category = text_position(&output.shapes, "Plugins").expect("plugin category");
     h.click(size, category);
     let output = h.warm(size);
-    let action_pos = text_position(&output.shapes, &expected).expect("installed action in palette");
+    let action_pos = text_position(&output.shapes, "Incrémenter").expect("installed action in palette");
     h.click(size, action_pos);
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[h.app.selected].steps[..], [Step::PluginAction { plugin: id, action, .. }] if id == &plugin.uuid && action == &plugin.actions[0].uuid));
