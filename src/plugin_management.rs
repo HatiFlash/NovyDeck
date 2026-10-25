@@ -25,9 +25,9 @@ fn local(root:&Path,id:&str)->Result<(PathBuf,crate::plugins::Plugin)> {
     uuid(id)?;anyhow::ensure!(metadata(root)?.is_dir(),"Racine invalide");
     let mut found=None;let mut count=0;
     for entry in fs::read_dir(root)? {
-        let entry=entry?;count+=1;anyhow::ensure!(count<=512,"Trop de dossiers de plugins");
-        let name=entry.file_name();let name=name.to_string_lossy();
+        let entry=entry?;let name=entry.file_name();let name=name.to_string_lossy();
         if name.starts_with('.') || name.starts_with("__") {continue;}
+        count+=1;anyhow::ensure!(count<=512,"Trop de dossiers de plugins");
         let folder=entry.path();let ty=entry.file_type()?;
         // Never dereference another plugin's junction to inspect its manifest.
         if ty.is_symlink() || !ty.is_dir(){continue;}
@@ -76,7 +76,7 @@ fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
             if ty.is_dir(){visit(base,candidate,&path,protected,count)?;continue;}
             anyhow::ensure!(ty.is_file(),"Type local refusé");
             let target=candidate.join(&path);let explicit=protected.iter().any(|p|p==&path);
-            let keep=explicit || mutable(&path) || !packaged(&path) && !target.exists();
+            let keep=!packaged(&path) && (explicit || mutable(&path) || !target.exists());
             if !keep {continue;}
             if target.exists(){anyhow::ensure!(metadata(&target)?.is_file(),"Conflit fichier/dossier : {}",path.display());}
             if !explicit && !mutable(&path) && target.exists(){anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());}
@@ -157,15 +157,27 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
         let old=root.join("a.sdPlugin");fs::create_dir(old.join("images")).unwrap();
         fs::write(old.join("images/user.png"),b"mine").unwrap();fs::write(old.join("main.js"),b"old code").unwrap();
+        fs::create_dir(old.join("data")).unwrap();fs::write(old.join("data/config.json"),b"local").unwrap();
         fs::write(old.join("i18n.json"),b"old translation").unwrap();
         let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
         let src=stage.join("a.sdPlugin");fs::create_dir(src.join("images")).unwrap();
         fs::write(src.join("images/user.png"),b"new image").unwrap();fs::write(src.join("i18n.json"),b"new translation").unwrap();
+        fs::create_dir(src.join("data")).unwrap();fs::write(src.join("data/config.json"),b"defaults").unwrap();
         let backup=replace_staged_preserving(&root,"test.a",&src,&[PathBuf::from("images/user.png")]).unwrap();
+        assert_eq!(fs::read(old.join("data/config.json")).unwrap(),b"local");
         assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"mine");
         assert_eq!(fs::read(old.join("i18n.json")).unwrap(),b"new translation");
         assert_eq!(fs::read(old.join("main.js")).unwrap(),b"2.0");
         assert_eq!(fs::read(backup.join("main.js")).unwrap(),b"old code");
+    }
+    #[test] fn ambiguous_image_collision_refuses_before_mutation() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+        let old=root.join("a.sdPlugin");fs::create_dir(old.join("images")).unwrap();fs::write(old.join("images/user.png"),b"mine").unwrap();
+        let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+        let incoming=stage.join("a.sdPlugin");fs::create_dir(incoming.join("images")).unwrap();fs::write(incoming.join("images/user.png"),b"new").unwrap();
+        assert!(replace_staged(&root,"test.a",&incoming).unwrap_err().to_string().contains("ambiguë"));
+        assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"mine");
+        assert_eq!(fs::read(old.join("main.js")).unwrap(),b"1.0");
     }
     #[test] fn invalid_protection_never_mutates() {
         for path in ["../outside","/absolute","manifest.json","main.js","images/../main.js"] {
