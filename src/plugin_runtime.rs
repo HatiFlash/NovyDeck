@@ -89,7 +89,7 @@ pub(crate) fn application_events(watch:&[String],running:&[String],before:&std::
     for app in before.difference(&now){events.push(json!({"event":"applicationDidTerminate","payload":{"application":app}}));}
     (now,events)
 }
-enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
+enum Request { Sync(HashMap<String,Visible>,HashMap<String,(String,String,Value)>,Option<(String,bool)>), Virtual(Visible), VirtualSettings(String,Value), OpenVirtualInspector(Visible), CloseVirtualInspector(String), #[cfg(test)] SimulateInspectors(Sender<()>), Device(Device), Key(String,bool), Title(String,String), Send(String,Value), Open(String), Catalog(Vec<Plugin>), Pause(String,Sender<Result<(),String>>,std::sync::Arc<std::sync::atomic::AtomicBool>), Resume(String,Sender<Result<(),String>>), Stop }
 static VIRTUAL_SENDER: std::sync::OnceLock<std::sync::Mutex<Option<Sender<Request>>>> = std::sync::OnceLock::new();
 fn virtual_sender() -> &'static std::sync::Mutex<Option<Sender<Request>>> {
     VIRTUAL_SENDER.get_or_init(|| std::sync::Mutex::new(None))
@@ -209,12 +209,26 @@ impl Manager {
     pub fn open_inspector(&self,index:usize){if let Some(v)=self.visible.values().find(|v|v.index==index){let _=self.tx.send(Request::Open(v.context.clone()));}}
     pub fn send(&self,plugin:&str,value:Value){let _=self.tx.send(Request::Send(plugin.to_owned(),value));}
     pub fn virtual_settings(&self,context:&str,settings:Value){let _=self.tx.send(Request::VirtualSettings(context.to_owned(),settings));}
+    /// Enqueues a new block's PI; success does not imply that the WebView opened.
+    /// The caller owns the unique `novydeck-inspector-block-` context until close.
+    pub fn open_virtual_inspector(&self,v:Visible)->Result<(),String>{
+        if !v.context.starts_with("novydeck-inspector-block-") || v.context.len()<"novydeck-inspector-block-".len()+1 || v.index>=Device::virtual_device().columns*Device::virtual_device().rows {
+            return Err("Contexte d'inspecteur de bloc invalide".into());
+        }
+        self.tx.send(Request::OpenVirtualInspector(v)).map_err(|_|"Runtime arrêté".into())
+    }
+    pub fn close_virtual_inspector(&self,context:&str)->Result<(),String>{
+        if !context.starts_with("novydeck-inspector-block-"){return Err("Contexte d'inspecteur de bloc invalide".into());}
+        self.tx.send(Request::CloseVirtualInspector(context.into())).map_err(|_|"Runtime arrêté".into())
+    }
     pub fn visible(&self)->&HashMap<String,Visible>{&self.visible}
 }
 impl Drop for Manager {fn drop(&mut self){let _=self.tx.send(Request::Stop);}}
 fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     let mut hosts:HashMap<String,Host>=HashMap::new();let mut current:HashMap<String,Visible>=HashMap::new();
     let mut configured:HashMap<String,Visible>=HashMap::new();
+    let mut drafts:HashMap<String,Visible>=HashMap::new();
+    #[cfg(test)] let mut simulate_inspectors=false;
     let mut device=Device::virtual_device();
     let mut inspectors:HashMap<String,Visible>=HashMap::new();
     let mut idle:HashMap<String,Instant>=HashMap::new();
@@ -227,6 +241,9 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             Ok(Request::Pause(id,ack,cancelled))=>{
                 if cancelled.load(std::sync::atomic::Ordering::SeqCst) {continue;}
                 paused.insert(id.clone());
+                drafts.retain(|_,v|v.plugin!=id);
+                current.retain(|ctx,v| !ctx.starts_with("novydeck-inspector-block-") || v.plugin!=id);
+                configured.retain(|ctx,_|current.contains_key(ctx));
                 inspectors.retain(|_,v|v.plugin!=id);
                 monitored.remove(&id);idle.remove(&id);restarts.remove(&id);
                 drop(hosts.remove(&id)); // Targeted child and inspectors only.
@@ -255,6 +272,42 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 }
                 let _=ack.send(result);
             }
+            #[cfg(test)] Ok(Request::SimulateInspectors(ack))=>{simulate_inspectors=true;for host in hosts.values(){host.simulate_inspectors();}let _=ack.send(());}
+            Ok(Request::OpenVirtualInspector(mut v))=>{
+                if !v.context.starts_with("novydeck-inspector-block-") || v.context.len()<"novydeck-inspector-block-".len()+1 || v.index>=device.columns*device.rows || current.contains_key(&v.context) && !drafts.contains_key(&v.context) {
+                    let _=reply.send(Reply::Error(v.plugin.clone(),"Contexte de brouillon invalide ou déjà utilisé".into()));continue;
+                }
+                if paused.contains(&v.plugin){let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin suspendu".into()));continue;}
+                let Some(p)=plugins.iter().find(|p|p.uuid==v.plugin) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin installé introuvable".into()));continue;};
+                let Some(action)=p.actions.iter().find(|a|a.uuid==v.action) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Action introuvable".into()));continue;};
+                let Some(path)=action.inspector.as_ref().or(p.inspector.as_ref()) else {let _=reply.send(Reply::Error(v.plugin.clone(),"Action sans inspecteur".into()));continue;};
+                if let Some(previous)=drafts.get(&v.context) {
+                    if previous.plugin!=v.plugin || previous.action!=v.action {let _=reply.send(Reply::Error(v.plugin.clone(),"Contexte déjà réservé à une autre action".into()));continue;}
+                    // The active WebView already owns this context. Do not overwrite its settings.
+                    if inspectors.iter().any(|(id,seen)|seen.context==v.context && hosts.get(&v.plugin).is_some_and(|h|h.inspector_active(id))) {continue;}
+                    v.settings=previous.settings.clone();v.state=current.get(&v.context).map_or(v.state,|old|old.state);
+                }
+                if !hosts.contains_key(&v.plugin){match Host::start(p,&device){
+                    Ok(h)=>{#[cfg(test)] if simulate_inspectors {h.simulate_inspectors();}let _=h.send(device.event("deviceDidConnect"));hosts.insert(v.plugin.clone(),h);},
+                    Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),format!("Plugin indisponible : {e}")));continue;}
+                }}
+                let host=&hosts[&v.plugin];
+                let info=json!({"action":v.action,"context":v.context,"device":device.id,"payload":{"settings":v.settings,"coordinates":{"column":v.index%device.columns,"row":v.index/device.columns}}});
+                let title=crate::plugin_host::inspector_title(&p.name,&action.name);
+                match host.open_inspector_with_title(path,info,&title){
+                    Ok(id)=>{
+                        if !current.contains_key(&v.context){reconcile_state(&mut v,None,&mut configured);let _=host.send(event("willAppear",&v,&device));}
+                        idle.remove(&v.plugin);current.insert(v.context.clone(),v.clone());drafts.insert(v.context.clone(),v.clone());inspectors.insert(id,v);
+                    },Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),format!("Inspecteur : {e}")));}
+                }
+            }
+            Ok(Request::CloseVirtualInspector(context))=>{
+                if let Some(v)=drafts.remove(&context){
+                    if let Some(host)=hosts.get(&v.plugin){for (id,_) in inspectors.iter().filter(|(_,seen)|seen.context==context){host.close_inspector(id);}let _=host.send(event("willDisappear",&v,&device));}
+                    inspectors.retain(|_,seen|seen.context!=context);current.remove(&context);configured.remove(&context);
+                    if !current.values().any(|seen|seen.plugin==v.plugin){idle.insert(v.plugin,Instant::now());}
+                }
+            }
             Ok(Request::Title(context,title))=>{if let Some(v)=current.get(&context){if let Some(host)=hosts.get(&v.plugin){let _=host.send(title_event(v,&device,&title));}}}
             Ok(Request::Device(next))=>{if next!=device {for host in hosts.values(){let _=host.send(device.event("deviceDidDisconnect"));let _=host.send(next.event("deviceDidConnect"));}device=next;}}
             Ok(Request::Sync(mut next,bindings,origin))=>{
@@ -265,6 +318,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                         next.insert(context,v);
                     }
                 }
+                for (context,v) in &drafts {next.insert(context.clone(),current.get(context).cloned().unwrap_or_else(||v.clone()));}
                 for v in next.values_mut(){let context=v.context.clone();reconcile_state(v,current.get(&context),&mut configured);}
                 configured.retain(|context,_|next.contains_key(context));
                 let notifications=settings_notifications(&current,&next,&inspectors,&device,origin.as_ref().map(|(id,from_pi)|(id.as_str(),*from_pi)));
@@ -276,7 +330,8 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 }
                 if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willAppear",&v,&device));}}
                 current=next;
-                inspectors.retain(|_,v|current.get(&v.context).is_some_and(|now|same_instance(v,now)));
+                let stale=inspectors.iter().filter(|(_,v)|!current.get(&v.context).is_some_and(|now|same_instance(v,now))).map(|(id,v)|(id.clone(),v.plugin.clone())).collect::<Vec<_>>();
+                for (id,plugin) in stale {if let Some(host)=hosts.get(&plugin){host.close_inspector(&id);}inspectors.remove(&id);}
                 for v in inspectors.values_mut(){if let Some(now)=current.get(&v.context){*v=now.clone();}}
                 for (plugin,message) in notifications {if let Some(host)=hosts.get(&plugin){let _=host.send(message);}}
                 for plugin in hosts.keys(){if current.values().any(|v|&v.plugin==plugin){idle.remove(plugin);}else{idle.entry(plugin.clone()).or_insert_with(Instant::now);}}
@@ -311,9 +366,14 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             }
             Ok(Request::VirtualSettings(context,settings))=>{
                 if let Some(v)=current.get_mut(&context) {
+                    let before=v.clone();
                     if v.settings!=settings {v.state=configured.get(&context).map_or(v.state,|c|c.state);}
                     v.settings=settings.clone();
                     if let Some(default)=configured.get_mut(&context){default.settings=settings;}
+                    if drafts.contains_key(&context) {
+                        drafts.insert(context.clone(),v.clone());
+                        for (plugin,message) in settings_notifications(&HashMap::from([(context.clone(),before)]),&HashMap::from([(context.clone(),v.clone())]),&inspectors,&device,None){if let Some(host)=hosts.get(&plugin){let _=host.send(message);}}
+                    }
                 }
             }
             Ok(Request::Open(context))=>{if let Some(v)=current.get(&context){if let (Some(p),Some(host))=(plugins.iter().find(|p|p.uuid==v.plugin),hosts.get(&v.plugin)){
@@ -349,16 +409,15 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 let _=reply.send(Reply::Error(plugin.clone(),format!("Evenement plugin non pris en charge : {name}")));continue;
             }
             if let Some(id)=value["__pi"].as_str().map(str::to_owned){
-                let Some(v)=inspectors.get(&id).filter(|v|v.plugin==*plugin).cloned() else {continue};
+                let Some(v)=inspectors.get(&id).filter(|v|v.plugin==*plugin && host.inspector_active(&id)).cloned() else {inspectors.remove(&id);continue};
+                if !value.get("action").is_none_or(|action|action.as_str()==Some(&v.action)) {
+                    let _=reply.send(Reply::Error(plugin.clone(),"Action étrangère".into()));continue;
+                }
                 if name=="propertyInspectorDidDisappear" {inspectors.remove(&id);}
                 if name=="propertyInspectorDidAppear" {
                     // Comme Stream Dock/Stream Deck : le PI reçoit tout de suite les réglages de sa touche.
                     let _=host.send(json!({"event":"didReceiveSettings","action":v.action,"context":v.context,"device":device.id,"__pi":id,
                         "payload":event("didReceiveSettings",&v,&device)["payload"]}));
-                }
-                if matches!(name.as_str(),"setState"|"novydeckStateUnknown")
-                    && !value.get("action").is_none_or(|action|action.as_str()==Some(&v.action)) {
-                    let _=reply.send(Reply::Error(plugin.clone(),"Action étrangère".into()));continue;
                 }
                 if !matches!(name.as_str(),"setState"|"novydeckStateUnknown"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"){continue;}
                 value["context"]=json!(v.context);value["action"]=json!(v.action);
@@ -367,13 +426,34 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                     let _=host.send(command);continue;
                 }
             } else if name=="sendToPropertyInspector" {
-                if let Some(ctx)=value["context"].as_str(){for (id,v) in &inspectors {if v.context==ctx && v.plugin==*plugin {let mut message=value.clone();message["__pi"]=json!(id);let _=host.send(message);}}}continue;
+                if let Some(ctx)=value["context"].as_str(){if current.get(ctx).is_some_and(|v|v.plugin==*plugin && value.get("action").is_none_or(|a|a.as_str()==Some(&v.action))){for (id,v) in &inspectors {if v.context==ctx && v.plugin==*plugin && host.inspector_active(id) {let mut message=value.clone();message["action"]=json!(v.action);message["__pi"]=json!(id);let _=host.send(message);}}}}continue;
             }
             // PI messages carry a session ID, not necessarily a canonical action context.
             // Validate that session and rewrite its context above BEFORE checking ownership.
             if matches!(name.as_str(),"setTitle"|"setImage"|"setState"|"novydeckStateUnknown"|"showOk"|"showAlert"|"setSettings"|"getSettings")
                 && !current.get(value["context"].as_str().unwrap_or("")).is_some_and(|v:&Visible|v.plugin==*plugin) {
                 let _=reply.send(Reply::Error(plugin.clone(),"Contexte étranger ou absent".into()));continue;
+            }
+            if name=="getSettings" {
+                if let Some(v)=current.get(value["context"].as_str().unwrap_or("")) {
+                    let mut message=event("didReceiveSettings",v,&device);
+                    if let Some(id)=value["__pi"].as_str(){message["__pi"]=json!(id);}
+                    let _=host.send(message);
+                }
+            }
+            if name=="setSettings" {
+                if let Some(context)=value["context"].as_str().map(str::to_owned) {
+                    if drafts.contains_key(&context){
+                        if let Some(v)=current.get_mut(&context){
+                            let before=v.clone();v.settings=value["payload"].clone();
+                            if before.settings!=v.settings{v.state=configured.get(&context).map_or(v.state,|c|c.state);}
+                            if let Some(default)=configured.get_mut(&context){default.settings=v.settings.clone();}
+                            drafts.insert(context.clone(),v.clone());
+                            let origin=value.get("__pi").map(|_|(context.as_str(),true)).or(Some((context.as_str(),false)));
+                            for (owner,message) in settings_notifications(&HashMap::from([(context.clone(),before)]),&HashMap::from([(context.clone(),v.clone())]),&inspectors,&device,origin){if let Some(h)=hosts.get(&owner){let _=h.send(message);}}
+                        }
+                    }
+                }
             }
             if matches!(name.as_str(),"setState"|"novydeckStateUnknown") {
                 let Some(v)=state_owner(&current,plugin,&value) else {
