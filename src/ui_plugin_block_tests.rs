@@ -21,18 +21,24 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
     for (i,value) in [(0,11),(1,22)] {
         let output = h.warm(size);
         let label = format!("Compteur DeckForge › Compteur");
-        let positions: Vec<_> = output.shapes.iter().filter_map(|shape| {
+        let property_left = egui::containers::panel::PanelState::load(&h.ctx,egui::Id::new("workshop_properties_panel"))
+            .map_or(size.x,|panel|panel.rect.left());
+        let mut positions: Vec<_> = output.shapes.iter().filter_map(|shape| {
             if let egui::Shape::Text(t) = &shape.shape {
-                if t.galley.job.text.contains(&label) && shape.clip_rect.contains(t.pos) { return Some(t.pos + vec2(10.0,8.0)); }
+                if t.galley.job.text.contains(&label) && t.pos.x < property_left && shape.clip_rect.contains(t.pos) {
+                    return Some(t.pos + vec2(10.0,8.0));
+                }
             }
             None
         }).collect();
+        positions.sort_by(|a,b|a.y.total_cmp(&b.y));
         if i == 0 {
             if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join("plugin-blocks-fr.png"));}
         }
         assert!(positions.len() >= 2,"block labels are not visible");
         h.click(size,positions[i]);
         let context = h.app.block_inspector.as_ref().expect("direct click opens session").context.clone();
+        assert_eq!(h.app.block_inspector.as_ref().unwrap().path,vec![i]);
         assert!(context.starts_with("novydeck-inspector-block-"));
         assert!(!context.starts_with("novydeck-block-"));
         h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"payload":{"count":value}}));
