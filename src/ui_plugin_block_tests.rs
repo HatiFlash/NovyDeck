@@ -154,9 +154,19 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
     let size = vec2(1366.0, 768.0);
     crate::i18n::set_language("fr");
     h.app.preferences.language = "fr".into();
-    h.warm(size); // initialise the workshop's selection context
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0]));
+    h.warm(size); // initialise le contexte de l'atelier
     let output = h.warm(size);
+    let card = output.shapes.iter().find_map(|shape| {
+        if let egui::Shape::Text(text) = &shape.shape {
+            if text.galley.job.text.contains("Google Home témoin") && text.pos.x < 1000.0
+                && shape.clip_rect.contains(text.pos) { return Some(text.pos + vec2(10.0, 8.0)); }
+        }
+        None
+    }).expect("la carte Google Home est visible");
+    h.click(size, card);
+    let output = h.warm(size);
+    assert!(text_position(&output.shapes, crate::i18n::tr("Luminosité (réglages du plugin)")).is_some(),
+        "le panneau de propriétés doit être ouvert sur le bloc choisi");
     if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
         h.png(size, output, &PathBuf::from(dir).join("googlehome-block-properties-fr.png"));
     }
@@ -179,6 +189,9 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
     assert!(matches!(&h.app.config.keys()[0].steps[1],
         Step::PluginAction {settings,..} if settings == &neighbour_settings));
     let output = h.warm(size);
+    let group_label = crate::i18n::trf("Groupe : {count} appareils", &[("count", &2)]);
+    assert!(text_position(&output.shapes, &group_label).is_some(),
+        "le bloc configuré doit indiquer le nombre d'appareils choisis");
     if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
         h.png(size, output, &PathBuf::from(dir).join("googlehome-block-group-off-fr.png"));
     }
@@ -191,7 +204,9 @@ fn googlehome_control_settings_persist_across_reload_and_keep_neighbour_targets(
         Step::PluginAction {settings,..} if settings == &neighbour_settings));
 
     // Mode change via the same setSettings path keeps targets/scope untouched.
-    let session = h.app.block_inspector.as_ref().unwrap().context.clone();
+    // Reopen the block inspector after the UI preview, as a user would.
+    h.app.block_inspector_open(vec![0]);
+    let session = h.app.block_inspector.as_ref().expect("inspector reopens after settings are saved").context.clone();
     let switched = serde_json::json!({"scope":"group","targets":["id1","id2"],"mode":"toggle"});
     h.app.plugin_message(&plugin_id, &serde_json::json!({"event":"setSettings","context":session,"payload":switched}));
     let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();
