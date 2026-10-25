@@ -113,7 +113,13 @@ fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[Pa
     let incoming=crate::plugin_import::validated_folder(source)?;
     let bytes=fs::read(source.join("manifest.json"))?;
     let manifest:serde_json::Value=serde_json::from_slice(bytes.strip_prefix(&[239,187,191]).unwrap_or(&bytes))?;
-    anyhow::ensure!(manifest["UUID"].as_str()==Some(id),"UUID explicite requis dans le manifeste de mise à jour");
+    // The official Stream Deck packages identify their plugin by the canonical
+    // `{id}.sdPlugin` directory and have no root UUID field. Permit that exact
+    // fallback only; an explicit UUID must still match the requested plugin.
+    let explicit=manifest["UUID"].as_str().filter(|value|!value.trim().is_empty());
+    let canonical=format!("{id}.sdPlugin");
+    anyhow::ensure!(match explicit {Some(value)=>value==id,None=>source.file_name().is_some_and(|name|name==canonical.as_str())},
+        "UUID explicite ou dossier canonique requis dans la mise à jour");
     uuid(&incoming.uuid)?;
     anyhow::ensure!(incoming.uuid==id && newer(&incoming.version,&previous.version)?,"UUID différent ou version non supérieure");
     // Copy into a private sibling first, with the importer's file-count/size limits.
@@ -226,6 +232,25 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         replace_staged(&root,"test.a",&stage.join("a.sdPlugin")).unwrap();
         assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"2.0");
         assert_eq!(fs::read(outside.join("other.sdPlugin/main.js")).unwrap(),b"1.0");
+    }
+    #[test] fn implicit_identity_uses_only_exact_canonical_directory() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");
+        fixture(&root,"legacy.sdPlugin","test.a","1.0");
+        let stage=d.path().join("stage");
+        let candidate=fixture_without_uuid(&stage,"test.a.sdPlugin","2.0");
+        // This is how the published first-party archives identify their plugin.
+        let wrong=stage.join("other.sdPlugin");fs::rename(&candidate,&wrong).unwrap();
+        assert!(replace_staged(&root,"test.a",&wrong).is_err());
+        assert_eq!(fs::read_to_string(root.join("legacy.sdPlugin/main.js")).unwrap(),"1.0");
+        fs::rename(&wrong,&candidate).unwrap();
+        let backup=replace_staged(&root,"test.a",&candidate).unwrap();
+        assert_eq!(fs::read_to_string(root.join("legacy.sdPlugin/main.js")).unwrap(),"2.0");
+        assert_eq!(fs::read_to_string(backup.join("main.js")).unwrap(),"1.0");
+    }
+    fn fixture_without_uuid(root:&Path,name:&str,version:&str)->PathBuf {
+        let folder=root.join(name);fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("manifest.json"),format!(r#"{{"Version":"{version}","CodePath":"main.js","Actions":[{{"UUID":"a"}}]}}"#)).unwrap();
+        fs::write(folder.join("main.js"),version).unwrap();folder
     }
     #[test] fn invalid_identity_and_version_never_mutate() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","2.0");
