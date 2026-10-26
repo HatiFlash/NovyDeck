@@ -24,6 +24,8 @@ use std::{
 
 #[path = "ui_about.rs"]
 mod about;
+#[path = "ui_update.rs"]
+mod update_ui;
 
 #[path = "ui_key_preview.rs"]
 mod key_preview;
