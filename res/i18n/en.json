@@ -735,7 +735,6 @@
     "Maximum": "Maximum",
     "Maximum de {name} et {value}": "Maximum of {name} and {value}",
     "Mer": "Wed",
-    "Mes binds": "My bindings",
     "Message": "Message",
     "Message (variables : {nom} ; {{ pour une accolade)": "Message (variables: {nom}; {{ for a brace)",
     "Message : accepte {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.": "Message: supports {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.",
