@@ -1257,6 +1257,9 @@ impl App {
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
                     let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
                         || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
+                    #[cfg(test)]
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_diagnostic"),
+                        (dragging, ctx.input(|i| i.pointer.primary_down()), ctx.input(|i| i.pointer.hover_pos()))));
                     if dragging && ctx.input(|i| i.pointer.primary_down()) {
                         if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
                             if clip.contains(pos) {
