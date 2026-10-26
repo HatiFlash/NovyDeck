@@ -1,7 +1,7 @@
 use super::*;
 use egui::{vec2, Rect, Shape};
 
-fn visible_rect(shapes: &[egui::ClippedShape], label: &str) -> Option<Rect> {
+fn visible_rect(shapes: &[egui::epaint::ClippedShape], label: &str) -> Option<Rect> {
     shapes.iter().find_map(|s| match &s.shape {
         Shape::Text(t) if t.galley.job.text == label && s.clip_rect.contains_rect(t.visual_bounding_rect()) => Some(t.visual_bounding_rect()),
         _ => None,
