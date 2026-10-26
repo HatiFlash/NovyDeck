@@ -109,11 +109,11 @@ fn plugin_request_corpus() {
         }).collect();
         for (id, action_id) in &inserted {
             let valid = knowledge.plugins.iter().any(|plugin| plugin.uuid == **id
-                && (super::contains_phrase(&mentioned, &super::parser::normalize(plugin.display_name()))
-                    || super::contains_phrase(&mentioned, &super::parser::normalize(&plugin.uuid)))
                 && plugin.actions.iter().any(|action| action.uuid == **action_id
-                    && (super::contains_phrase(&mentioned, &super::parser::normalize(&action.name))
-                        || super::contains_phrase(&mentioned, &super::parser::normalize(&action.uuid)))));
+                    && super::parser::normalize(&action.name).split_whitespace()
+                        .all(|word| super::contains_phrase(&mentioned, word))
+                    && (super::contains_phrase(&mentioned, &super::parser::normalize(plugin.display_name()))
+                        || knowledge.plugins.iter().filter(|p| p.actions.iter().any(|a| a.name == action.name)).count() == 1)));
             if !valid { gaps.push(format!("FAUX POSITIF {request:?}: {p:?}")); }
         }
         let actual = match &p.status {
@@ -164,5 +164,5 @@ fn plugin_request_corpus() {
     }
     eprintln!("CORPUS plugins: pass={} question={} inconnue={} écarts={}", counts[0], counts[1], counts[2], gaps.len());
     for gap in &gaps { eprintln!("  {gap}"); }
-    assert!(gaps.is_empty(), "{} écarts dans le corpus plugins", gaps.len());
+    assert!(gaps.is_empty(), "{} écarts dans le corpus plugins: {}", gaps.len(), gaps.join(" | "));
 }

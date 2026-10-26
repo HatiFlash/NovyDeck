@@ -585,12 +585,13 @@ fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Res
         choix: plugin_choices(items, unsafe_target),
         choix_autonomes: true,
     };
-    // « de X » après une action désigne un plugin précis : ne pas choisir un plugin
-    // homonyme installé lorsque X n'appartient pas à l'inventaire.
+    // Une qualification de plugin non installé, même après un nom d'action unique,
+    // interdit de choisir silencieusement son homonyme installé.
     let unknown_qualifier = mentioned.is_empty() && exact.iter().any(|(_, a)| {
         [a.name.as_str(), a.uuid.as_str()].iter().any(|name| {
             let token = parser::normalize(name);
-            n.split_once(&token).is_some_and(|(_, rest)| rest.trim_start().starts_with("de ") || rest.trim_start().starts_with("from "))
+            n.split_once(&token).is_some_and(|(_, rest)| ["de ", "from ", "avec ", "with ", "sur "]
+                .iter().any(|prefix| rest.trim_start().starts_with(prefix)))
         })
     });
     if unknown_qualifier {
