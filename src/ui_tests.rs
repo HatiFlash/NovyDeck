@@ -181,7 +181,7 @@ fn workshop_chat_plugin_choice_is_complete_and_insertable() {
         h.app.preferences.workshop_chat_mode = "local".into();
         h.app.workshop_chat_send("utilise SoundPad".into(), None);
         let pending = h.app.workshop_chat.pending.as_ref().unwrap();
-        assert!(matches!(&pending.proposal.status, Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question)));
+        assert!(matches!(&pending.proposal.status, crate::local_assistant::Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question)));
         let size = vec2(1366.0, 768.0);
         let output = h.warm(size);
         let pos = text_position(&output.shapes, expected_choice).expect("choix visible");
