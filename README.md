@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0"><img src="https://img.shields.io/badge/Release-v0.14.0-3478F6.svg" alt="Release v0.14.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.0"><img src="https://img.shields.io/badge/Release-v0.15.0-3478F6.svg" alt="Release v0.15.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -28,23 +28,23 @@ A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Re
 
 On the main deck screen, the header now labels whether key actions are running or paused. The library names its **Templates** and **Saved** sections directly.
 
-<!-- TODO: Insert a generated 0.15.0 English main-screen capture here; no 0.15.0 capture is available yet. -->
+![0.15.0 English main screen showing the deck header and library](docs/images/v015-main-en.png)
 
 ### More room in the key inspector
 
-Select a key to view its action steps in the inspector; the layout keeps initial steps visible at compact and HiDPI sizes. The **Appearance** tab remains scrollable for its controls.
+Select a key to view its action steps in the inspector; the layout keeps initial steps visible at compact and HiDPI sizes. The **Appearance** tab remains scrollable for its controls. Its square checked box and the Appearance tab itself were introduced in 0.13.0; they are shown here as context, not new 0.15.0 features.
 
-<!-- TODO: Insert a generated 0.15.0 English inspector capture here; no 0.15.0 capture is available yet. -->
+![0.15.0 English key inspector, including the Appearance tab](docs/images/v015-appearance-en.png)
 
 ### Assistant conversations and reviewable proposals
 
 From an empty key, choose **Ask the assistant** to open **Workshop → Assistant**. Requests and replies appear in conversation order. A recognized proposal shows its block count and a structured preview, including nested branches; you must review and choose **Add** or **Apply** before it changes the key. Built-in deterministic rules remain available without an AI model. An optional local AI model can handle requests beyond those rules; it is not universal plugin comprehension, and plugin actions/settings are validated rather than assumed. No particular model or successful hardware behavior is implied.
 
-<!-- TODO: Insert a generated 0.15.0 English assistant capture here; no 0.15.0 capture is available yet. -->
+![0.15.0 English assistant proposal and structured preview; the French example request is offline test-fixture data](docs/images/v015-assistant-en.png)
 
-### Explicit running and paused status
+The separate clarification view shows the assistant asking which plugin/action is meant. It uses the offline SoundPad test fixture, not a real installed plugin; this does not demonstrate real plugin comprehension.
 
-The main-screen status makes it easier to distinguish active key execution from paused execution. The UI behavior is covered by tests; this does not claim a physical-device test.
+![0.15.0 English plugin clarification question using an offline SoundPad test fixture](docs/images/v015-question-en.png)
 
 ## What's new in 0.14.0
 
@@ -381,8 +381,8 @@ NovyDeck works offline. Local AI stays on your PC and is optional and disabled b
 
 ## Latest release
 
-- **0.11.1:** official plugin store updates accept verified archives without a root UUID; responsive store cards. Version 0.12.0 is prepared above, not yet published.
-- **0.11.0:** transactional plugin updates/removal, compact installed library, scrolling action picker, independent block inspectors, plugin ON/OFF faces and direct-action test.
+- **0.15.0:** clearer deck header and Templates/Saved library labels; roomier key inspector; assistant conversations with structured, reviewable proposals and plugin clarification.
+- **0.14.0:** transactional plugin updates/removal, compact installed library, scrolling action picker, independent block inspectors, plugin ON/OFF faces and direct-action test.
 - **0.10.1:** cleaner deck header (texts inside the card, grouped page arrows greyed out on a single page); English fixes (Undo, library categories, step names, Add menu).
 - **0.10.0:** redesigned interface with a new design system: graphite deck stage without neon glow, outline-free buttons, clearer key inspector with underlined tabs, cleaner action library, deeper colours in all themes and Semibold titles. Profiles, media and plugins are kept.
 - **0.9.3:** security badges in the plugin store (automatic GitHub scan); official plugins 1.0.2 with logos and cleaner settings; no console during in-app updates; fixed secondary windows; ON/OFF state kept across pages.
