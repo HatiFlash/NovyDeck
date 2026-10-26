@@ -1410,6 +1410,10 @@
     "Mise à jour de NovyDeck": "Updating NovyDeck",
     "Vérification SHA-256": "SHA-256 verification",
     "Progression indéterminée — octets reçus indisponibles": "Progress unknown — received bytes unavailable",
-    "Voir la mise à jour": "View update"
+    "Voir la mise à jour": "View update",
+    "Téléchargement": "Download",
+    "Installation": "Installation",
+    "Installation…": "Installing…",
+    "Relance": "Relaunch"
   }
 }

@@ -64,7 +64,7 @@ pub(super) fn notes(ui: &mut egui::Ui, markdown: &str, cards: bool) {
     if blocks.is_empty() { return; }
     let p = theme::palette(ui.ctx());
     theme::overline(ui, tr("Nouveautés"));
-    let max_height = (ui.ctx().screen_rect().height() - 310.0).clamp(100.0, 305.0);
+    let max_height = (ui.ctx().screen_rect().height() - 440.0).clamp(100.0, 180.0);
     egui::ScrollArea::vertical().id_salt(if cards { "whats_new_notes" } else { "update_notes" })
         .max_height(max_height).show(ui, |ui| {
             ui.set_max_width(ui.available_width());

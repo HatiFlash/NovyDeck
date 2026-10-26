@@ -129,7 +129,16 @@ fn update_after_captures_offline() {
             }
         }
         let output = h.warm(size);
-        h.png(size, output, &out.join(format!("apres-{state}.png")));
+        h.png(size, output.clone(), &out.join(format!("apres-{state}.png")));
+        let expected = match state {
+            "disponible" => Some(tr("Mettre à jour maintenant")),
+            "erreur-reseau" => Some(tr("Réessayer")),
+            s if s.starts_with("quoi-de-neuf") => Some(tr("C'est parti")),
+            _ => None,
+        };
+        if let Some(label) = expected {
+            assert!(text_position(&output.shapes, label).is_some(), "{state}: action {label} invisible");
+        }
     }
 }
 
