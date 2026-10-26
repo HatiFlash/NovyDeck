@@ -2775,6 +2775,28 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
 }
 
 #[test]
+fn key_actions_add_menu_scrolls_to_last_action_at_hidpi() {
+    for (physical, dpi) in [(vec2(1366.0, 768.0), 1.0), (vec2(1366.0, 768.0), 1.25)] {
+        let mut h = Harness::new();
+        crate::i18n::set_language("fr");
+        h.ctx.set_pixels_per_point(dpi);
+        let size = physical / dpi;
+        h.app.selected = 0;
+        h.app.config.keys_mut()[0].steps.clear();
+        let output = h.warm(size);
+        let add = text_position(&output.shapes, "Ajouter").expect("Ajouter dans l'inspecteur");
+        h.click(size, add);
+        let last = crate::automation::NAMES.last().unwrap();
+        let at = pos2(add.x + 30.0, (add.y + 110.0).min(size.y - 30.0));
+        let last_pos = navigation_seek(&mut h, size, last, at, -80.0);
+        assert!(last_pos.x >= 0.0 && last_pos.y <= size.y, "action hors écran : {last_pos:?}");
+        h.click(size, last_pos);
+        assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::WindowOp { .. }]),
+            "dernière action du menu Ajouter non ajoutée à {physical:?}/{dpi}");
+    }
+}
+
+#[test]
 fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
     let mut h = Harness::new();
     crate::i18n::set_language("fr");

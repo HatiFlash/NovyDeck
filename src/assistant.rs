@@ -171,6 +171,7 @@ impl Proposals {
                     label: a.label.clone(),
                     color: a.color.unwrap_or(old.color),
                     background: a.background.unwrap_or(old.background),
+                    label_overlay: old.label_overlay,
                     image: old.image.clone(),
                     repeat: a.repeat.unwrap_or(1),
                     run_mode: a.run_mode.or(old.run_mode),
