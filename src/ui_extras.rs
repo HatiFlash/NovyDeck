@@ -1253,6 +1253,8 @@ impl App {
                 }
                 let scroll = area.show(ui, |ui| {
                     let clip = ui.clip_rect();
+                    #[cfg(test)]
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
                     let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
                         || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
                     if dragging && ctx.input(|i| i.pointer.primary_down()) {

@@ -189,11 +189,8 @@ fn dragging_near_bottom_scrolls_workshop_list() {
     h.app.config.keys_mut()[0].steps = (0..22).map(|i| Step::Delay { ms: i }).collect();
     let out = h.warm(size);
     let from = handles(&out.shapes)[0];
-    // The scroll viewport ends above the journal bar; use the actual clipped card text.
-    let clip = out.shapes.iter().find_map(|shape| match &shape.shape {
-        egui::Shape::Text(t) if t.galley.job.text == "1" && shape.clip_rect.contains(t.pos + t.galley.size() * 0.5) => Some(shape.clip_rect),
-        _ => None,
-    }).expect("visible first card in scroll viewport");
+    let clip = h.ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("workshop_scroll_clip")))
+        .expect("actual scroll viewport clip");
     let target = egui::pos2(from.x + 30.0, clip.bottom() - 8.0);
     assert!(clip.contains(target) && target.y > clip.bottom() - 48.0, "target outside bottom scroll edge: {target:?} / {clip:?}");
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
