@@ -767,7 +767,7 @@ impl App {
             if let Some(result) = self.local_ai_check.as_ref().and_then(|j| j.poll()) {
                 self.local_ai_check = None;
                 self.local_ai_status = match result {
-                    Ok(steps) if !steps.is_empty() => crate::i18n::tr("IA locale opérationnelle.").into(),
+                    Ok(output) if !output.steps.is_empty() => crate::i18n::tr("IA locale opérationnelle.").into(),
                     Ok(_) => crate::i18n::tr("Connexion établie, mais réponse vide du modèle.").into(),
                     Err(e) => crate::i18n::trf("Échec : {e}", &[("e", &(e))] ),
                 };
