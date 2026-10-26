@@ -661,6 +661,8 @@ mod tests {
             ("lance Brightness de LightBar", "pass"),
             ("active Record Clip", "pass"),
             ("active Toggle Mute", "question"),
+            ("active mute de SoundPad", "question"),
+            ("lance toggle-mute de soundpad", "pass"),
             ("utilise SoundPad", "question"),
             ("lance une action SoundPad", "question"),
             ("active Toggle Mute de SonInconnu", "question"),
@@ -674,15 +676,36 @@ mod tests {
             let proposal = propose_with(request, &Config::default(), &knowledge);
             let actual = match &proposal.status {
                 Status::Reconnue if proposal.insertable() => { counts[0] += 1; "pass" }
-                Status::Ambigue { question, .. } if !question.is_empty() && !proposal.insertable() => {
+                Status::Ambigue { question, choix } if !question.is_empty() && !proposal.insertable() => {
                     assert!(proposal.steps.is_empty(), "{request}: {proposal:?}");
+                    let expected_choices: &[(&str, &str)] = match request {
+                        "utilise SoundPad" => &[("SoundPad", "Toggle Mute"), ("SoundPad", "Record Clip")],
+                        "active Toggle Mute" => &[("SoundPad", "Toggle Mute"), ("LightBar", "Toggle Mute")],
+                        "active mute de SoundPad" => &[("SoundPad", "Toggle Mute")],
+                        "active Toggle Mute de SonInconnu" => &[("SoundPad", "Toggle Mute"), ("LightBar", "Toggle Mute")],
+                        "lance Toggle Mute de SoundPad sur mon micro" | "active Toggle Mute de SoundPad sur l'app" => {
+                            assert!(choix.is_empty(), "{request}: {proposal:?}");
+                            &[]
+                        }
+                        _ => &[],
+                    };
+                    if !expected_choices.is_empty() {
+                        assert_eq!(choix.len(), expected_choices.len(), "{request}: {proposal:?}");
+                        for (choice, (plugin_name, action_name)) in choix.iter().zip(expected_choices) {
+                            assert!(choice.contains(plugin_name) && choice.contains(action_name), "{request}: {choice}");
+                            let resolved = propose_with(choice, &Config::default(), &knowledge);
+                            let p = knowledge.plugins.iter().find(|p| p.display_name() == *plugin_name).unwrap();
+                            let a = p.actions.iter().find(|a| a.name == *action_name).unwrap();
+                            assert!(resolved.insertable() && matches!(&resolved.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &p.uuid && action == &a.uuid), "{request}: {choice}: {resolved:?}");
+                        }
+                    }
                     counts[1] += 1; "question"
                 }
                 _ => { counts[2] += 1; "error" }
             };
             assert_eq!(actual, expected, "{request}: {proposal:?}");
         }
-        assert_eq!(counts, [5, 6, 1]);
+        assert_eq!(counts, [6, 7, 1]);
     }
     #[test]
     fn plugin_inspector_fields_are_not_guessed() {
