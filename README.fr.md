@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0"><img src="https://img.shields.io/badge/Release-v0.14.0-3478F6.svg" alt="Version 0.14.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.0"><img src="https://img.shields.io/badge/Release-v0.15.0-3478F6.svg" alt="Version 0.15.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,30 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.15.0
+
+### En-tête du deck et bibliothèque plus clairs
+
+Sur l'écran principal du deck, l'en-tête indique si l'exécution des touches est active ou en pause. La bibliothèque nomme explicitement ses sections **Modèles** et **Enregistrés**.
+
+![Écran principal français 0.15.0 avec l'en-tête du deck et la bibliothèque](docs/images/v015-main-fr.png)
+
+### Plus de place dans l'inspecteur de touche
+
+Sélectionnez une touche pour afficher ses étapes d'action dans l'inspecteur ; la disposition garde les premières étapes visibles en petite fenêtre et en HiDPI. L'onglet **Apparence** reste défilable pour accéder à ses réglages. L'option **Fond et ombre derrière le titre** existe depuis la 0.13.0 ; sa case carrée plus lisible fait partie des finitions de la 0.15.0.
+
+![Inspecteur de touche français 0.15.0, avec l'onglet Apparence](docs/images/v015-appearance-fr.png)
+
+### Conversations avec l'assistant et propositions à relire
+
+Depuis une touche vide, choisissez **Demander à l’IA** pour ouvrir **Atelier → Assistant**. Les demandes et réponses apparaissent dans l'ordre de la conversation. Une proposition reconnue affiche son nombre de blocs et un aperçu structuré, y compris les branches imbriquées ; il faut la relire puis choisir **Ajouter** ou **Appliquer** avant de modifier la touche. Les règles déterministes intégrées restent disponibles sans modèle IA. Un modèle IA local facultatif peut traiter des demandes au-delà de ces règles ; il ne comprend pas universellement les plugins, et leurs actions et réglages sont validés plutôt que supposés. Cela ne garantit ni un modèle particulier ni un fonctionnement matériel réussi.
+
+![Proposition et aperçu structuré de l'assistant en français 0.15.0 ; la demande d'exemple provient d'une fixture de test hors ligne](docs/images/v015-assistant-fr.png)
+
+La vue distincte de clarification montre l'assistant demandant quel plugin ou quelle action est visé. Elle utilise la fixture SoundPad hors ligne, et non un vrai plugin installé ; elle ne démontre pas une compréhension réelle des plugins.
+
+![Question de clarification de plugin en français 0.15.0 avec une fixture SoundPad hors ligne](docs/images/v015-question-fr.png)
 
 ## Nouveautés 0.14.0
 
@@ -357,8 +381,8 @@ NovyDeck fonctionne hors ligne. L'IA locale reste sur votre PC ; elle est facult
 
 ## Dernière version
 
-- **0.11.1 :** le magasin accepte les archives officielles vérifiées sans UUID à la racine ; cartes adaptées à la fenêtre. La 0.12.0 est préparée ci-dessus, pas encore publiée.
-- **0.11.0 :** mises à jour/désinstallation transactionnelles, bibliothèque compacte, sélecteur défilable, inspecteurs de blocs indépendants, faces ON/OFF et test direct des actions plugin.
+- **0.15.0 :** en-tête du deck plus clair et sections Modèles/Enregistrés ; inspecteur de touche plus spacieux ; conversations avec l'assistant, propositions structurées à relire et clarification de plugin.
+- **0.14.0 :** modification directe et glisser-déposer des blocs dans l'Atelier ; cartes Quoi de neuf et progression de mise à jour plus claires ; propositions de l'assistant pour les actions des plugins installés.
 - **0.10.1 :** en-tête du deck plus propre (textes dans la carte, flèches de page groupées et grisées s'il n'y a qu'une page) ; corrections de l'interface anglaise (Undo, catégories, noms d'étapes, menu Add).
 - **0.10.0 :** interface redessinée avec un nouveau design system : scène du deck graphite sans néon, boutons sans contour, inspecteur de touche plus clair avec onglets soulignés, bibliothèque épurée, couleurs plus profondes dans tous les thèmes et titres en semi-gras. Profils, médias et plugins conservés.
 - **0.9.3 :** badges de sécurité dans le magasin (analyse automatique sur GitHub) ; plugins officiels 1.0.2 avec logos et réglages repensés ; plus de console pendant la mise à jour ; fenêtres secondaires fixes ; état ON/OFF conservé entre les pages.

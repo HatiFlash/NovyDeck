@@ -435,8 +435,8 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.hyperlink_color = p.accent_hover;
     style.visuals.warn_fg_color = p.warning;
     style.visuals.error_fg_color = p.danger;
-    style.visuals.selection.bg_fill = p.accent_soft;
-    style.visuals.selection.stroke = Stroke::new(1.0_f32, p.text_primary);
+    style.visuals.selection.bg_fill = p.accent;
+    style.visuals.selection.stroke = Stroke::new(2.0, Color32::WHITE);
     style.visuals.window_corner_radius = egui::CornerRadius::same(RADIUS_LG);
     style.visuals.window_stroke = Stroke::new(1.0_f32, p.hairline);
     style.visuals.window_shadow = egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(if dark { 102 } else { 28 }) };
@@ -490,6 +490,42 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         .text_styles
         .insert(egui::TextStyle::Small, egui::FontId::proportional(11.0));
     ctx.set_style(style);
+}
+
+pub fn checkbox(ui: &mut egui::Ui, checked: &mut bool, label: &str) -> egui::Response {
+    let p = palette(ui.ctx());
+    let icon = ui.spacing().icon_width;
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let galley = ui.fonts(|fonts| fonts.layout_no_wrap(label.to_owned(), font, p.text_primary));
+    let height = ui.spacing().interact_size.y.max(galley.size().y);
+    let size = Vec2::new(icon + ui.spacing().icon_spacing + galley.size().x, height);
+    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
+    if response.clicked() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Space))) {
+        *checked = !*checked;
+        response.mark_changed();
+    }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *checked, label));
+    if ui.is_rect_visible(rect) {
+        let box_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.min.x + icon * 0.5, rect.center().y), Vec2::splat(icon),
+        );
+        let border = if response.hovered() || response.has_focus() { p.accent } else { p.text_tertiary };
+        let fill = if *checked { p.accent } else { p.surface };
+        ui.painter().rect_filled(box_rect, 4.0, fill);
+        ui.painter().rect_stroke(box_rect, 4.0, Stroke::new(1.5, border), egui::StrokeKind::Inside);
+        if *checked {
+            let at = |x: f32, y: f32| box_rect.min + Vec2::new(icon * x, icon * y);
+            let tick = Stroke::new(2.0, p.on_accent);
+            ui.painter().line_segment([at(0.22, 0.52), at(0.43, 0.72)], tick);
+            ui.painter().line_segment([at(0.43, 0.72), at(0.79, 0.30)], tick);
+        }
+        if response.has_focus() {
+            ui.painter().rect_stroke(box_rect.expand(2.0), 5.0, Stroke::new(1.0, p.accent_ring), egui::StrokeKind::Outside);
+        }
+        let text_pos = egui::pos2(box_rect.max.x + ui.spacing().icon_spacing, rect.center().y - galley.size().y * 0.5);
+        ui.painter().galley(text_pos, galley, p.text_primary);
+    }
+    response
 }
 
 pub fn primary(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {

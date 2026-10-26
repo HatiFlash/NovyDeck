@@ -84,6 +84,46 @@ impl WorkshopChat {
     }
 }
 
+fn preview_count(count: usize) -> String {
+    if count == 1 {
+        crate::i18n::trf("{count} bloc", &[("count", &count)])
+    } else {
+        crate::i18n::trf("{count} blocs", &[("count", &count)])
+    }
+}
+
+fn preview_steps(ui: &mut egui::Ui, steps: &[Step], depth: usize) {
+    for step in steps {
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space((depth * 14) as f32);
+            iconset::heading(ui, iconset::for_step(step), RichText::new(crate::i18n::tr(step.name())).strong());
+            let summary = match step.active() {
+                Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. } =>
+                    crate::i18n::trf("Si {exe} est ouvert (arrière-plan inclus)", &[("exe", exe)]),
+                Step::WindowOp { target, value, op, .. } if target == "exe" && op == "activate" =>
+                    crate::i18n::trf("Activer la fenêtre {value}", &[("value", value)]),
+                _ => super::extras::block_summary(step),
+            };
+            ui.label(RichText::new(summary).small().color(theme::palette(ui.ctx()).muted));
+        });
+        if depth >= 6 { continue; }
+        match step.active() {
+            Step::IfCondition { then_steps, else_steps, .. }
+            | Step::IfWindow { then_steps, else_steps, .. }
+            | Step::IfVariable { then_steps, else_steps, .. } => {
+                if !then_steps.is_empty() {
+                    ui.indent((depth, "then"), |ui| { ui.label(crate::i18n::tr("ALORS")); preview_steps(ui, then_steps, depth + 1); });
+                }
+                if !else_steps.is_empty() {
+                    ui.indent((depth, "else"), |ui| { ui.label(crate::i18n::tr("SINON")); preview_steps(ui, else_steps, depth + 1); });
+                }
+            }
+            Step::Repeat { steps, .. } => preview_steps(ui, steps, depth + 1),
+            _ => {}
+        }
+    }
+}
+
 fn sensitive(step: &Step) -> bool {
     matches!(
         step.active(),
@@ -177,8 +217,7 @@ impl App {
         }
         match &proposal.status {
             Status::Inconnue => self.workshop_chat.say(crate::i18n::tr("Demande inconnue en local. Exemples : attends 2 s ; ouvre https://exemple.fr ; tape bonjour.")),
-            Status::Ambigue { question, .. } => self.workshop_chat.say(question.clone()),
-            Status::Reconnue => self.workshop_chat.say(crate::i18n::trf("Aperçu de {count} bloc(s), sans exécution.", &[("count", &proposal.steps.len())])),
+            Status::Ambigue { .. } | Status::Reconnue => {},
         }
         if matches!(proposal.status, Status::Inconnue) && mode == "auto" {
             self.workshop_chat.consent = Some(ConsentRequest::new(
@@ -264,6 +303,7 @@ impl App {
                         .hint_text(crate::i18n::tr("Décris une action..."))
                         .desired_width((ui.available_width() - 84.0).max(60.0)),
                 );
+                if self.pending_chat_focus { response.request_focus(); self.pending_chat_focus = false; }
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     || ui.button(crate::i18n::tr("Envoyer")).clicked()
                 {
@@ -377,7 +417,23 @@ impl App {
                             self.workshop_chat.open = false;
                         }
                     }
-                    // Aperçu et boutons Ajouter/Annuler avant l'historique : visibles sans défiler.
+                    // Le fil suit l'ordre de la conversation : demande, puis réponse/proposition.
+                    for message in &self.workshop_chat.messages {
+                        let user = message.starts_with("Vous : ") || message.starts_with("You: ");
+                        ui.with_layout(
+                            egui::Layout::top_down(if user { egui::Align::Max } else { egui::Align::Min }),
+                            |ui| {
+                                egui::Frame::new()
+                                    .fill(if user { theme::accent().gamma_multiply(0.35) } else { theme::palette(ctx).surface })
+                                    .corner_radius(8)
+                                    .inner_margin(8)
+                                    .show(ui, |ui| {
+                                        ui.set_max_width((ui.available_width() - 16.0).max(80.0));
+                                        ui.add(egui::Label::new(message).wrap());
+                                    });
+                            },
+                        );
+                    }
                     if let Some(pending) = &self.workshop_chat.pending {
                         ui.separator();
                         if stale {
@@ -399,8 +455,23 @@ impl App {
                             action = Some(3);
                         }
                         match &pending.proposal.status {
-                            Status::Ambigue { question, choix } => {
-                                ui.label(question);
+                            Status::Ambigue { question, choix, .. } => {
+                                egui::Frame::new()
+                                    .fill(theme::palette(ctx).surface)
+                                    .corner_radius(10)
+                                    .inner_margin(10)
+                                    .show(ui, |ui| {
+                                        ui.set_max_width(ui.available_width());
+                                        ui.label(RichText::new(question).strong());
+                                        ui.add_space(6.0);
+                                        ui.horizontal_wrapped(|ui| {
+                                            for option in choix {
+                                                if ui.add(egui::Button::new(option).wrap()).clicked() {
+                                                    choice = Some(option.clone());
+                                                }
+                                            }
+                                        });
+                                    });
                                 if self.preferences.workshop_chat_mode == "auto"
                                     && !stale
                                     && ui.button(crate::i18n::tr("Demander à mon IA")).clicked()
@@ -412,88 +483,52 @@ impl App {
                                         self.selected,
                                     ));
                                 }
-                                for option in choix {
-                                    if ui.button(option).clicked() {
-                                        choice = Some(option.clone());
-                                    }
-                                }
                             }
                             Status::Reconnue => {
-                                egui::ScrollArea::vertical()
-                                    .id_salt("chat_preview")
-                                    .max_height((screen.height() * 0.24).min(175.0))
-                                    .show(ui, |ui| {
-                                        if let Some(before) = &pending.original {
-                                            ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &(before.len()))] ));
-                                            for step in before {
-                                                ui.label(format!(
-                                                    "- {}",
-                                                    super::extras::block_summary(step)
-                                                ));
-                                            }
-                                            ui.label(crate::i18n::trf(
-                                                "Après : {count} bloc(s)",
-                                                &[("count", &pending.proposal.steps.len())]
-                                            ));
-                                        }
-                                        for (i, step) in pending.proposal.steps.iter().enumerate() {
-                                            egui::Frame::new()
-                                                .fill(theme::palette(ctx).surface)
-                                                .corner_radius(8)
-                                                .inner_margin(7)
-                                                .show(ui, |ui| {
-                                                    iconset::heading(ui, iconset::for_step(step), RichText::new(step.name()).strong());
-                                                    ui.label(super::extras::block_summary(step));
-                                                });
-                                            for missing in pending
-                                                .proposal
-                                                .missing
-                                                .iter()
-                                                .filter(|m| m.path.first() == Some(&i))
-                                            {
-                                                ui.colored_label(
-                                                    Color32::LIGHT_RED,
-                                                    crate::i18n::trf("À compléter : {field}", &[("field", &(missing.field))] ),
-                                                );
-                                            }
-                                            if sensitive(step) {
-                                                ui.colored_label(
-                                                    Color32::LIGHT_RED,
-                                                    crate::i18n::tr("Action sensible : vérifier avant insertion."),
-                                                );
-                                            }
-                                        }
-                                        for note in &pending.proposal.notes {
-                                            ui.label(note);
-                                        }
-                                    });
                                 ui.horizontal_wrapped(|ui| {
-                                    let valid = !stale
-                                        && pending.proposal.insertable()
-                                        && (pending.original.is_some()
-                                            || self.config.keys()[self.selected].steps.len()
-                                                + pending.proposal.steps.len()
-                                                <= 256);
-                                    if ui
-                                        .add_enabled(
-                                            valid,
-                                            egui::Button::new(if pending.original.is_some() {
-                                                crate::i18n::tr("Appliquer")
-                                            } else {
-                                                crate::i18n::tr("Ajouter")
-                                            }),
-                                        )
-                                        .clicked()
-                                    {
-                                        action = Some(0);
-                                    }
-                                    if ui.button(crate::i18n::tr("Ajuster")).clicked() {
-                                        action = Some(1);
-                                    }
-                                    if ui.button(crate::i18n::tr("Annuler")).clicked() {
-                                        action = Some(2);
-                                    }
+                                    let valid = !stale && pending.proposal.insertable()
+                                        && (pending.original.is_some() || self.config.keys()[self.selected].steps.len()
+                                            + pending.proposal.steps.len() <= 256);
+                                    if ui.add_enabled(valid, theme::primary(if pending.original.is_some() {
+                                        crate::i18n::tr("Appliquer")
+                                    } else { crate::i18n::tr("Ajouter") })).clicked() { action = Some(0); }
+                                    if ui.button(crate::i18n::tr("Ajuster")).clicked() { action = Some(1); }
+                                    if ui.button(crate::i18n::tr("Annuler")).clicked() { action = Some(2); }
                                 });
+                                egui::Frame::new()
+                                    .fill(theme::palette(ctx).surface)
+                                    .corner_radius(10)
+                                    .inner_margin(10)
+                                    .show(ui, |ui| {
+                                        egui::ScrollArea::vertical()
+                                            .id_salt("chat_preview_steps")
+                                            .max_height((screen.height() * 0.24).min(190.0))
+                                            .show(ui, |ui| {
+                                                ui.label(RichText::new(preview_count(pending.proposal.steps.len())).strong());
+                                                ui.label(RichText::new(crate::i18n::tr("Proposition · sans exécution")).small().color(theme::palette(ctx).muted));
+                                                if let Some(before) = &pending.original {
+                                                    ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &before.len())]));
+                                                    for step in before { ui.label(super::extras::block_summary(step)); }
+                                                    ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
+                                                }
+                                                preview_steps(ui, &pending.proposal.steps, 0);
+                                                for missing in &pending.proposal.missing {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
+                                                }
+                                                if pending.proposal.steps.iter().any(sensitive) {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Action sensible : vérifier avant insertion."));
+                                                }
+                                                for note in &pending.proposal.notes {
+                                                    if crate::i18n::current() == "en" && note.starts_with("Condition : « ") {
+                                                        if let Some(Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. }) = pending.proposal.steps.first() {
+                                                            ui.label(crate::i18n::trf("Condition : {exe} est lancé ? Sinon s'applique quand il ne l'est pas.", &[("exe", exe)]));
+                                                            continue;
+                                                        }
+                                                    }
+                                                    ui.label(note);
+                                                }
+                                            });
+                                    });
                             }
                             Status::Inconnue => {
                                 if ui.button(crate::i18n::tr("Annuler")).clicked() {
@@ -502,36 +537,6 @@ impl App {
                             }
                         }
                     }
-                    ui.separator();
-                    egui::ScrollArea::vertical()
-                        .id_salt("chat_history")
-                        .max_height((screen.height() * 0.32).clamp(120.0, 320.0))
-                        .show(ui, |ui| {
-                            for message in &self.workshop_chat.messages {
-                                let user = message.starts_with("Vous : ");
-                                ui.with_layout(
-                                    egui::Layout::top_down(if user {
-                                        egui::Align::Max
-                                    } else {
-                                        egui::Align::Min
-                                    }),
-                                    |ui| {
-                                        egui::Frame::new()
-                                            .fill(if user {
-                                                theme::accent().gamma_multiply(0.35)
-                                            } else {
-                                                theme::palette(ctx).surface
-                                            })
-                                            .corner_radius(8)
-                                            .inner_margin(8)
-                                            .show(ui, |ui| {
-                                                ui.set_max_width((ui.available_width() - 16.0).max(80.0));
-                                                ui.add(egui::Label::new(message).wrap());
-                                            });
-                                    },
-                                );
-                            }
-                        });
                 });
         };
         // Reserve room for the assistant before laying out the canvas at every size.
@@ -576,14 +581,19 @@ impl App {
             self.save_preferences();
         }
         if let Some(option) = choice {
-            self.workshop_chat.input = format!(
-                "{} : {}",
-                self.workshop_chat
-                    .pending
-                    .as_ref()
-                    .map_or("", |p| p.request.as_str()),
+            // Les choix de plugin sont des demandes complètes : ne pas réinjecter la
+            // qualification inconnue ou la cible non décrite de la demande initiale.
+            self.workshop_chat.input = if self.workshop_chat.pending.as_ref().is_some_and(|p| {
+                matches!(p.proposal.status, Status::Ambigue { choix_autonomes: true, .. })
+            }) {
                 option
-            );
+            } else {
+                format!(
+                    "{} : {}",
+                    self.workshop_chat.pending.as_ref().map_or("", |p| p.request.as_str()),
+                    option
+                )
+            };
             self.workshop_chat.pending = None;
         }
         if let Some(action) = action {
@@ -655,18 +665,18 @@ impl App {
             return;
         }
         let proposal = match result {
-            Ok(steps) => local_assistant::from_model(steps, &self.config),
+            Ok(output) => {
+                let knowledge = self.local_knowledge();
+                local_assistant::from_model_guarded(output.steps, output.rejected, &self.config, &knowledge)
+            },
             Err(error) => {
                 self.workshop_chat.say(crate::i18n::trf("IA locale indisponible : {error}", &[("error", &(error))] ));
                 local_assistant::from_model(vec![], &self.config)
             }
         };
         match &proposal.status {
-            Status::Reconnue => self.workshop_chat.say(crate::i18n::trf(
-                "Aperçu de {count} bloc(s) proposé par l'IA locale, sans exécution.",
-                &[("count", &proposal.steps.len())]
-            )),
-            _ => {
+            Status::Reconnue | Status::Ambigue { .. } => {},
+            Status::Inconnue => {
                 self.workshop_chat.say(crate::i18n::tr("L'IA locale n'a pas trouvé de blocs pour cette demande. Reformule ou ajoute les blocs à la main."));
                 if offer_ai {
                     self.workshop_chat.consent = Some(ConsentRequest::new(request.clone(), &self.config, self.selected));
@@ -758,7 +768,7 @@ impl App {
             if let Some(result) = self.local_ai_check.as_ref().and_then(|j| j.poll()) {
                 self.local_ai_check = None;
                 self.local_ai_status = match result {
-                    Ok(steps) if !steps.is_empty() => crate::i18n::tr("IA locale opérationnelle.").into(),
+                    Ok(output) if !output.steps.is_empty() => crate::i18n::tr("IA locale opérationnelle.").into(),
                     Ok(_) => crate::i18n::tr("Connexion établie, mais réponse vide du modèle.").into(),
                     Err(e) => crate::i18n::trf("Échec : {e}", &[("e", &(e))] ),
                 };

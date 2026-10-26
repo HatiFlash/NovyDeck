@@ -81,7 +81,7 @@ fn icon_button(ui: &mut egui::Ui, selected: bool, label: &str, import: bool) -> 
 pub(super) fn color(ui: &mut egui::Ui, key: &mut Key) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
-        ui.label("Couleur");
+        ui.label(tr("Couleur"));
         changed |= ui
             .add_enabled_ui(key.background, |ui| {
                 ui.color_edit_button_srgb(&mut key.color)
@@ -92,9 +92,9 @@ pub(super) fn color(ui: &mut egui::Ui, key: &mut Key) -> bool {
             ui,
             !key.background,
             if key.background {
-                "Sans fond coloré · écran noir"
+                tr("Sans fond coloré · écran noir")
             } else {
-                "Rétablir la couleur mémorisée"
+                tr("Rétablir la couleur mémorisée")
             },
             false,
         )
@@ -121,21 +121,21 @@ pub(super) fn icons(ui: &mut egui::Ui, has_image: bool) -> IconActions {
         actions.gallery = ui
             .add_sized(
                 Vec2::new(width, 30.0),
-                theme::primary(RichText::new("Galerie").color(Color32::WHITE)),
+                theme::primary(RichText::new(tr("Galerie")).color(Color32::WHITE)),
             )
-            .on_hover_text("Choisir dans les packs FIFINE, Elgato et les icônes locales")
+            .on_hover_text(tr("Choisir dans les packs FIFINE, Elgato et les icônes locales"))
             .clicked();
         actions.pick_file = icon_button(
             ui,
             false,
-            "Importer une icône depuis le PC (PNG, JPEG, SVG)",
+            tr("Importer une icône depuis le PC (PNG, JPEG, SVG)"),
             true,
         )
         .clicked();
         if has_image {
             actions.clear = ui
                 .add_sized(Vec2::new(30.0, 30.0), egui::Button::new("×"))
-                .on_hover_text("Retirer l’image de la touche")
+                .on_hover_text(tr("Retirer l’image de la touche"))
                 .clicked();
         }
     });

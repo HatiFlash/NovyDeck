@@ -1,4 +1,6 @@
 mod intent_parser;
+#[cfg(test)]
+mod plugin_request_corpus;
 mod proposal;
 mod structured;
 mod templates;
@@ -196,6 +198,7 @@ fn clarification(question: &str, choices: &[&str]) -> Status {
     Status::Ambigue {
         question: question.into(),
         choix: choices.iter().map(|s| (*s).into()).collect(),
+        choix_autonomes: false,
     }
 }
 
@@ -523,40 +526,100 @@ pub fn propose_with(text: &str, config: &Config, knowledge: &crate::local_llm::K
     }
 }
 
-fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Result<Step, String>> {
+/// Choix complets, jamais une action implicite : partagés entre règles et IA locale.
+fn plugin_choices(items: &[(&crate::plugins::Plugin, &crate::plugins::Action)], unsafe_target: bool) -> Vec<String> {
+    items.iter().filter(|(p, a)| !unsafe_target && p.inspector.is_none() && a.inspector.is_none()).take(6).map(|(p, a)| {
+        if crate::i18n::current() == "en" {
+            format!("Launch {} from {}", a.name, p.display_name())
+        } else {
+            format!("Lance {} de {}", a.name, p.display_name())
+        }
+    }).collect()
+}
+
+/// Un refus par le garde-fou annule toute la macro, y compris les blocs acceptés.
+pub fn from_model_guarded(steps: Vec<Step>, rejected: Vec<(String, String)>, config: &Config, knowledge: &crate::local_llm::Knowledge) -> Proposal {
+    if rejected.is_empty() { return from_model(steps, config); }
+    let available = |p: &crate::plugins::Plugin| p.prerequisite.is_none()
+        && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_));
+    let unknown = rejected.iter().any(|(id, _)| !knowledge.plugins.iter().any(|p| p.uuid == *id && available(p)));
+    let (question, choix) = if unknown {
+        (if crate::i18n::current() == "en" { "The proposed plugin is not installed or available; no blocks were added." } else { "Le plugin proposé n'est pas installé ou disponible ; aucun bloc n'a été ajouté." }.to_owned(), vec![])
+    } else {
+        let (id, action) = &rejected[0];
+        let plugin = knowledge.plugins.iter().find(|p| p.uuid == *id).expect("plugin vérifié");
+        let mut actions: Vec<_> = plugin.actions.iter().collect();
+        actions.sort_by_key(|a| if a.uuid == *action { 0 } else { 1 });
+        let items: Vec<_> = actions.iter().map(|a| (plugin, *a)).collect();
+        (if crate::i18n::current() == "en" {
+            format!("Which action from '{}' did you mean? The model's plugin action was rejected (name or settings); no blocks were added.", plugin.display_name())
+        } else {
+            format!("Quelle action de « {} » voulais-tu ? L'action proposée par le modèle a été refusée (nom ou réglages) ; aucun bloc n'a été ajouté.", plugin.display_name())
+        }, plugin_choices(&items, false))
+    };
+    Proposal { steps: vec![], notes: vec![], missing: vec![], status: Status::Ambigue { question, choix, choix_autonomes: true } }
+}
+
+fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Result<Step, Status>> {
     let n = parser::normalize(clause);
     let named = |name: &str| !name.trim().is_empty() && contains_phrase(&n, &parser::normalize(name));
     let available: Vec<_> = plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_))).collect();
     let mentioned: Vec<_> = available.iter().copied().filter(|p| named(p.display_name()) || named(&p.uuid)).collect();
-    let candidates: Vec<_> = (if mentioned.is_empty() { &available } else { &mentioned })
-        .iter().flat_map(|p| p.actions.iter().filter(|a| named(&a.name) || named(&a.uuid)).map(move |a| (*p, a)))
-        .collect();
-    // « de X » après une action désigne un plugin précis : ne pas choisir un plugin
-    // homonyme installé lorsque X n'appartient pas à l'inventaire.
-    let unknown_qualifier = mentioned.is_empty() && candidates.iter().any(|(_, a)| {
+    let pool = if mentioned.is_empty() { &available } else { &mentioned };
+    let exact: Vec<_> = pool.iter().flat_map(|p| p.actions.iter().filter(|a| named(&a.name) || named(&a.uuid)).map(move |a| (*p, a))).collect();
+    // Une partie d'un nom d'action ne suffit jamais à insérer. Seul le nom complet
+    // (éventuellement avec les mots dans un autre ordre) est une preuve suffisante.
+    let partial: Vec<_> = if exact.is_empty() && !mentioned.is_empty() {
+        pool.iter().flat_map(|p| p.actions.iter().filter(|a| {
+            let action = parser::normalize(&a.name);
+            action.split_whitespace().any(|word| word.len() > 2 && contains_phrase(&n, word))
+        }).map(move |a| (*p, a))).collect()
+    } else { vec![] };
+    let complete: Vec<_> = partial.iter().copied().filter(|(_, a)| {
+        parser::normalize(&a.name).split_whitespace().filter(|w| w.len() > 2).all(|w| contains_phrase(&n, w))
+    }).collect();
+    let candidates = if !exact.is_empty() { &exact } else { &partial };
+    // Une action nommée ne suffit pas à autoriser une planification différée :
+    // aucune étape de calendrier n'est déduite implicitement d'un adverbe temporel.
+    if !candidates.is_empty() && has(&n, &["tomorrow", "demain", "next week", "la semaine prochaine", "tonight", "ce soir"]) {
+        return Some(Err(Status::Inconnue));
+    }
+    let unsafe_target = has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]);
+    let question = |fr: String, en: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue {
+        question: if crate::i18n::current() == "en" { en } else { fr },
+        choix: plugin_choices(items, unsafe_target),
+        choix_autonomes: true,
+    };
+    // Une qualification de plugin non installé, même après un nom d'action unique,
+    // interdit de choisir silencieusement son homonyme installé.
+    let unknown_qualifier = mentioned.is_empty() && exact.iter().any(|(_, a)| {
         [a.name.as_str(), a.uuid.as_str()].iter().any(|name| {
             let token = parser::normalize(name);
-            n.split_once(&token).is_some_and(|(_, rest)| rest.trim_start().starts_with("de ") || rest.trim_start().starts_with("from "))
+            n.split_once(&token).is_some_and(|(_, rest)| ["de ", "from ", "avec ", "with ", "sur "]
+                .iter().any(|prefix| rest.trim_start().starts_with(prefix)))
         })
     });
     if unknown_qualifier {
-        return Some(Err("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into()));
+        return Some(Err(question("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into(), "Which installed plugin do you want to use? Specify its exact name and action.".into(), &exact)));
     }
     match candidates.as_slice() {
-        [(p, a)] => {
+        [(p, a)] if !exact.is_empty() || complete.len() == 1 && partial.len() == 1 => {
             // Les champs de l'inspecteur tiers ne figurent pas dans le manifeste :
             // ni appareil ni réglages implicites ne peuvent être déduits ici.
             if a.inspector.is_some() || p.inspector.is_some() {
-                return Some(Err(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name())));
+                return Some(Err(question(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name()), format!("What settings for '{}' from '{}'? Configure them in the plugin inspector; I don't know its internal fields.", a.name, p.display_name()), &[])));
             }
-            if has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]) {
-                return Some(Err(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name())));
+            if unsafe_target {
+                return Some(Err(question(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name()), format!("Which target or device for '{}' from '{}'? The manifest does not describe this setting.", a.name, p.display_name()), &[])));
             }
             Some(Ok(Step::PluginAction { plugin: p.uuid.clone(), action: a.uuid.clone(), settings: serde_json::json!({}), label: a.name.clone() }))
         }
-        [] if !mentioned.is_empty() => Some(Err(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")))),
+        [] if !mentioned.is_empty() => {
+            let actions: Vec<_> = mentioned.iter().flat_map(|p| p.actions.iter().map(move |a| (*p, a))).collect();
+            Some(Err(question(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), format!("Which action from '{}' do you want to use? Specify its name from the installed actions.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), &actions)))
+        }
         [] => None,
-        _ => Some(Err(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")))),
+        _ => Some(Err(question(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), format!("Which action from which plugin? Several match: {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), candidates))),
     }
 }
 
@@ -572,9 +635,9 @@ fn propose_plain(text: &str, config: &Config, knowledge: &crate::local_llm::Know
         if let Some(intent) = plugin_intent(&clause, &knowledge.plugins) {
             match intent {
                 Ok(step) => { result.steps.push(step); continue; }
-                Err(question) => {
+                Err(status) => {
                     result.steps.clear();
-                    result.status = Status::Ambigue { question, choix: vec![] };
+                    result.status = status;
                     return result;
                 }
             }
@@ -661,6 +724,8 @@ mod tests {
             ("lance Brightness de LightBar", "pass"),
             ("active Record Clip", "pass"),
             ("active Toggle Mute", "question"),
+            ("active mute de SoundPad", "question"),
+            ("lance toggle-mute de soundpad", "pass"),
             ("utilise SoundPad", "question"),
             ("lance une action SoundPad", "question"),
             ("active Toggle Mute de SonInconnu", "question"),
@@ -674,15 +739,36 @@ mod tests {
             let proposal = propose_with(request, &Config::default(), &knowledge);
             let actual = match &proposal.status {
                 Status::Reconnue if proposal.insertable() => { counts[0] += 1; "pass" }
-                Status::Ambigue { question, .. } if !question.is_empty() && !proposal.insertable() => {
+                Status::Ambigue { question, choix, .. } if !question.is_empty() && !proposal.insertable() => {
                     assert!(proposal.steps.is_empty(), "{request}: {proposal:?}");
+                    let expected_choices: &[(&str, &str)] = match request {
+                        "utilise SoundPad" => &[("SoundPad", "Toggle Mute"), ("SoundPad", "Record Clip")],
+                        "active Toggle Mute" => &[("SoundPad", "Toggle Mute"), ("LightBar", "Toggle Mute")],
+                        "active mute de SoundPad" => &[("SoundPad", "Toggle Mute")],
+                        "active Toggle Mute de SonInconnu" => &[("SoundPad", "Toggle Mute"), ("LightBar", "Toggle Mute")],
+                        "lance Toggle Mute de SoundPad sur mon micro" | "active Toggle Mute de SoundPad sur l'app" => {
+                            assert!(choix.is_empty(), "{request}: {proposal:?}");
+                            &[]
+                        }
+                        _ => &[],
+                    };
+                    if !expected_choices.is_empty() {
+                        assert_eq!(choix.len(), expected_choices.len(), "{request}: {proposal:?}");
+                        for (choice, (plugin_name, action_name)) in choix.iter().zip(expected_choices) {
+                            assert!(choice.contains(plugin_name) && choice.contains(action_name), "{request}: {choice}");
+                            let resolved = propose_with(choice, &Config::default(), &knowledge);
+                            let p = knowledge.plugins.iter().find(|p| p.display_name() == *plugin_name).unwrap();
+                            let a = p.actions.iter().find(|a| a.name == *action_name).unwrap();
+                            assert!(resolved.insertable() && matches!(&resolved.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &p.uuid && action == &a.uuid), "{request}: {choice}: {resolved:?}");
+                        }
+                    }
                     counts[1] += 1; "question"
                 }
                 _ => { counts[2] += 1; "error" }
             };
             assert_eq!(actual, expected, "{request}: {proposal:?}");
         }
-        assert_eq!(counts, [5, 6, 1]);
+        assert_eq!(counts, [6, 7, 1]);
     }
     #[test]
     fn plugin_inspector_fields_are_not_guessed() {
@@ -694,8 +780,29 @@ mod tests {
         let mut knowledge = crate::local_llm::Knowledge::builtin();
         knowledge.plugins = vec![plugin];
         let p = propose_with("active Toggle Mute de SoundPad", &Config::default(), &knowledge);
-        assert!(matches!(&p.status, Status::Ambigue { question, .. } if question.contains("réglages")), "{p:?}");
+        assert!(matches!(&p.status, Status::Ambigue { question, choix, .. } if question.contains("réglages") && choix.is_empty()), "{p:?}");
         assert!(p.steps.is_empty() && !p.insertable());
+    }
+    #[test]
+    fn plugin_choices_follow_interface_language_and_partial_names_stay_ambiguous() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut pad = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        pad.name = "SoundPad".into();
+        pad.actions[0].name = "Toggle Mute".into();
+        pad.actions[1].name = "Mute Channel".into();
+        let mut knowledge = crate::local_llm::Knowledge::builtin();
+        knowledge.plugins = vec![pad];
+        crate::i18n::set_language("en");
+        let p = propose_with("mute de SoundPad", &Config::default(), &knowledge);
+        let Status::Ambigue { choix, .. } = &p.status else { panic!("{p:?}") };
+        assert_eq!(choix.len(), 2);
+        assert!(p.steps.is_empty());
+        for (choice, action) in choix.iter().zip(&knowledge.plugins[0].actions) {
+            assert!(choice.starts_with("Launch ") && choice.contains(" from SoundPad"));
+            let resolved = propose_with(choice, &Config::default(), &knowledge);
+            assert!(resolved.insertable() && matches!(&resolved.steps[..], [Step::PluginAction { action: id, .. }] if id == &action.uuid), "{choice}: {resolved:?}");
+        }
+        crate::i18n::set_language("fr");
     }
     fn recognized(text: &str) -> Step {
         let p = first(text);

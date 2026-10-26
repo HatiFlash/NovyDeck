@@ -6,6 +6,8 @@ pub enum Status {
     Ambigue {
         question: String,
         choix: Vec<String>,
+        /// Les options sont des demandes complètes, sans préfixer la demande initiale.
+        choix_autonomes: bool,
     },
     Inconnue,
 }

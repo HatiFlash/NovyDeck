@@ -1,7 +1,9 @@
 //! Tests of the actual egui widgets, without opening or controlling Windows.
+#[path = "ui_assistant015_tests.rs"] mod assistant015_tests;
 #[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
 #[path = "ui_update_tests.rs"] mod update_tests;
 #[path = "ui_audit_tests.rs"] mod audit_tests;
+#[path = "ui_main015_tests.rs"] mod main015_tests;
 #[path = "ui_release013_tests.rs"] mod release013_tests;
 #[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
 #[path="ui_plugin_block_tests.rs"] mod plugin_block_tests;
@@ -160,6 +162,43 @@ fn workshop_chat_previews_a_natural_request_without_running_it() {
         h.png(size, output, &PathBuf::from(dir).join("atelier-assistant.png"));
     }
 }
+#[test]
+fn workshop_chat_plugin_choice_is_complete_and_insertable() {
+    for (language, expected_question, expected_choice) in [
+        ("fr", "Quelle action", "Lance Toggle Mute de SoundPad"),
+        ("en", "Which action", "Launch Toggle Mute from SoundPad"),
+    ] {
+        let mut h = Harness::new();
+        crate::i18n::set_language(language);
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        plugin.name = "SoundPad".into();
+        plugin.actions[0].name = "Toggle Mute".into();
+        plugin.actions[1].name = "Record Clip".into();
+        let plugin_id = plugin.uuid.clone();
+        let action_id = plugin.actions[0].uuid.clone();
+        h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
+        h.app.show_workflow = true;
+        h.app.workshop_chat.open = true;
+        h.app.preferences.workshop_chat_mode = "local".into();
+        h.app.workshop_chat_send("utilise SoundPad".into(), None);
+        let pending = h.app.workshop_chat.pending.as_ref().unwrap();
+        assert!(matches!(&pending.proposal.status, crate::local_assistant::Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question)));
+        let size = vec2(1366.0, 768.0);
+        let output = h.warm(size);
+        let pos = text_position(&output.shapes, expected_choice).expect("choix visible");
+        h.click(size, pos);
+        assert_eq!(h.app.workshop_chat.input, expected_choice);
+        assert!(h.app.workshop_chat.pending.is_none());
+        let request = std::mem::take(&mut h.app.workshop_chat.input);
+        h.app.workshop_chat_send(request, None);
+        let proposal = &h.app.workshop_chat.pending.as_ref().unwrap().proposal;
+        assert!(proposal.insertable(), "{proposal:?}");
+        assert!(matches!(&proposal.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &plugin_id && action == &action_id));
+    }
+    crate::i18n::set_language("fr");
+}
+
 #[test]
 fn gallery_imports_a_user_icon_without_overwriting_and_applies_it() {
     let mut h = Harness::new();
@@ -2146,7 +2185,7 @@ fn library_scroll_reuses_cached_interface_icons() {
     let first = h.warm(size);
     let shown = crate::iconset::rasterized(&h.ctx);
     assert!(shown >= 8, "icônes IconPark affichées : {shown}");
-    assert!(text_position(&first.shapes, "Réglages").is_some() && text_position(&first.shapes, "Magasin").is_some());
+    assert!(text_position(&first.shapes, "Réglages").is_some() && text_position(&first.shapes, "Modèles").is_some());
     let list = egui::pos2(1230.0, 520.0);
     let wheel = |dy: f32| vec![Input::PointerMoved(list), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, dy), modifiers: Modifiers::NONE }];
     for tab in [0usize, 1] {
@@ -2586,7 +2625,7 @@ fn language_combo_is_visible_in_general_settings() {
     let output = h.warm(vec2(1380.0, 900.0));
     assert!(text_position(&output.shapes, "Langue").is_some());
     assert!(text_position(&output.shapes, "Langue de Windows").is_some());
-    assert!(text_position(&output.shapes, "Aider à traduire NovyDeck").is_some());
+    assert!(text_position(&output.shapes, "Aider à traduire NovyDeck ↗").is_some());
 }
 
 #[test]
