@@ -3298,15 +3298,8 @@ impl App {
                         });
                         return;
                     }
+                    let mut enable_onoff = false;
                     if !long_editor {
-                        let toggle_index = key.steps.iter().position(|s| matches!(s, Step::Toggle { .. }));
-                        if toggle_index.is_none() {
-                            if ui.button(tr("Actions ON/OFF")).on_hover_text(tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.")).clicked() {
-                                let original = std::mem::take(&mut key.steps);
-                                key.steps.push(Step::Toggle { a: original, b: Vec::new() });
-                                changed = true;
-                            }
-                        }
                         if let Some(index) = key.steps.iter().position(|s| matches!(s, Step::Toggle { .. })) {
                             ui.label(RichText::new(tr("Actions ON/OFF · premier appui : Action 1, deuxième appui : Action 2")).strong());
                             if key.steps.len() > 1 {
@@ -3332,10 +3325,18 @@ impl App {
                         }
                     }
                     if long_editor || !(key.steps.len() == 1 && matches!(key.steps[0], Step::Toggle { .. })) {
+                    let has_plugin = key.plugin.is_some();
+                    let has_toggle = key.steps.iter().any(|step| matches!(step, Step::Toggle { .. }));
                     let steps = if long_editor { &mut key.long_steps } else { &mut key.steps };
                     if long_editor { ui.label(RichText::new(tr("L’atelier de blocs modifie uniquement l’appui court. Pour un fichier, renseigne son chemin dans l’action.")).small().color(p.muted)); }
                     ui.horizontal(|ui|{
                         ui.label(RichText::new(trf("Actions · {steps} étape(s)", &[("steps", &steps.len())])).strong());
+                        if !long_editor {
+                            if ui.add_enabled(!has_plugin && !has_toggle, egui::Button::new(tr("Actions ON/OFF")))
+                                .on_hover_text(tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.")).clicked() {
+                                enable_onoff = true;
+                            }
+                        }
                         iconset::menu(ui, Ico::Add, tr("Ajouter"), |ui| {
                             let available = (ui.ctx().screen_rect().height() - 64.0).max(160.0);
                             egui::ScrollArea::vertical().id_salt("key_add_action_menu")
@@ -3372,6 +3373,11 @@ impl App {
                         });}
                     });
                     if let Some(i)=remove{steps.remove(i);changed=true;removed_step=true;}if let Some((a,b))=movement{steps.swap(a,b);changed=true;}
+                    }
+                    if enable_onoff {
+                        let original = std::mem::take(&mut key.steps);
+                        key.steps.push(Step::Toggle { a: original, b: Vec::new() });
+                        changed = true;
                     }
                 });
             });
