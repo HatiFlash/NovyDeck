@@ -5132,7 +5132,7 @@ fn onoff_branch_ui(
     ui.separator();
     ui.label(RichText::new(title).strong());
     if steps.is_empty() && ui.button(tr("Raccourci clavier")).clicked() {
-        steps.push(crate::automation::step(0));
+        steps.extend(catalog::action(0, &profiles[target.0]).steps);
         changed = true;
     }
     let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
@@ -5176,8 +5176,8 @@ fn onoff_branch_ui(
         });
     }
     if let Some(i) = removal { steps.remove(i); *removed_step = true; changed = true; }
-    if let Some((i, kind)) = replacement { steps[i] = crate::automation::step(kind); changed = true; }
-    if let Some(kind) = addition { steps.push(crate::automation::step(kind)); changed = true; }
+    if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, &profiles[target.0]).steps); changed = true; }
+    if let Some(kind) = addition { steps.extend(catalog::action(kind, &profiles[target.0]).steps); changed = true; }
     changed
 }
 
