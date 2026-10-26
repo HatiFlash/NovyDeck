@@ -863,6 +863,9 @@ fn lcd_preview_cache_refreshes_labels_colors_icons_and_changed_image_files() {
         .unwrap()
         .id();
     assert_ne!(new, label);
+    changed.label_overlay = false;
+    let without_overlay = h.app.key_previews.texture(&h.ctx, 5, &changed, 126, None).unwrap().id();
+    assert_ne!(label, without_overlay, "le cache de l'aperçu doit suivre le choix fond/ombre");
     changed.color = [12, 34, 56];
     let color = h
         .app
