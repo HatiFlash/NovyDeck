@@ -22,6 +22,30 @@
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
 
+## Nouveautés 0.15.0
+
+### En-tête du deck et bibliothèque plus clairs
+
+Sur l'écran principal du deck, l'en-tête indique si l'exécution des touches est active ou en pause. La bibliothèque nomme explicitement ses sections **Modèles** et **Enregistrés**.
+
+<!-- TODO : insérer ici une capture anglaise générée pour la 0.15.0 ; aucune capture 0.15.0 n'est disponible pour l'instant. -->
+
+### Plus de place dans l'inspecteur de touche
+
+Sélectionnez une touche pour afficher ses étapes d'action dans l'inspecteur ; la disposition garde les premières étapes visibles en petite fenêtre et en HiDPI. L'onglet **Apparence** reste défilable pour accéder à ses réglages.
+
+<!-- TODO : insérer ici une capture française de l'inspecteur, générée pour la 0.15.0 ; aucune capture 0.15.0 n'est disponible pour l'instant. -->
+
+### Conversations avec l'assistant et propositions à relire
+
+Depuis une touche vide, choisissez **Demander à l’IA** pour ouvrir **Atelier → Assistant**. Les demandes et réponses apparaissent dans l'ordre de la conversation. Une proposition reconnue affiche son nombre de blocs et un aperçu structuré, y compris les branches imbriquées ; il faut la relire puis choisir **Ajouter** ou **Appliquer** avant de modifier la touche. Les règles déterministes intégrées restent disponibles sans modèle IA. Un modèle IA local facultatif peut traiter des demandes au-delà de ces règles ; il ne comprend pas universellement les plugins, et leurs actions et réglages sont validés plutôt que supposés. Cela ne garantit ni un modèle particulier ni un fonctionnement matériel réussi.
+
+<!-- TODO : insérer ici une capture française de l'assistant, générée pour la 0.15.0 ; aucune capture 0.15.0 n'est disponible pour l'instant. -->
+
+### État actif ou en pause explicite
+
+L'état affiché sur l'écran principal aide à distinguer l'exécution active des touches de leur mise en pause. Le comportement UI est couvert par des tests ; cela ne signifie pas qu'un périphérique physique a été testé.
+
 ## Nouveautés 0.14.0
 
 ### Modification directe des blocs dans l'Atelier

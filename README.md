@@ -22,6 +22,30 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
+## What's new in 0.15.0
+
+### A clearer deck header and library
+
+On the main deck screen, the header now labels whether key actions are running or paused. The library names its **Templates** and **Saved** sections directly.
+
+<!-- TODO: Insert a generated 0.15.0 English main-screen capture here; no 0.15.0 capture is available yet. -->
+
+### More room in the key inspector
+
+Select a key to view its action steps in the inspector; the layout keeps initial steps visible at compact and HiDPI sizes. The **Appearance** tab remains scrollable for its controls.
+
+<!-- TODO: Insert a generated 0.15.0 English inspector capture here; no 0.15.0 capture is available yet. -->
+
+### Assistant conversations and reviewable proposals
+
+From an empty key, choose **Ask the assistant** to open **Workshop → Assistant**. Requests and replies appear in conversation order. A recognized proposal shows its block count and a structured preview, including nested branches; you must review and choose **Add** or **Apply** before it changes the key. Built-in deterministic rules remain available without an AI model. An optional local AI model can handle requests beyond those rules; it is not universal plugin comprehension, and plugin actions/settings are validated rather than assumed. No particular model or successful hardware behavior is implied.
+
+<!-- TODO: Insert a generated 0.15.0 English assistant capture here; no 0.15.0 capture is available yet. -->
+
+### Explicit running and paused status
+
+The main-screen status makes it easier to distinguish active key execution from paused execution. The UI behavior is covered by tests; this does not claim a physical-device test.
+
 ## What's new in 0.14.0
 
 ### Direct block editing in the Workshop
