@@ -276,7 +276,7 @@ fn parse_item(item: &Value, nested: bool, total: &mut usize) -> Result<Step, Str
         "plugin_action" => Step::PluginAction {
             plugin: item["plugin"].as_str().unwrap_or_default().to_owned(),
             action: item["plugin_action"].as_str().unwrap_or_default().to_owned(),
-            settings: json!({}), label: String::new(),
+            settings: item.get("settings").cloned().unwrap_or_else(|| json!({})), label: String::new(),
         },
         "delay" => Step::Delay { ms: item["ms"].as_u64().ok_or("délai invalide")?.min(600_000) },
         "hotkey" => {
@@ -1038,6 +1038,42 @@ mod tests {
             *settings = json!({"privateDeviceId": "invented"});
         }
         assert!(guard("lance Toggle Mute de SoundPad", vec![invented], &knowledge).is_empty());
+    }
+
+    #[test]
+    fn rejected_model_plugin_actions_require_clarification() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        plugin.name = "SoundPad".into();
+        plugin.actions[0].name = "Toggle Mute".into();
+        plugin.actions[1].name = "Record Clip".into();
+        let id = plugin.uuid.clone();
+        let action = plugin.actions[0].uuid.clone();
+        let mut knowledge = Knowledge::builtin();
+        knowledge.plugins.push(plugin);
+        let config = crate::model::Config::default();
+        let response = |plugin: &str, action: &str, settings: Value, delay: bool| {
+            let mut steps = vec![];
+            if delay { steps.push(json!({"action":"delay","ms":2000})); }
+            steps.push(json!({"action":"plugin_action","plugin":plugin,"plugin_action":action,"settings":settings}));
+            parse_steps(&json!({"steps":steps}).to_string()).unwrap()
+        };
+        for delay in [false, true] {
+            let (steps, rejected) = guard_report("lance SoundPad", response(&id, &action, json!({}), delay), &knowledge);
+            let proposal = crate::local_assistant::from_model_guarded(steps, rejected, &config, &knowledge);
+            assert!(proposal.steps.is_empty() && !proposal.insertable(), "{proposal:?}");
+            assert!(matches!(&proposal.status, crate::local_assistant::Status::Ambigue { choix, choix_autonomes: true, .. } if choix.first() == Some(&"Lance Toggle Mute de SoundPad".to_owned())), "{proposal:?}");
+        }
+        let (steps, rejected) = guard_report("lance Toggle Mute de SoundPad", response(&id, &action, json!({"device":"invented"}), false), &knowledge);
+        let proposal = crate::local_assistant::from_model_guarded(steps, rejected, &config, &knowledge);
+        assert!(proposal.steps.is_empty() && !proposal.insertable());
+        let (steps, rejected) = guard_report("lance Toggle Mute de SoundPad", response("not.installed", &action, json!({}), true), &knowledge);
+        let proposal = crate::local_assistant::from_model_guarded(steps, rejected, &config, &knowledge);
+        assert!(proposal.steps.is_empty() && !proposal.insertable());
+        assert!(matches!(&proposal.status, crate::local_assistant::Status::Ambigue { question, choix, .. } if question.contains("pas installé") && choix.is_empty()), "{proposal:?}");
+        let (steps, rejected) = guard_report("lance Toggle Mute de SoundPad", response(&id, &action, json!({}), false), &knowledge);
+        let proposal = crate::local_assistant::from_model_guarded(steps, rejected, &config, &knowledge);
+        assert!(proposal.insertable() && matches!(&proposal.steps[..], [Step::PluginAction { .. }]));
     }
 
     #[test]
