@@ -6,6 +6,7 @@ pub enum Edit {
     Duplicate(Vec<usize>),
     Move(Vec<usize>, usize),  // destination index in the same sibling list
     Insert(Vec<usize>, Step), // insertion path ends in an index, possibly len
+    Drop { from: Vec<usize>, at: Vec<usize>, copy: bool },
     Toggle(Vec<usize>),
 }
 
@@ -53,10 +54,12 @@ pub fn get<'a>(steps: &'a mut Vec<Step>, path: &[usize]) -> Option<&'a mut Step>
 
 /// Returns the new selection only if the entire edit succeeded; failures leave the tree intact.
 pub fn apply(steps: &mut Vec<Step>, edit: Edit) -> Option<Vec<usize>> {
+    if let Edit::Drop { .. } = edit { return None; }
     let (path, kind) = match &edit {
         Edit::Duplicate(p) => (p, 0),
         Edit::Move(p, _) => (p, 2),
         Edit::Insert(p, _) => (p, 3),
+        Edit::Drop { .. } => unreachable!(),
         Edit::Toggle(p) => (p, 4),
     };
     let (&index, parent) = path.split_last()?;
@@ -82,6 +85,7 @@ pub fn apply(steps: &mut Vec<Step>, edit: Edit) -> Option<Vec<usize>> {
             selected.push(target);
         }
         Edit::Insert(_, step) => list.insert(index, step),
+        Edit::Drop { .. } => unreachable!(),
         Edit::Toggle(_) => {
             let old = list.remove(index);
             list.insert(
