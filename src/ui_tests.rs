@@ -2,6 +2,7 @@
 #[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
 #[path = "ui_update_tests.rs"] mod update_tests;
 #[path = "ui_audit_tests.rs"] mod audit_tests;
+#[path = "ui_main015_tests.rs"] mod main015_tests;
 #[path = "ui_release013_tests.rs"] mod release013_tests;
 #[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
 #[path="ui_plugin_block_tests.rs"] mod plugin_block_tests;
@@ -2183,7 +2184,7 @@ fn library_scroll_reuses_cached_interface_icons() {
     let first = h.warm(size);
     let shown = crate::iconset::rasterized(&h.ctx);
     assert!(shown >= 8, "icônes IconPark affichées : {shown}");
-    assert!(text_position(&first.shapes, "Réglages").is_some() && text_position(&first.shapes, "Magasin").is_some());
+    assert!(text_position(&first.shapes, "Réglages").is_some() && text_position(&first.shapes, "Modèles").is_some());
     let list = egui::pos2(1230.0, 520.0);
     let wheel = |dy: f32| vec![Input::PointerMoved(list), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, dy), modifiers: Modifiers::NONE }];
     for tab in [0usize, 1] {
@@ -2623,7 +2624,7 @@ fn language_combo_is_visible_in_general_settings() {
     let output = h.warm(vec2(1380.0, 900.0));
     assert!(text_position(&output.shapes, "Langue").is_some());
     assert!(text_position(&output.shapes, "Langue de Windows").is_some());
-    assert!(text_position(&output.shapes, "Aider à traduire NovyDeck").is_some());
+    assert!(text_position(&output.shapes, "Aider à traduire NovyDeck ↗").is_some());
 }
 
 #[test]

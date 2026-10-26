@@ -435,8 +435,8 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.hyperlink_color = p.accent_hover;
     style.visuals.warn_fg_color = p.warning;
     style.visuals.error_fg_color = p.danger;
-    style.visuals.selection.bg_fill = p.accent_soft;
-    style.visuals.selection.stroke = Stroke::new(1.0_f32, p.text_primary);
+    style.visuals.selection.bg_fill = p.accent;
+    style.visuals.selection.stroke = Stroke::new(2.0, Color32::WHITE);
     style.visuals.window_corner_radius = egui::CornerRadius::same(RADIUS_LG);
     style.visuals.window_stroke = Stroke::new(1.0_f32, p.hairline);
     style.visuals.window_shadow = egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(if dark { 102 } else { 28 }) };
@@ -490,6 +490,17 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
         .text_styles
         .insert(egui::TextStyle::Small, egui::FontId::proportional(11.0));
     ctx.set_style(style);
+}
+
+pub fn checkbox(ui: &mut egui::Ui, checked: &mut bool, label: &str) -> egui::Response {
+    ui.scope(|ui| {
+        let p = palette(ui.ctx());
+        let widgets = &mut ui.style_mut().visuals.widgets;
+        widgets.inactive.bg_stroke = Stroke::new(1.5, p.text_tertiary);
+        widgets.hovered.bg_stroke = Stroke::new(1.5, p.accent);
+        widgets.active.bg_stroke = Stroke::new(1.5, p.accent);
+        ui.checkbox(checked, label)
+    }).inner
 }
 
 pub fn primary(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {
