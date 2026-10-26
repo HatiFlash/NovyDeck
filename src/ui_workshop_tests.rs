@@ -140,7 +140,7 @@ fn branch_numbers_are_stable_in_french_and_english() {
 fn palette_delay(shapes: &[egui::epaint::ClippedShape]) -> egui::Pos2 {
     shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
         let pos = t.pos + t.galley.size() * 0.5;
-        (t.galley.job.text == crate::i18n::tr("Attendre") && s.clip_rect.contains(pos)).then_some(pos)
+        (t.galley.job.text == crate::i18n::tr("Attendre") && pos.x < 260.0 && s.clip_rect.contains(pos)).then_some(pos)
     } else { None }).max_by(|a, b| a.x.total_cmp(&b.x)).expect("visible palette delay")
 }
 
