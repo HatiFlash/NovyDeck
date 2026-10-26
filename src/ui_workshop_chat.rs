@@ -96,8 +96,15 @@ fn preview_steps(ui: &mut egui::Ui, steps: &[Step], depth: usize) {
     for step in steps {
         ui.horizontal_wrapped(|ui| {
             ui.add_space((depth * 14) as f32);
-            iconset::heading(ui, iconset::for_step(step), RichText::new(step.name()).strong());
-            ui.label(RichText::new(super::extras::block_summary(step)).small().color(theme::palette(ui.ctx()).muted));
+            iconset::heading(ui, iconset::for_step(step), RichText::new(crate::i18n::tr(step.name())).strong());
+            let summary = match step.active() {
+                Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. } =>
+                    crate::i18n::trf("Si {exe} est ouvert (arrière-plan inclus)", &[("exe", exe)]),
+                Step::WindowOp { target, value, op, .. } if target == "exe" && op == "activate" =>
+                    crate::i18n::trf("Activer la fenêtre {value}", &[("value", value)]),
+                _ => super::extras::block_summary(step),
+            };
+            ui.label(RichText::new(summary).small().color(theme::palette(ui.ctx()).muted));
         });
         if depth >= 6 { continue; }
         match step.active() {
@@ -319,7 +326,6 @@ impl App {
             ui.separator();
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .stick_to_bottom(true)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
@@ -485,21 +491,32 @@ impl App {
                                     .show(ui, |ui| {
                                         ui.label(RichText::new(preview_count(pending.proposal.steps.len())).strong());
                                         ui.label(RichText::new(crate::i18n::tr("Proposition · sans exécution")).small().color(theme::palette(ctx).muted));
-                                        if let Some(before) = &pending.original {
-                                            ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &before.len())]));
-                                            for step in before {
-                                                ui.label(super::extras::block_summary(step));
-                                            }
-                                            ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
-                                        }
-                                        preview_steps(ui, &pending.proposal.steps, 0);
-                                        for missing in &pending.proposal.missing {
-                                            ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
-                                        }
-                                        if pending.proposal.steps.iter().any(sensitive) {
-                                            ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Action sensible : vérifier avant insertion."));
-                                        }
-                                        for note in &pending.proposal.notes { ui.label(note); }
+                                        egui::ScrollArea::vertical()
+                                            .id_salt("chat_preview_steps")
+                                            .max_height((screen.height() * 0.24).min(190.0))
+                                            .show(ui, |ui| {
+                                                if let Some(before) = &pending.original {
+                                                    ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &before.len())]));
+                                                    for step in before { ui.label(super::extras::block_summary(step)); }
+                                                    ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
+                                                }
+                                                preview_steps(ui, &pending.proposal.steps, 0);
+                                                for missing in &pending.proposal.missing {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
+                                                }
+                                                if pending.proposal.steps.iter().any(sensitive) {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Action sensible : vérifier avant insertion."));
+                                                }
+                                                for note in &pending.proposal.notes {
+                                                    if crate::i18n::current() == "en" && note.starts_with("Condition : « ") {
+                                                        if let Some(Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. }) = pending.proposal.steps.first() {
+                                                            ui.label(crate::i18n::trf("Condition : {exe} est lancé ? Sinon s'applique quand il ne l'est pas.", &[("exe", exe)]));
+                                                            continue;
+                                                        }
+                                                    }
+                                                    ui.label(note);
+                                                }
+                                            });
                                     });
                                 ui.horizontal_wrapped(|ui| {
                                     let valid = !stale
