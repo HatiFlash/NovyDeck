@@ -3377,6 +3377,11 @@ impl App {
                     if enable_onoff {
                         let original = std::mem::take(&mut key.steps);
                         key.steps.push(Step::Toggle { a: original, b: Vec::new() });
+                        if let Some(crate::model::PluginStateTarget::Block { path }) = &mut key.plugin_state {
+                            let mut wrapped = vec![0, 0];
+                            wrapped.extend(path.iter().copied());
+                            *path = wrapped;
+                        }
                         changed = true;
                     }
                 });

@@ -45,6 +45,24 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
 }
 
 #[test]
+fn onoff_conversion_preserves_plugin_state_block_target() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    let key = &mut h.app.config.keys_mut()[0];
+    key.steps = vec![Step::PluginAction {
+        plugin: "test.plugin".into(), action: "test.action".into(),
+        settings: serde_json::json!({}), label: String::new(),
+    }];
+    key.plugin_state = Some(crate::model::PluginStateTarget::Block { path: vec![0] });
+    let output = h.warm(size);
+    let enable = text_position(&output.shapes, "Actions ON/OFF").expect("main inspector ON/OFF button");
+    h.click(size, enable);
+    let key = &h.app.config.keys()[0];
+    assert!(matches!(&key.steps[..], [Step::Toggle { a, b }] if a.len() == 1 && b.is_empty()));
+    assert_eq!(key.plugin_state, Some(crate::model::PluginStateTarget::Block { path: vec![0, 0, 0] }));
+}
+
+#[test]
 fn onoff_existing_branches_and_extra_steps_are_not_silently_lost() {
     let mut h = Harness::new();
     let size = vec2(1366.0, 768.0);
