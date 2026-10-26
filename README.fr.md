@@ -22,7 +22,7 @@
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
 
-## Nouveautés 0.12.0 (préparation de la version)
+## Nouveautés 0.12.0
 
 ### Sélecteur d'état Google Home dans les blocs
 
@@ -36,7 +36,7 @@ Depuis les **Réglages du plugin** du bloc sélectionné, utilisez **Commander �
 
 ### Plugins séparés
 
-Économiseur OLED et SignalRGB ne sont pas installés automatiquement avec NovyDeck. Installez ou mettez à jour les plugins compatibles séparément si nécessaire, selon leur disponibilité et leurs prérequis. Ces tests d'interface ne prouvent aucun effet sur des appareils Google Home, des écrans ou un deck physique. Voir les [notes 0.12.0](docs/RELEASE-0.12.0.md) ; le badge en tête renvoie encore à la dernière version publiée jusqu'à la publication de 0.12.0.
+Économiseur OLED et SignalRGB ne sont pas installés automatiquement avec NovyDeck. Installez ou mettez à jour les plugins compatibles séparément si nécessaire, selon leur disponibilité et leurs prérequis. Ces tests d'interface ne prouvent aucun effet sur des appareils Google Home, des écrans ou un deck physique. Voir les [notes 0.12.0](docs/RELEASE-0.12.0.md).
 
 ## Nouveautés 0.11.1
 

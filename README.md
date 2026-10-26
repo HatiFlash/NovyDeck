@@ -22,7 +22,7 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
-## What's new in 0.12.0 (release preparation)
+## What's new in 0.12.0
 
 ### Google Home state selector for blocks
 
@@ -36,7 +36,7 @@ From the selected block's **Plugin settings** (Réglages du plugin), use **Contr
 
 ### Plugins remain separate
 
-OLED Saver and SignalRGB are not installed automatically with NovyDeck. Install or update compatible plugins separately when needed, subject to their availability and prerequisites. These UI tests do not establish any effect on Google Home devices, displays or physical decks. See the [0.12.0 release notes](docs/RELEASE-0.12.0.md); the badge above still links to the last published release until 0.12.0 is published.
+OLED Saver and SignalRGB are not installed automatically with NovyDeck. Install or update compatible plugins separately when needed, subject to their availability and prerequisites. These UI tests do not establish any effect on Google Home devices, displays or physical decks. See the [0.12.0 release notes](docs/RELEASE-0.12.0.md).
 
 ## What's new in 0.11.1
 

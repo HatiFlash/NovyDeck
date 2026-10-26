@@ -157,6 +157,8 @@ pub struct App {
     device_model: Option<DeviceGrid>,
     gate: InputGate,
     long_press: LongPress,
+    /// Physical edges survive a page apply; a release must not trigger the new page.
+    physical_down: [bool; 32],
     long_editor: bool,
     wanted: bool,
     status: String,
@@ -400,6 +402,7 @@ impl App {
             state_monitor, state_generation: 0, state_values: [None; 32], toggle_faces: std::collections::HashMap::new(), device_model: None,
             gate,
             long_press: LongPress::default(),
+            physical_down: [false; 32],
             long_editor: false,
             wanted: false,
             status: tr("Aucun périphérique").into(),
@@ -916,6 +919,7 @@ impl App {
                         self.device_model = None;
                         self.selected = self.selected.min(14);
                         self.long_press.clear();
+                        self.physical_down.fill(false);
                         self.gate.disconnect();
                         self.engine.stop();
                     } else {
@@ -946,6 +950,9 @@ impl App {
                     }
                 }
                 Event::Key(index, at) => {
+                    if index >= self.device_keys() || index >= self.applied.keys().len() || index >= self.physical_down.len() { continue; }
+                    if self.physical_down[index] { continue; }
+                    self.physical_down[index] = true;
                     if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
                     let wake = self.sleep.press(Instant::now());
                     if wake { self.wake_display(); self.long_press.clear(); continue; }
@@ -972,6 +979,8 @@ impl App {
                     }
                 }
                 Event::KeyRelease(index, at) => {
+                    if index >= self.physical_down.len() || !self.physical_down[index] { continue; }
+                    self.physical_down[index] = false;
                     if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
                     if index < self.device_keys() && index < self.applied.keys().len() {
                         if self.gate.decision()==Decision::Execute && self.applied.keys()[index].plugin.is_some() { if let Some(plugins)=&self.plugins { plugins.key(index,false); } }
