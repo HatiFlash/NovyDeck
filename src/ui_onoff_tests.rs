@@ -37,7 +37,7 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     }
     let record = text_position(&output.shapes, "Enregistrer…").expect("champ Action 2 accessible par défilement");
     h.click(size, record + egui::vec2(-90.0, 0.0));
-    h.frame(size, vec![Input::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers { ctrl: true, ..Default::default() } }]);
+    h.frame(size, vec![Input::Key { key: egui::Key::A, physical_key: Some(egui::Key::A), pressed: true, repeat: false, modifiers: egui::Modifiers { ctrl: true, command: true, ..Default::default() } }]);
     h.frame(size, vec![Input::Text("F10".into())]);
     h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }] if matches!(&a[..], [Step::Hotkey { keys }] if keys == "F9") && matches!(&b[..], [Step::Hotkey { keys }] if keys == "F10")), "edited steps: {:?}", h.app.config.keys()[0].steps);
