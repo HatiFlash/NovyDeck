@@ -1905,7 +1905,7 @@ impl App {
             )
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    ui.horizontal_wrapped(|ui| {
+                    ui.horizontal(|ui| {
                     let logo = theme::logo_texture(ctx);
                     ui.add(egui::Image::new((logo.id(), Vec2::splat(34.0))));
                     ui.vertical(|ui| {
@@ -1928,9 +1928,7 @@ impl App {
                     {
                         self.redo_edit();
                     }
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        iconset::menu(ui, Ico::Settings, tr("Réglages"), |ui| {
+                    iconset::menu(ui, Ico::Settings, tr("Réglages"), |ui| {
                         if ui
                             .add(iconset::secondary_button(ctx, Ico::Robot, self.ai_status_label()))
                             .on_hover_text(tr("Assistant IA : IA locale sur ce PC et IA connectée (Claude, ChatGPT…)"))
@@ -2074,7 +2072,6 @@ impl App {
                             ),
                         };
                         if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
-                    });
                 });
             });
     }
