@@ -60,6 +60,54 @@ fn main015_inspector_room_for_steps_and_appearance() {
     }
 }
 
+#[test]
+fn main015_library_shows_five_complete_rows_at_laptop_size() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.catalog_tab = 1;
+    let frame = h.warm(size);
+    let names: Vec<_> = catalog::presets().into_iter().take(5).map(|v| catalog::display_name(&v.key.label).to_owned()).collect();
+    for name in &names {
+        let visible = frame.shapes.iter().any(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == *name && text.pos.x > 1000.0 =>
+                shape.clip_rect.contains_rect(egui::Rect::from_min_size(text.pos, text.galley.size())),
+            _ => false,
+        });
+        assert!(visible, "library row {name:?} is clipped at 1366x768");
+    }
+}
+
+#[test]
+fn main015_empty_key_asks_assistant_without_running() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.selected = 14;
+    h.app.config.keys_mut()[14] = Key::default();
+    let before = h.warm(size);
+    let button = text_position(&before.shapes, "Demander à l’IA").expect("empty key assistant button");
+    h.click(size, button);
+    let after = h.warm(size);
+    assert_eq!(h.app.selected, 14);
+    assert!(h.app.show_workflow && h.app.workshop_chat.open);
+    assert!(text_position(&after.shapes, "Assistant · Atelier").is_some());
+    assert!(h.app.config.keys()[14].steps.is_empty());
+    assert!(h.app.workshop_chat.pending.is_none() && h.app.workshop_chat.thinking.is_none());
+    assert!(h.app.workshop_journal.confirm_real == false);
+}
+
+#[test]
+fn main015_update_checkbox_remains_clickable() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.settings = true;
+    h.app.settings_tab = 0;
+    let before = h.warm(size);
+    let pos = text_position(&before.shapes, "Vérifier les mises à jour au démarrage").expect("update checkbox");
+    let previous = h.app.preferences.update_check.unwrap_or(false);
+    h.click(size, pos);
+    assert_eq!(h.app.preferences.update_check, Some(!previous));
+}
+
 fn main015_capture(screen: &str, physical: Vec2, dpi: f32, dark: bool, lang: &str, out: &std::path::Path) {
     let size = physical / dpi;
     let mut h = demo_harness();
