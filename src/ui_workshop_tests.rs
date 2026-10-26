@@ -137,8 +137,11 @@ fn branch_numbers_are_stable_in_french_and_english() {
 #[test]
 fn palette_drag_inserts_at_specific_sibling_slot() {
     let (mut h, size) = workshop();
+    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_search"), "Attendre".to_owned()));
     let output = h.warm(size);
-    let source = text_position(&output.shapes, crate::i18n::tr("Attendre")).expect("palette delay");
+    let source = output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
+        (t.galley.job.text == crate::i18n::tr("Attendre")).then_some(t.pos + t.galley.size() * 0.5)
+    } else { None }).max_by(|a, b| a.x.total_cmp(&b.x)).expect("palette delay");
     let destination = handles(&output.shapes)[1];
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
     h.frame(size, vec![Input::PointerMoved(source)]);
