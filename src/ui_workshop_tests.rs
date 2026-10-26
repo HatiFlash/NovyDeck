@@ -143,6 +143,7 @@ fn palette_drag_inserts_at_specific_sibling_slot() {
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
     h.frame(size, vec![Input::PointerMoved(source), press(source, true)]);
     h.frame(size, vec![Input::PointerMoved(destination)]);
+    assert_eq!(h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))), Some(5), "palette drag not started from {source:?}");
     h.frame(size, vec![Input::PointerMoved(destination)]);
     h.frame(size, vec![press(destination, false)]);
     let steps = &h.app.config.keys()[0].steps;
