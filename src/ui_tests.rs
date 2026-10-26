@@ -2531,9 +2531,15 @@ fn update_offer_widgets_follow_installation_mode_without_network() {
         h.app.update_result = Some(Ok(crate::app_update::Status::New(latest.clone())));
         let output = h.warm(size);
         assert!(text_position(&output.shapes, "Nouvelle version v0.8.14 disponible").is_some());
-        assert!(text_position(&output.shapes, "Voir les nouveautés").is_some());
-        assert_eq!(text_position(&output.shapes, "Télécharger et installer").is_some(), installed);
-        assert_eq!(text_position(&output.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_some(), !installed);
+        assert!(text_position(&output.shapes, "Voir la mise à jour").is_some());
+        assert!(text_position(&output.shapes, "Mettre à jour maintenant").is_none());
+        assert!(text_position(&output.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_none());
+        let pos = text_position(&output.shapes, "Voir la mise à jour").unwrap();
+        h.click(size, pos);
+        assert_eq!(h.app.startup_offer.as_ref().map(|l| l.version.as_str()), Some("v0.8.14"));
+        let offer = h.warm(size);
+        assert_eq!(text_position(&offer.shapes, "Mettre à jour maintenant").is_some(), installed);
+        assert_eq!(text_position(&offer.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_some(), !installed);
         assert!(h.app.update_rx.is_none());
     }
 }

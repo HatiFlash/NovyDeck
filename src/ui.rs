@@ -189,6 +189,8 @@ pub struct App {
     update_result: Option<Result<crate::app_update::Status, String>>,
     update_rx: Option<Receiver<about::UpdateEvent>>,
     update_phase: Option<&'static str>,
+    update_installing: bool,
+    update_target: Option<crate::app_update::Latest>,
     update_confirm: Option<crate::app_update::Latest>,
     update_installed: bool,
     startup_prompts: bool,
@@ -430,6 +432,8 @@ impl App {
             update_result: None,
             update_rx: None,
             update_phase: None,
+            update_installing: false,
+            update_target: None,
             update_confirm: None,
             update_installed: crate::app_update::installed(),
             startup_prompts,
@@ -563,6 +567,7 @@ impl App {
                 context.request_repaint();
             });
         } else {
+            self.update_installing = false;
             self.update_result = None;
             self.update_phase = Some(tr("Vérification en cours…"));
             let (tx, rx) = mpsc::channel();
@@ -4020,6 +4025,7 @@ impl App {
                         match result {
                             Err(error) => self.update_result = Some(Err(trf("Mise à jour impossible : {error}", &[("error", &error)]))),
                             Ok(setup) => {
+                                self.update_phase = Some(tr("Installation…"));
                                 // Failure to persist must never silently discard edits on restart.
                                 if self.gate.invalid || self.config.validate_structure().is_err() {
                                     self.update_result = Some(Err(tr("Configuration invalide : enregistrez-la avant de mettre à jour").into()));
@@ -4095,7 +4101,7 @@ impl App {
                 }
             }
         }
-        if self.show_about {
+        if self.show_about && !self.update_installing {
             let mut open = true;
             theme::fixed_window(tr("À propos de NovyDeck"))
                 .open(&mut open).collapsible(false).resizable(false).default_width(370.0)
@@ -4133,7 +4139,6 @@ impl App {
                     if ui.add_enabled(self.update_rx.is_none() && self.update_confirm.is_none(), egui::Button::new(tr("Vérifier les mises à jour"))).clicked() {
                         self.start_update_check(ctx, false);
                     }
-                    if let Some(phase) = self.update_phase { motion::loading(ui, phase); }
                     update_ui::status(ui, self);
                     if self.update_result.as_ref().is_some_and(Result::is_err)
                         && ui.add(theme::ghost_button(tr("Réessayer"))).clicked() {
@@ -4141,25 +4146,29 @@ impl App {
                     }
                     if let Some(Ok(crate::app_update::Status::New(latest))) = &self.update_result {
                         ui.label(trf("Nouvelle version {version} disponible", &[("version", &latest.version)]));
-                        update_ui::notes(ui, &latest.notes, false);
-                        if self.update_installed {
-                            if ui.add_enabled(self.update_rx.is_none(), theme::primary(tr("Mettre à jour maintenant"))).clicked() {
-                                self.update_confirm = Some(latest.clone());
-                            }
-                        } else {
-                            ui.label(tr("Version portable : téléchargez le ZIP depuis la page des nouveautés"));
-                        }
-                        if ui.add(theme::ghost_button(tr("Voir sur GitHub"))).clicked() {
-                            ui.ctx().open_url(egui::OpenUrl::new_tab(latest.page.clone()));
+                        if ui.add(theme::primary(tr("Voir la mise à jour"))).clicked() {
+                            self.startup_offer = Some(latest.clone());
+                            open = false;
                         }
                     }
                 });
             self.show_about = open;
         }
+        if self.update_installing {
+            if update_ui::operation(ctx, self) {
+                self.update_installing = false;
+                self.update_phase = None;
+                self.update_result = None;
+                self.update_confirm = self.update_target.clone();
+            }
+        }
         if let Some(latest) = self.update_confirm.clone() {
             match update_ui::confirm(ctx, &latest) {
                 Some(true) => {
                     self.update_confirm = None;
+                    self.update_target = Some(latest.clone());
+                    self.update_result = None;
+                    self.update_installing = true;
                     self.update_phase = Some(tr("Téléchargement…"));
                     let (tx, rx) = mpsc::channel();
                     self.update_rx = Some(rx);

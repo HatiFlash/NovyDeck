@@ -2,8 +2,8 @@ use super::*;
 
 fn sample() -> crate::app_update::Latest {
     crate::app_update::Latest {
-        version: "v0.13.0".into(),
-        page: "https://github.com/HatiFlash/NovyDeck/releases/tag/v0.13.0".into(),
+        version: "v0.14.0".into(),
+        page: "https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0".into(),
         setup_url: "https://github.com/example/setup.exe".into(),
         sha_url: "https://github.com/example/setup.sha256".into(),
         setup_size: 32_456_789,
@@ -39,6 +39,8 @@ fn update_installation_uses_dedicated_dialog_without_duplicate_or_missing_glyphs
             h.ctx.set_pixels_per_point(dpi);
             crate::i18n::set_language(lang);
             h.app.show_about = true;
+            h.app.update_installing = true;
+            h.app.update_target = Some(sample());
             h.app.update_phase = Some(tr("Téléchargement…"));
             let shown = h.warm(size);
             let mut all = Vec::new();
@@ -87,7 +89,7 @@ fn update_primary_opens_the_existing_confirmation_without_network() {
     let pos = text_position(&shown.shapes, tr("Mettre à jour maintenant")).unwrap();
     h.click(size, pos);
     assert!(h.app.startup_offer.is_none());
-    assert_eq!(h.app.update_confirm.as_ref().map(|latest| latest.version.as_str()), Some("v0.13.0"));
+    assert_eq!(h.app.update_confirm.as_ref().map(|latest| latest.version.as_str()), Some("v0.14.0"));
     assert!(h.app.update_rx.is_none(), "confirmation does not download");
     let shown = h.warm(size);
     h.click(size, text_position(&shown.shapes, tr("Annuler")).unwrap());
@@ -100,12 +102,17 @@ fn update_after_captures_offline() {
     let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
     let out = PathBuf::from(out);
     let size = vec2(1366.0, 768.0);
-    for (state, lang) in [("disponible", "fr"), ("telechargement", "fr"), ("verification-sha", "fr"), ("erreur-reseau", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en")] {
+    for (state, lang) in [("disponible", "fr"), ("telechargement", "fr"), ("verification-sha", "fr"), ("installation", "fr"), ("erreur-reseau", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en"), ("quoi-de-neuf-clair-fr", "fr")] {
         let mut h = Harness::new();
         crate::i18n::set_language(lang);
         h.app.startup_checked = true;
         h.app.preferences.update_check = Some(false);
         h.app.update_installed = true;
+        h.app.update_target = Some(sample());
+        if state == "quoi-de-neuf-clair-fr" {
+            h.app.preferences.dark = false;
+            theme::apply(&h.ctx, false);
+        }
         if state.starts_with("quoi-de-neuf") {
             h.app.startup_prompts = true;
             h.app.whats_new = true;
@@ -114,9 +121,10 @@ fn update_after_captures_offline() {
         else {
             h.app.show_about = true;
             match state {
-                "telechargement" => h.app.update_phase = Some(tr("Téléchargement…")),
-                "verification-sha" => h.app.update_phase = Some(tr("Vérification…")),
-                "erreur-reseau" => h.app.update_result = Some(Err("Vérification impossible : connexion interrompue".into())),
+                "telechargement" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Téléchargement…")); },
+                "verification-sha" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Vérification…")); },
+                "installation" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Installation…")); },
+                "erreur-reseau" => { h.app.update_installing = true; h.app.update_result = Some(Err("Mise à jour impossible : connexion interrompue".into())); },
                 _ => h.app.update_result = Some(Ok(crate::app_update::Status::Current)),
             }
         }

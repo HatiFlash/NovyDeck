@@ -1403,6 +1403,13 @@
     "Réessayer": "Retry",
     "Téléchargement → Vérification → Installation → Relance": "Download → Verification → Installation → Relaunch",
     "{size} octets annoncés par la version publiée": "{size} bytes listed by the published release",
-    "Confirmation requise avant téléchargement": "Confirm before downloading"
+    "Confirmation requise avant téléchargement": "Confirm before downloading",
+    "SHA-256 vérifié avant installation": "SHA-256 verified before installation",
+    "Installateur · {size} Mo": "Installer · {size} MB",
+    "Installation de la mise à jour": "Installing update",
+    "Mise à jour de NovyDeck": "Updating NovyDeck",
+    "Vérification SHA-256": "SHA-256 verification",
+    "Progression indéterminée — octets reçus indisponibles": "Progress unknown — received bytes unavailable",
+    "Voir la mise à jour": "View update"
   }
 }
