@@ -341,8 +341,10 @@ fn palette(ui: &mut egui::Ui, search: &str, depth: usize, advanced: bool, keyboa
                         let _ = category;
                         let label = if keyboard == Some(index) { format!("> {}", block_name(kind)) }
                             else { block_name(kind).to_owned() };
-                        if ui.add(egui::Button::new(label).frame(false))
-                            .on_hover_text(block_help(kind)).clicked() { selected = Some(kind); }
+                        let entry = ui.add(egui::Button::new(label).frame(false).sense(egui::Sense::click_and_drag()))
+                            .on_hover_text(block_help(kind));
+                        if entry.clicked() { selected = Some(kind); }
+                        if entry.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_drag"), kind)); }
                         index += 1;
                     });
                 }
@@ -388,7 +390,7 @@ pub(super) fn block_summary(step: &Step) -> String {
         Step::Text { text } => crate::i18n::trf("Écrire {text}", &[("text", &(text.chars().take(50).collect::<String>()))] ),
         Step::Launch { program, .. } => crate::i18n::trf("Lancer {program}", &[("program", &(program))] ),
         Step::Toggle { a, b } => crate::i18n::trf("Basculer : {a} / {b} blocs", &[("a", &(a.len())), ("b", &(b.len()))] ),
-        Step::Repeat { count, steps } => crate::i18n::trf("Répéter {count} fois ({blocks} blocs)", &[("count", &(count)), ("blocks", &(steps.len()))] ),
+        Step::Repeat { count, steps } => crate::i18n::trf(if steps.len() == 1 { "Répéter {count} fois ({blocks} bloc)" } else { "Répéter {count} fois ({blocks} blocs)" }, &[("count", &(count)), ("blocks", &(steps.len()))] ),
         Step::UdpSend { host, port, .. } => crate::i18n::trf("UDP : {host}:{port}", &[("host", &(host)), ("port", &(port))] ),
         Step::HttpRequest { method, url, .. } => crate::i18n::trf("HTTP {method} : {url}", &[("method", &(method)), ("url", &(url))] ),
         Step::D6Brightness { mode, value } => crate::i18n::trf("Luminosité : {mode} {value} %", &[("mode", &(mode)), ("value", &(value))] ),
@@ -793,7 +795,7 @@ fn block_glyph(ui: &mut egui::Ui, step: &Step, color: Color32) {
     }
 }
 // A compact card tree; structural edits are applied only after the immutable render pass.
-fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], selection: &mut Option<Vec<usize>>,
+fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering: &str, selection: &mut Option<Vec<usize>>,
     action: &mut Option<WorkshopAction>, insert_at: &mut Option<Vec<usize>>, config: &crate::model::Config,
     plugins: &[crate::plugins::Plugin],
     ) {
@@ -817,26 +819,24 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], selection
             let frame = egui::Frame::new().fill(p.surface)
                 .stroke(egui::Stroke::new(if chosen { 1.5_f32 } else { 1.0_f32 }, if chosen { accent() } else { p.line }))
                 .corner_radius(10).inner_margin(9).show(ui, |ui| {
-                    ui.set_width((ui.available_width() - 20.0).clamp(120.0, 520.0));
+                    ui.set_width((ui.available_width() - 20.0).max(120.0));
                     let color = if matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }) {
                         Color32::from_rgb(164, 123, 239)
                     } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
                     ui.horizontal(|ui| {
+                        let handle = ui.add(egui::Label::new("⋮⋮").sense(egui::Sense::drag())).on_hover_text(crate::i18n::tr("Glisser pour déplacer ; Ctrl pour dupliquer"));
+                        if handle.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_drag"), path.clone())); }
                         block_glyph(ui, step, color);
-                        ui.colored_label(color, path.iter().step_by(2).map(|n| (n + 1).to_string()).collect::<Vec<_>>().join("."));
+                        ui.colored_label(color, format!("{numbering}{}", i + 1));
                         let summary = named_summary(step, plugins);
-                        // Le glyphe identifie déjà un bloc de plugin : « Plugin › action » suffit.
-                        let title = if summary.starts_with(step_label(step)) || matches!(step.active(), Step::PluginAction { .. }) { summary.clone() } else { format!("{} · {}", step_label(step), summary) };
-                        let label = ui.add(egui::Button::new(egui::RichText::new(title)).selected(chosen)
-                            .truncate().sense(egui::Sense::click_and_drag()))
-                            .on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.", &[("name", &step_label(step)), ("summary", &summary)]));
+                        let title = step_label(step);
+                        let label = ui.add(egui::Label::new(RichText::new(title).strong()).truncate().sense(egui::Sense::click()));
                         if label.clicked() {
                             *selection = if chosen { None } else { Some(path.clone()) };
                             if matches!(step.active(),Step::PluginAction { .. }) {
                                 ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.clone()));
                             }
                         }
-                        if label.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_drag"), path.clone())); }
                         if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
                         ui.menu_button("...", |ui| {
                             if ui.button(crate::i18n::tr("Dupliquer")).clicked() { *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path.clone()))); ui.close_menu(); }
@@ -856,6 +856,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], selection
                             }
                         });
                     });
+                    ui.label(RichText::new(named_summary(step, plugins)).small().color(p.muted));
                     let branches: Vec<(&str, &[Step])> = match step.active() {
                         Step::IfCondition { then_steps, else_steps, .. }
                         | Step::IfWindow { then_steps, else_steps, .. }
@@ -868,27 +869,43 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], selection
                         ui.indent(branch, |ui| {
                             ui.label(RichText::new(match label { "RÉPÉTER" => crate::i18n::tr("RÉPÉTER"), "ÉTAT 1" => crate::i18n::tr("ÉTAT 1"), "ÉTAT 2" => crate::i18n::tr("ÉTAT 2"), "ALORS" => crate::i18n::tr("ALORS"), "SINON" => crate::i18n::tr("SINON"), _ => label }).small().color(p.muted));
                             let mut nested = path.clone(); nested.push(branch);
-                            sequence_cards(ui, children, &nested, selection, action, insert_at, config, plugins);
+                            let child_number = if matches!(step.active(), Step::Repeat { .. }) {
+                                format!("{numbering}{}.", i + 1)
+                            } else {
+                                format!("{numbering}{}.{}", i + 1, if branch == 0 { "A" } else { "B" })
+                            };
+                            sequence_cards(ui, children, &nested, &child_number, selection, action, insert_at, config, plugins);
+                            let mut end = nested;
+                            end.push(children.len());
+                            let slot = ui.allocate_response(egui::vec2(ui.available_width(), 14.0), egui::Sense::hover());
+                            workshop_drop_indicator(ui, slot.rect, &end);
                         });
                     }
                 });
-            if frame.response.hovered() && ui.ctx().input(|input| input.pointer.any_released()) {
-                if let Some(from) = ui.ctx().data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))) {
-                    if from != path && from[..from.len() - 1] == path[..path.len() - 1] {
-                        let dest = i;
-                        *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(from, dest)));
-                    }
-                }
-            }
-            if ui.ctx().data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some()
-                && frame.response.hovered() && ui.ctx().input(|input| input.pointer.primary_down()) {
-                let r = frame.response.rect;
-                let y = if ui.ctx().input(|input| input.pointer.hover_pos()).is_some_and(|pos| pos.y > r.center().y) { r.bottom() } else { r.top() };
-                ui.painter().line_segment([egui::pos2(r.left(), y), egui::pos2(r.right(), y)], egui::Stroke::new(2.0_f32, accent()));
-            }
+            let r = frame.response.rect;
+            let top = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, r.min.y + 20.0));
+            workshop_drop_indicator(ui, top, &path);
+            let mut after = path.clone(); *after.last_mut().unwrap() += 1;
+            let bottom = egui::Rect::from_min_max(egui::pos2(r.min.x, r.max.y - 18.0), r.max);
+            workshop_drop_indicator(ui, bottom, &after);
         });
     }
 }
+fn workshop_drop_indicator(ui: &egui::Ui, rect: egui::Rect, at: &[usize]) {
+    let ctx = ui.ctx();
+    let drag = egui::Id::new("workshop_drag");
+    let palette = egui::Id::new("workshop_palette_drag");
+    if ctx.data(|d| d.get_temp::<Vec<usize>>(drag).is_none() && d.get_temp::<usize>(palette).is_none()) { return; }
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return; };
+    if !rect.intersects(ui.clip_rect()) || !rect.contains(pos) || !ui.clip_rect().contains(pos) { return; }
+    let id = egui::Id::new("workshop_drop_at");
+    let previous = ctx.data(|d| d.get_temp::<Vec<usize>>(id));
+    if previous.as_ref().is_some_and(|p| p.len() > at.len()) { return; }
+    ctx.data_mut(|d| d.insert_temp(id, at.to_vec()));
+    let y = rect.center().y;
+    ui.painter().line_segment([egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)], egui::Stroke::new(2.0, accent()));
+}
+
 enum WorkshopAction { Edit(crate::workshop_ops::Edit), Remove(Vec<usize>) }
 impl App {
     pub(super) fn automation_prompt(&self) -> String {
@@ -1009,6 +1026,14 @@ impl App {
         }
         let selection_before = selection.clone();
         let mut action: Option<WorkshopAction> = None;
+        let drop_id = egui::Id::new("workshop_drop_at");
+        ctx.data_mut(|d| d.remove::<Vec<usize>>(drop_id));
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ctx.data_mut(|d| {
+                d.remove::<Vec<usize>>(egui::Id::new("workshop_drag"));
+                d.remove::<usize>(egui::Id::new("workshop_palette_drag"));
+            });
+        }
         let mut insert_at = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_insert_at")));
         if !ctx.wants_keyboard_input() {
             if let Some(path) = selection.clone() {
@@ -1217,7 +1242,7 @@ impl App {
                         });
                         if ui.button(crate::i18n::tr("Demander à l'assistant")).clicked() { self.workshop_chat.open = true; }
                     } else {
-                        sequence_cards(ui, steps, &[], &mut selection, &mut action, &mut insert_at, &validation_config, &installed_plugins);
+                        sequence_cards(ui, steps, &[], "", &mut selection, &mut action, &mut insert_at, &validation_config, &installed_plugins);
                     }
                     ui.menu_button(crate::i18n::tr("+ Ajouter un bloc"), |ui| {
                         for &(category, kinds) in BLOCK_CATEGORIES {
@@ -1277,7 +1302,25 @@ impl App {
             }
         }
         if ctx.input(|i| i.pointer.any_released()) {
-            ctx.data_mut(|d| d.remove::<Vec<usize>>(egui::Id::new("workshop_drag")));
+            let destination = ctx.data(|d| d.get_temp::<Vec<usize>>(drop_id));
+            if let Some(at) = destination {
+                if let Some(from) = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))) {
+                    let copy = ctx.input(|i| i.modifiers.ctrl || i.events.iter().any(|event| matches!(event, egui::Event::PointerButton { pressed: false, modifiers, .. } if modifiers.ctrl)));
+                    if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
+                        crate::workshop_ops::Edit::Drop { from, at, copy }) {
+                        selection = Some(path); changed = true;
+                    }
+                } else if let Some(kind) = ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))) {
+                    if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
+                        crate::workshop_ops::Edit::Insert(at, new_block(kind, &profiles))) {
+                        selection = Some(path); changed = true;
+                    }
+                }
+            }
+            ctx.data_mut(|d| {
+                d.remove::<Vec<usize>>(egui::Id::new("workshop_drag"));
+                d.remove::<usize>(egui::Id::new("workshop_palette_drag"));
+            });
         }
         ctx.data_mut(|d| {
             if let Some(path) = insert_at { d.insert_temp(egui::Id::new("workshop_insert_at"), path); }

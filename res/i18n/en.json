@@ -1053,6 +1053,7 @@
     "Répéter la macro": "Repeat macro",
     "Répéter une séquence de blocs. Cet exemple attend deux fois 250 ms, sans action sur ton PC.": "Repeat a block sequence. This example waits 250 ms twice, without affecting your PC.",
     "Répéter une touche N fois": "Repeat a key N times",
+    "Répéter {count} fois ({blocks} bloc)": "Repeat {count} times ({blocks} block)",
     "Répéter {count} fois ({blocks} blocs)": "Repeat {count} times ({blocks} blocks)",
     "Rétablir": "Redo",
     "Rétablir dans les applications utilisant Ctrl+Y.": "Redo in apps that use Ctrl+Y.",
