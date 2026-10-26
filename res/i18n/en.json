@@ -1179,6 +1179,8 @@
     "Touche {key} · {label}\nGlisse depuis la bibliothèque pour affecter un bind. Glisse une touche sur une autre pour les échanger.": "Key {key} · {label}\nDrag from the library to assign a binding. Drag one key onto another to swap them.",
     "Touche à deux états": "Two-state key",
     "Touches (ex. CTRL+SHIFT+A)": "Keys (e.g. CTRL+SHIFT+A)",
+    "Touches : actives": "Keys: running",
+    "Touches : en pause": "Keys: paused",
     "Toujours au premier plan": "Always on top",
     "Tous les packs": "All packs",
     "Tout": "All",

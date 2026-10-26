@@ -2059,11 +2059,11 @@ impl App {
                             }
                         }
                         let (label, color) = match self.gate.decision() {
-                            Decision::Execute => (tr("Exécution des touches : active"), p.text_primary),
+                            Decision::Execute => (tr("Touches : actives"), p.text_primary),
                             Decision::Inspect => ("Diagnostic", accent()),
                             Decision::Blocked(_) => (
                                 if !self.gate.enabled {
-                                    tr("Exécution des touches : en pause")
+                                    tr("Touches : en pause")
                                 } else if !self.gate.connected {
                                     if self.wanted {
                                         tr("En attente")
@@ -2078,7 +2078,14 @@ impl App {
                                 if self.gate.enabled { p.muted } else { p.warning },
                             ),
                         };
-                        if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
+                        if ctx.screen_rect().width() >= 1200.0 {
+                            let detail = if matches!(self.gate.decision(), Decision::Execute) {
+                                tr("Exécution des touches : active")
+                            } else if !self.gate.enabled {
+                                tr("Exécution des touches : en pause")
+                            } else { label };
+                            ui.label(RichText::new(label).size(12.0).strong().color(color)).on_hover_text(detail);
+                        }
                 });
             });
             });
@@ -2237,11 +2244,11 @@ impl App {
                             }
                         }
                         let (label, color) = match self.gate.decision() {
-                            Decision::Execute => (tr("Exécution des touches : active"), p.text_primary),
+                            Decision::Execute => (tr("Touches : actives"), p.text_primary),
                             Decision::Inspect => ("Diagnostic", accent()),
                             Decision::Blocked(_) => (
                                 if !self.gate.enabled {
-                                    tr("Exécution des touches : en pause")
+                                    tr("Touches : en pause")
                                 } else if !self.gate.connected {
                                     if self.wanted {
                                         tr("En attente")
@@ -2256,7 +2263,14 @@ impl App {
                                 if self.gate.enabled { p.muted } else { p.warning },
                             ),
                         };
-                        if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
+                        if ctx.screen_rect().width() >= 1200.0 {
+                            let detail = if matches!(self.gate.decision(), Decision::Execute) {
+                                tr("Exécution des touches : active")
+                            } else if !self.gate.enabled {
+                                tr("Exécution des touches : en pause")
+                            } else { label };
+                            ui.label(RichText::new(label).size(12.0).strong().color(color)).on_hover_text(detail);
+                        }
                     });
                 });
             });
@@ -2997,7 +3011,7 @@ impl App {
     fn editor(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
         let running = self.engine.running.load(Ordering::SeqCst);
-        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.43).clamp(190.0,290.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.55).clamp(300.0,430.0)}else{380.0}).height_range(160.0..=(ctx.screen_rect().height()*0.68).max(180.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
+        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else{320.0}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
             let tab_id = egui::Id::new("inspector_tab");
             let mut tab = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id));
             let configured = { let k = &self.config.keys()[self.selected]; !k.steps.is_empty() || !k.long_steps.is_empty() || k.plugin.is_some() };
