@@ -4,7 +4,7 @@ const target = process.argv[2] || "http://127.0.0.1:8767/NovyDeck/";
 const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
 const report = [];
 let failed = false;
-for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844]]) {
+for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844], ["narrow", 320, 700]]) {
   const page = await browser.newPage({ viewport: { width, height } });
   const problems = [];
   page.on("pageerror", error => problems.push(`JS: ${error.message}`));
@@ -21,10 +21,19 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       await page.locator(`#${id}`).scrollIntoViewIfNeeded();
       await page.waitForTimeout(100);
     }
+    await page.getByRole("tab", { name: /04.*Atelier 0\.14/ }).click();
+    const workshop = page.locator("#showcase [role=tabpanel][data-state=active]");
+    const fullImage = workshop.getByRole("link", { name: /Agrandir la capture/ });
+    if (!(await fullImage.getAttribute("href"))?.includes("v014-workshop-fr.webp")) problems.push("Workshop full-size image link missing");
+    if (!(await workshop.locator("img").evaluate(img => img.complete && img.naturalWidth > 0))) problems.push("Workshop screenshot failed to load");
+    await page.getByRole("tab", { name: /05.*Quoi de neuf/ }).click();
+    if (!(await page.locator("#showcase [role=tabpanel][data-state=active] a[href*='v014-update-fr.webp']").count())) problems.push("Update offer image link missing");
     await page.getByRole("tab", { name: /02.*États ON/ }).click();
     await page.getByRole("button", { name: "Clair" }).click();
     await page.getByRole("button", { name: /Switch to English/ }).click();
     if (await page.locator("html").getAttribute("lang") !== "en") problems.push("Language toggle failed");
+    await page.getByRole("tab", { name: /04.*Workshop 0\.14/ }).click();
+    if (!(await page.locator("#showcase [role=tabpanel][data-state=active] a[href*='v014-workshop-en.webp']").count())) problems.push("English workshop image link missing");
     const info = await page.evaluate(() => ({
       title: document.title,
       width: innerWidth,
@@ -32,7 +41,7 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       brokenImages: [...document.images].filter(i => i.complete && !i.naturalWidth).map(i => i.src),
       displayFont: getComputedStyle(document.querySelector("h1")).fontFamily,
       loadedFonts: [...document.fonts].filter(f => f.status === "loaded").map(f => f.family),
-      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.11.1-Setup.exe")),
+      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.14.0-Setup.exe")),
     }));
     if (info.overflow) problems.push("Horizontal overflow");
     if (info.brokenImages.length) problems.push(`Broken images: ${info.brokenImages.join(", ")}`);

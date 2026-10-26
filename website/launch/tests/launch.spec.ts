@@ -21,13 +21,19 @@ test("desktop: sections, media, interactions, download", async ({ page }) => {
   await page.getByRole("tab", { name: /02.*États ON/ }).click();
   await expect(page.getByRole("heading", { name: "Le bon état, au bon moment." })).toBeVisible();
   await expect(page.getByRole("tab", { name: /02.*États ON/ })).toHaveAttribute("data-state", "active");
+  await page.getByRole("tab", { name: /04.*Atelier 0\.14/ }).click();
+  await expect(page.getByRole("img", { name: /Capture française de l’Atelier 0\.14/ })).toBeVisible();
+  await page.screenshot({ path: output("workshop-014-desktop") });
+  await page.getByRole("tab", { name: /05.*Quoi de neuf/ }).click();
+  await expect(page.getByRole("link", { name: /offre de mise à jour 0\.13/ })).toHaveAttribute("href", /v014-update-fr\.webp/);
+  await page.screenshot({ path: output("whats-new-014-desktop") });
   await page.getByRole("button", { name: "Clair" }).click();
   await expect(page.getByRole("img", { name: "Interface NovyDeck en thème clair" })).toBeVisible();
   await page.locator("#workflow").scrollIntoViewIfNeeded();
   await page.screenshot({ path: output("workflow-desktop") });
   await expect(page.locator(".flow-step")).toHaveCount(5);
-  const href = await page.getByRole("link", { name: "Installateur Windows v0.11.1" }).getAttribute("href");
-  expect(href).toContain("v0.11.1/NovyDeck-0.11.1-Setup.exe");
+  const href = await page.getByRole("link", { name: "Installateur Windows v0.14.0" }).getAttribute("href");
+  expect(href).toContain("v0.14.0/NovyDeck-0.14.0-Setup.exe");
   for (const section of ["assistant", "plugins", "integrations", "film", "download"]) {
     await page.locator(`#${section}`).scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
