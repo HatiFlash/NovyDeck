@@ -26,15 +26,21 @@ Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé 
 
 ### Modification directe des blocs dans l'Atelier
 
-Faites glisser un bloc par sa poignée pour le réordonner ou l'imbriquer dans une branche. Maintenez **Ctrl** pendant le glissement pour le dupliquer ; appuyez sur **Échap** pour annuler. **Annuler** et **Rétablir** couvrent les modifications, et le défilement automatique suit le glissement près du bord d'un panneau. Modifiez le bloc sélectionné dans le panneau **Propriétés**.
+Ouvrez une touche, puis **Atelier → Simple**. Faites glisser un bloc par sa poignée pour le réordonner ou l'imbriquer dans **Alors**, **Sinon** ou **Répéter**. Maintenez **Ctrl** pour dupliquer pendant le glissement ; **Échap** l'annule. **Annuler** et **Rétablir** couvrent les modifications, et la liste défile automatiquement près de ses bords. Cliquez sur un bloc pour le modifier dans le panneau **Propriétés**.
+
+![Atelier en mode Simple avec bibliothèque de blocs et branches Alors/Sinon, capture française hors écran du laboratoire Windows](docs/images/v014-workshop-fr.png)
 
 ### Cartes Quoi de neuf actualisées et progression honnête
 
-La fenêtre de mise à jour présente des cartes actualisées des changements disponibles. La progression du téléchargement et de l'installation reste indéterminée si l'opération ne fournit pas de mesure numérique fiable ; NovyDeck n'affiche pas de pourcentage estimé.
+Dans **Réglages → À propos**, vérifiez les mises à jour. L'offre et la fenêtre **Quoi de neuf** présentent les nouveautés sous forme de cartes. La fenêtre d'installation distingue Téléchargement, Vérification SHA-256, Installation et Relance. Si le nombre d'octets reçus n'est pas disponible, la progression reste indéterminée : aucun pourcentage n'est inventé.
+
+| Offre de mise à jour | Quoi de neuf |
+| --- | --- |
+| ![Offre 0.13.0 vers 0.14.0, capture française hors ligne](docs/images/v014-update-fr.png) | ![Nouveautés 0.14.0, capture française hors écran](docs/images/v014-whats-new-fr.png) |
 
 ### Assistant et actions des plugins installés
 
-L'assistant local peut proposer les actions présentes dans les manifestes des plugins installés. Cela ne signifie pas qu'il comprend tous les plugins : les comportements et réglages non documentés ne peuvent pas être déduits, et les propositions restent à relire et à confirmer.
+Dans **Atelier → Assistant**, décrivez l'action voulue. L'assistant local cherche dans les manifestes des plugins installés et demande une précision si le plugin, l'action ou la cible est ambiguë. Il n'invente pas les réglages privés d'un inspecteur tiers : renseignez-les dans l'inspecteur du plugin. Cela ne garantit pas la compréhension de toute demande ; aucun bloc n'est inséré sans relecture et application de la proposition. Un modèle IA local est nécessaire pour les demandes au-delà des règles intégrées.
 
 ## Nouveautés 0.13.0
 

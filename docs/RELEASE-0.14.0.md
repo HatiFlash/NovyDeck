@@ -14,7 +14,7 @@
 
 ## Qualification
 
-These sections describe 0.14.0. Available UI captures predate the version bump and are deliberately not embedded; regenerate and review final-version English and French captures before release.
+The English and French README sections include actual off-screen Windows-lab captures generated for 0.14.0. Automated UI gestures and the Windows CI passed before publication; these are not tests on Hatim's PC, a physical D6, a real third-party plugin installation/account, or an installed local AI model. Profiles and media are preserved by the existing updater; plugin packages are updated separately.
 
-Ces sections décrivent la version 0.14.0. Les captures UI disponibles précèdent la mise à jour de version et ne sont volontairement pas intégrées ; régénérer et relire les captures finales en français et en anglais avant la release.
+Les sections anglaise et française des README comprennent de vraies captures hors écran du laboratoire Windows générées pour 0.14.0. Les gestes UI automatisés et la CI Windows ont été testés avant publication ; il ne s'agit pas d'essais sur le PC de Hatim, un D6 physique, une installation ou un compte de plugin tiers réel, ni un modèle IA local installé. Le mécanisme existant de mise à jour préserve les profils et les médias ; les paquets de plugins se mettent à jour séparément.
 

@@ -26,15 +26,21 @@ A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Re
 
 ### Direct block editing in the Workshop
 
-Drag a block by its handle to reorder it or nest it in a branch. Hold **Ctrl** while dragging to duplicate it; press **Esc** to cancel. **Undo** and **Redo** cover edits, and dragging near a panel edge autoscrolls. Edit the selected block in the **Properties** panel.
+Open a key, then choose **Workshop → Simple**. Drag a block by its handle to reorder it or nest it in a **Then**, **Else** or **Repeat** branch. Hold **Ctrl** while dragging to duplicate it; press **Esc** to cancel. **Undo** and **Redo** cover edits, and dragging near a panel edge autoscrolls. Click a block to edit it in the **Properties** panel.
+
+![Workshop blocks and Properties panel in the English UI, with French sample data from the test fixture](docs/images/v014-workshop-en.png)
 
 ### Refreshed What's new cards and honest progress
 
-The update window presents refreshed cards for the available changes. Download and installation progress is indeterminate when the operation provides no reliable numeric measurement; NovyDeck does not display a guessed percentage.
+From **Settings → About**, check for updates. The update offer and **What's new** window present the release notes in readable cards; the install dialog separates download, SHA-256 verification, installation and relaunch. Progress remains indeterminate when no reliable byte count is available—NovyDeck never displays a guessed percentage.
+
+| Update offer | What's new |
+| --- | --- |
+| ![0.13.0 to 0.14.0 update offer, English offline fixture](docs/images/v014-update-en.png) | ![0.14.0 release notes, English off-screen capture](docs/images/v014-whats-new-en.png) |
 
 ### Assistant and installed plugin actions
 
-The local assistant can propose actions present in the manifests of installed plugins. This is not universal plugin comprehension: undocumented behavior or settings cannot be inferred, and suggestions remain subject to review and confirmation.
+In **Workshop → Assistant**, describe the action you want. The local assistant uses installed plugin manifests to identify actions and asks which plugin, action or target you mean when the request is ambiguous. It refuses to invent private inspector settings; configure those in the plugin's own inspector. This is not universal plugin comprehension, and no block is inserted until you review and apply the proposal. A local AI model is needed for requests beyond the built-in rules.
 
 ## What's new in 0.13.0
 
