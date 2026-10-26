@@ -3313,10 +3313,12 @@ impl App {
                                 ui.label(RichText::new(tr("Étapes supplémentaires hors ON/OFF : elles s'exécutent à chaque appui.")).color(theme::WARNING));
                             }
                             if let Step::Toggle { a, b } = &mut key.steps[index] {
-                                egui::ScrollArea::vertical().id_salt("onoff_actions").auto_shrink([false, false]).max_height((body_height - 50.0).max(90.0)).show(ui, |ui| {
+                                ui.columns(2, |columns| {
                                     for (branch, steps, title) in [(0, a, tr("Action 1")), (1, b, tr("Action 2"))] {
-                                        ui.push_id(("onoff", branch), |ui| {
-                                            changed |= onoff_branch_ui(ui, steps, title, branch, index, &names, &pages, &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]), &mut record_step, &mut pick_audio, &mut removed_step);
+                                        columns[branch].push_id(("onoff", branch), |ui| {
+                                            egui::ScrollArea::vertical().id_salt("branch_scroll").auto_shrink([false, false]).max_height((body_height - 50.0).max(90.0)).show(ui, |ui| {
+                                                changed |= onoff_branch_ui(ui, steps, title, branch, index, &names, &pages, &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]), &mut record_step, &mut pick_audio, &mut removed_step);
+                                            });
                                         });
                                     }
                                 });
