@@ -3298,10 +3298,64 @@ impl App {
                         });
                         return;
                     }
+                    let mut enable_onoff = false;
+                    if !long_editor {
+                        if let Some(index) = key.steps.iter().position(|s| matches!(s, Step::Toggle { .. })) {
+                            ui.label(RichText::new(tr("Actions ON/OFF · premier appui : Action 1, deuxième appui : Action 2")).strong());
+                            if key.steps.len() > 1 {
+                                ui.label(RichText::new(tr("Étapes supplémentaires hors ON/OFF : elles s'exécutent à chaque appui.")).color(theme::WARNING));
+                            }
+                            let mut branch_edit = None;
+                            let mut edited_branch = 0;
+                            if let Step::Toggle { a, b } = &mut key.steps[index] {
+                                let tab_id = ui.id().with("onoff_action_tab");
+                                let mut branch = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id)).min(1);
+                                ui.horizontal(|ui| {
+                                    for (choice, title) in [(0, tr("Action 1")), (1, tr("Action 2"))] {
+                                        if theme::segmented(ui, branch == choice, title).clicked() { branch = choice; }
+                                    }
+                                });
+                                ui.ctx().data_mut(|d| d.insert_persisted(tab_id, branch));
+                                edited_branch = branch as usize;
+                                let (steps, title) = if branch == 0 { (a, tr("Action 1")) } else { (b, tr("Action 2")) };
+                                egui::ScrollArea::vertical().id_salt(("onoff_branch_scroll", branch))
+                                    .auto_shrink([false, false]).max_height((body_height - 64.0).max(80.0)).show(ui, |ui| {
+                                        changed |= onoff_branch_ui(ui, steps, title, edited_branch, index, &names, &pages,
+                                            &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]),
+                                            &mut record_step, &mut pick_audio, &mut removed_step, &mut branch_edit);
+                                    });
+                            }
+                            if let (Some(edit), Some(crate::model::PluginStateTarget::Block { path })) = (branch_edit, &mut key.plugin_state) {
+                                if path.len() >= 3 && path[0] == index && path[1] == edited_branch {
+                                    let clear = match edit {
+                                        OnOffBranchEdit::Remove(i) => {
+                                            let selected_source = path[2] == i;
+                                            if path[2] > i { path[2] -= 1; }
+                                            selected_source
+                                        }
+                                        OnOffBranchEdit::Replace(i) => path[2] == i,
+                                    };
+                                    if clear { key.plugin_state = None; }
+                                }
+                            }
+                        }
+                    }
+                    if long_editor || !(key.steps.len() == 1 && matches!(key.steps[0], Step::Toggle { .. })) {
+                    let has_plugin = key.plugin.is_some();
+                    let has_toggle = key.steps.iter().any(|step| matches!(step, Step::Toggle { .. }));
+                    let has_navigation = key.steps.iter().any(|step| matches!(step.active(),
+                        Step::Page { .. } | Step::Folder { .. } | Step::Back | Step::PageNext |
+                        Step::PagePrevious | Step::Profile { .. }));
                     let steps = if long_editor { &mut key.long_steps } else { &mut key.steps };
                     if long_editor { ui.label(RichText::new(tr("L’atelier de blocs modifie uniquement l’appui court. Pour un fichier, renseigne son chemin dans l’action.")).small().color(p.muted)); }
                     ui.horizontal(|ui|{
                         ui.label(RichText::new(trf("Actions · {steps} étape(s)", &[("steps", &steps.len())])).strong());
+                        if !long_editor {
+                            if ui.add_enabled(!has_plugin && !has_toggle && !has_navigation, egui::Button::new(tr("Actions ON/OFF")))
+                                .on_hover_text(if has_navigation { tr("La navigation ne peut pas être placée dans une action ON/OFF.") } else { tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.") }).clicked() {
+                                enable_onoff = true;
+                            }
+                        }
                         iconset::menu(ui, Ico::Add, tr("Ajouter"), |ui| {
                             let available = (ui.ctx().screen_rect().height() - 64.0).max(160.0);
                             egui::ScrollArea::vertical().id_salt("key_add_action_menu")
@@ -3333,17 +3387,28 @@ impl App {
                                     });
                                 });
                                 if matches!(step,Step::AutoHotkey{..}) {ui.label(RichText::new(tr("Pas besoin d’écrire du code : compose tes actions dans l’Atelier de blocs")).small().color(p.muted));if ui.button(tr("Ouvrir l’Atelier de blocs")).clicked(){open_workflow=true;}}
-                                let mut record=false;let mut audio_icon=None;changed|=edit_step(ui,step,&names,&pages,&mut record,&self.audio,&mut audio_icon,&dialog_tx,&(active,page_id.clone(),selected,vec![i]));if let Some(state)=audio_icon{pick_audio=Some((vec![i],state));}if record && !long_editor {record_step=Some(i);}
+                                let mut record=false;let mut audio_icon=None;changed|=edit_step(ui,step,&names,&pages,&mut record,&self.audio,&mut audio_icon,&dialog_tx,&(active,page_id.clone(),selected,vec![i]));if let Some(state)=audio_icon{pick_audio=Some((vec![i],state));}if record && !long_editor {record_step=Some(vec![i]);}
                             });
                         });}
                     });
                     if let Some(i)=remove{steps.remove(i);changed=true;removed_step=true;}if let Some((a,b))=movement{steps.swap(a,b);changed=true;}
+                    }
+                    if enable_onoff {
+                        let original = std::mem::take(&mut key.steps);
+                        key.steps.push(Step::Toggle { a: original, b: Vec::new() });
+                        if let Some(crate::model::PluginStateTarget::Block { path }) = &mut key.plugin_state {
+                            let mut wrapped = vec![0, 0];
+                            wrapped.extend(path.iter().copied());
+                            *path = wrapped;
+                        }
+                        changed = true;
+                    }
                 });
             });
             match advanced { Some(0)=>self.copy_key(), Some(1)=>self.paste_key(self.selected), Some(2)=>self.duplicate_key(self.selected), _=>{} }
             if open_workflow || open_model || open_assistant { self.show_workflow = true; }
             if open_assistant { self.workshop_chat.open = true; self.pending_chat_focus = true; }
-            if let Some(step)=record_step {self.recording=Some((active,self.config.page.clone(),self.selected,vec![step],self.gate.enabled));self.recording_error.clear();self.gate.enabled=false;self.engine.stop();self.refresh_hotkeys();}
+            if let Some(path)=record_step {self.recording=Some((active,self.config.page.clone(),self.selected,path,self.gate.enabled));self.recording_error.clear();self.gate.enabled=false;self.engine.stop();self.refresh_hotkeys();}
             if changed {self.edited(); if removed_step {self.log(tr("Étape retirée — Ctrl+Z pour annuler").into());}}
             if open_icons{self.open_icon_gallery(None);}
             if recrop {
@@ -5090,6 +5155,71 @@ fn condition_operator(ui: &mut egui::Ui, op: &mut String) -> bool {
     });
     changed
 }
+// This editor changes only the selected branch; other root steps and the other branch stay intact.
+enum OnOffBranchEdit { Remove(usize), Replace(usize) }
+#[allow(clippy::too_many_arguments)]
+fn onoff_branch_ui(
+    ui: &mut egui::Ui, steps: &mut Vec<Step>, title: &str, branch: usize, root: usize,
+    profiles: &[String], pages: &[crate::model::Page], audio: &crate::audio::Snapshot,
+    tx: &Sender<Option<DialogEffect>>, target: &StepTarget,
+    record_step: &mut Option<Vec<usize>>, pick_audio: &mut Option<(Vec<usize>, usize)>,
+    removed_step: &mut bool, branch_edit: &mut Option<OnOffBranchEdit>,
+) -> bool {
+    let mut changed = false;
+    ui.separator();
+    let mut addition = None;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).strong());
+        if steps.is_empty() && ui.button(tr("Raccourci clavier")).clicked() {
+            steps.extend(catalog::action(0, &profiles[target.0]).steps);
+            changed = true;
+        }
+        let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
+        ui.menu_button(caption, |ui| {
+            egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+                for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                    if (7..=12).contains(&kind) || kind == 36 { continue; } // Navigation must remain a root action; nested toggles need the workshop.
+                    if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&catalog::action(kind, &profiles[target.0]).steps[0]), tr(*label))).clicked() {
+                        addition = Some(kind);
+                        ui.close_menu();
+                    }
+                }
+            });
+        });
+    });
+    let mut removal = None;
+    let mut replacement = None;
+    for (i, step) in steps.iter_mut().enumerate() {
+        ui.push_id(i, |ui| {
+            egui::Frame::new().fill(theme::palette(ui.ctx()).raised).corner_radius(8).inner_margin(6).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(tr(step.name()));
+                    if ui.small_button(tr("Retirer")).clicked() { removal = Some(i); }
+                    ui.menu_button(tr("Remplacer"), |ui| {
+                        egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+                            for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                                if (7..=12).contains(&kind) || kind == 36 { continue; }
+                                if ui.button(tr(*label)).clicked() { replacement = Some((i, kind)); ui.close_menu(); }
+                            }
+                        });
+                    });
+                });
+                let mut record = false;
+                let mut audio_icon = None;
+                let path = vec![root, branch, i];
+                changed |= edit_step(ui, step, profiles, pages, &mut record, audio, &mut audio_icon, tx,
+                    &(target.0, target.1.clone(), target.2, path.clone()));
+                if record { *record_step = Some(path.clone()); }
+                if let Some(icon) = audio_icon { *pick_audio = Some((path, icon)); }
+            });
+        });
+    }
+    if let Some(i) = removal { steps.remove(i); *branch_edit = Some(OnOffBranchEdit::Remove(i)); *removed_step = true; changed = true; }
+    if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, &profiles[target.0]).steps); *branch_edit = Some(OnOffBranchEdit::Replace(i)); changed = true; }
+    if let Some(kind) = addition { steps.extend(catalog::action(kind, &profiles[target.0]).steps); changed = true; }
+    changed
+}
+
 #[allow(clippy::too_many_arguments)] // UI editor must carry the stable dialog destination through nested steps.
 fn edit_step(
     ui: &mut egui::Ui,

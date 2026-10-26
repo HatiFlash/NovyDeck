@@ -7,6 +7,56 @@ fn workshop() -> (Harness, egui::Vec2) {
     (h, egui::vec2(1366.0, 768.0))
 }
 
+#[test]
+fn nested_block_menu_opens_and_removes_only_that_branch_child() {
+    let (mut h, size) = workshop();
+    h.app.config.keys_mut()[0].steps = vec![Step::Toggle {
+        a: vec![Step::Delay { ms: 111 }, Step::Delay { ms: 112 }],
+        b: vec![Step::Delay { ms: 222 }],
+    }, Step::Delay { ms: 333 }];
+    let output = h.warm(size);
+    let nested = text_position(&output.shapes, "1.A1").expect("visible first branch child");
+    // Several cards have a "..." button. Click the one on the child's row,
+    // not the first one painted (which belongs to the parent Toggle).
+    fn find_menus(shape: &egui::Shape, clip: egui::Rect, out: &mut Vec<egui::Pos2>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.job.text == "..." => {
+                let pos = t.pos + t.galley.size() * 0.5;
+                if clip.contains(pos) { out.push(pos); }
+            }
+            egui::Shape::Vec(shapes) => {
+                for shape in shapes { find_menus(shape, clip, out); }
+            }
+            _ => {}
+        }
+    }
+    let mut menus = Vec::new();
+    for shape in &output.shapes { find_menus(&shape.shape, shape.clip_rect, &mut menus); }
+    let menu = menus.into_iter().find(|p| (p.y - nested.y).abs() < 12.0)
+        .expect("visible child menu on first branch row");
+    h.click(size, menu);
+    let output = h.warm(size);
+    assert!(text_position(&output.shapes, crate::i18n::tr("Supprimer")).is_some(), "nested menu did not open");
+    let remove = text_position(&output.shapes, crate::i18n::tr("Supprimer")).unwrap();
+    h.click(size, remove);
+    assert!(matches!(&h.app.config.keys()[0].steps[0], Step::Toggle { a, b } if a.len() == 1 && matches!(a[0], Step::Delay { ms: 112 }) && b == &vec![Step::Delay { ms: 222 }]));
+    assert!(matches!(h.app.config.keys()[0].steps[1], Step::Delay { ms: 333 }));
+}
+
+#[test]
+fn root_block_menu_opens_and_removes_only_selected_block() {
+    let (mut h, size) = workshop();
+    h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 111 }, Step::Delay { ms: 222 }];
+    let output = h.warm(size);
+    let menu = text_position(&output.shapes, "...").expect("visible root menu button");
+    h.click(size, menu);
+    let output = h.warm(size);
+    let remove = text_position(&output.shapes, crate::i18n::tr("Supprimer"))
+        .expect("root menu opened");
+    h.click(size, remove);
+    assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::Delay { ms: 222 }]));
+}
+
 fn drag(h: &mut Harness, size: egui::Vec2, from: egui::Pos2, to: egui::Pos2, ctrl: bool) -> egui::FullOutput {
     let mods = egui::Modifiers { ctrl, ..Default::default() };
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: mods };

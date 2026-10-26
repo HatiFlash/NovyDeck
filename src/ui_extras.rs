@@ -822,6 +822,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                 crate::model::validate_key(&Key { steps: vec![step.clone()], ..Key::default() }, config).err()
             };
             let mut card_body_bottom = 0.0;
+            let mut title_clicked = false;
             let mut handle_rect = egui::Rect::NOTHING;
             let mut menu_rect = egui::Rect::NOTHING;
             let frame = egui::Frame::new().fill(p.surface)
@@ -839,7 +840,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                         ui.colored_label(color, format!("{numbering}{}", i + 1));
                         let summary = named_summary(step, plugins);
                         let title = step_label(step);
-                        ui.add(egui::Label::new(RichText::new(title).strong()).truncate());
+                        title_clicked = ui.add(egui::Label::new(RichText::new(title).strong()).truncate().sense(egui::Sense::click())).clicked();
                         if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
                         let menu = ui.menu_button("...", |ui| {
                             if ui.button(crate::i18n::tr("Dupliquer")).clicked() { *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path.clone()))); ui.close_menu(); }
@@ -887,11 +888,18 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     }
                 });
             let r = frame.response.rect;
-            let body = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, (card_body_bottom + 9.0).min(r.max.y)));
+            // Register card selection only on its summary, below the header controls.
+            // A later full-width click target would sit on top of the menu button and
+            // drag handle in egui's hit test, so the "..." could never open.
+            let summary_bottom = (card_body_bottom + 9.0).min(r.max.y);
+            let body = egui::Rect::from_min_max(
+                egui::pos2(r.min.x, menu_rect.bottom().min(summary_bottom)),
+                egui::pos2(r.max.x, summary_bottom),
+            );
             let card = ui.interact(body, ui.id().with("workshop_card"), egui::Sense::click())
                 .on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.",
                     &[("name", &step_label(step)), ("summary", &named_summary(step, plugins))]));
-            if card.clicked() && card.interact_pointer_pos().is_some_and(|pos| !handle_rect.contains(pos) && !menu_rect.contains(pos)) {
+            if (title_clicked || card.clicked()) && card.interact_pointer_pos().or_else(|| ui.ctx().input(|i| i.pointer.interact_pos())).is_some_and(|pos| !handle_rect.contains(pos) && !menu_rect.contains(pos)) {
                 *selection = if chosen { None } else { Some(path.clone()) };
                 if matches!(step.active(), Step::PluginAction { .. }) {
                     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("plugin_block_open"), path.clone()));
