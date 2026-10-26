@@ -99,6 +99,25 @@ fn onoff_branch_removal_rebases_and_clears_plugin_state_target() {
 }
 
 #[test]
+fn onoff_second_action_can_be_chosen_from_main_catalog_menu() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.config.keys_mut()[0].steps = vec![Step::Toggle {
+        a: vec![Step::Hotkey { keys: "F9".into() }], b: vec![],
+    }];
+    let output = h.warm(size);
+    h.click(size, text_position(&output.shapes, "Action 2").expect("second action tab"));
+    let output = h.warm(size);
+    h.click(size, text_position(&output.shapes, "Ajouter à Action 2").expect("main action picker"));
+    let output = h.warm(size);
+    h.click(size, text_position(&output.shapes, "Attendre").expect("delay action in picker"));
+    assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }]
+        if matches!(&a[..], [Step::Hotkey { keys }] if keys == "F9")
+        && matches!(&b[..], [Step::Delay { .. }])));
+    assert!(!h.app.show_workflow);
+}
+
+#[test]
 fn onoff_existing_branches_and_extra_steps_are_not_silently_lost() {
     let mut h = Harness::new();
     let size = vec2(1366.0, 768.0);
