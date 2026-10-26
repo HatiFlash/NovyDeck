@@ -344,7 +344,9 @@ fn palette(ui: &mut egui::Ui, search: &str, depth: usize, advanced: bool, keyboa
                         let entry = ui.add(egui::Button::new(label).frame(false).sense(egui::Sense::click_and_drag()))
                             .on_hover_text(block_help(kind));
                         if entry.clicked() { selected = Some(kind); }
-                        if entry.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_drag"), kind)); }
+                        if entry.drag_started() || entry.is_pointer_button_down_on() {
+                            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_drag"), kind));
+                        }
                         index += 1;
                     });
                 }
