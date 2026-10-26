@@ -20,7 +20,35 @@ fn update_notes_parse_language_bullets_bold_headings_and_links() {
     assert!(matches!(&fr[1], NoteBlock::Bullet { title, body } if title == "Installation rapide" && body == "Consultez et plugins."));
     assert!(!format!("{fr:?}").contains("http") && !format!("{fr:?}").contains("**"));
     let en = parse_notes(raw, "en");
-    assert!(matches!(&en[1], NoteBlock::Bullet { title, body } if title == "Fast setup:" && body == "Read more and plugins."));
+    assert!(matches!(&en[1], NoteBlock::Bullet { title, body } if title == "Fast setup" && body == "Read more and plugins."));
+}
+
+#[test]
+fn update_installation_uses_dedicated_dialog_without_duplicate_or_missing_glyphs() {
+    fn texts(shape: &egui::Shape, result: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(text) => result.push(text.galley.job.text.clone()),
+            egui::Shape::Vec(shapes) => for shape in shapes { texts(shape, result); },
+            _ => {}
+        }
+    }
+    for (physical, dpi) in [(vec2(1000.0, 700.0), 1.0), (vec2(1366.0, 768.0), 1.0), (vec2(1920.0, 1080.0), 1.5)] {
+        for lang in ["fr", "en"] {
+            let size = physical / dpi;
+            let mut h = Harness::new();
+            h.ctx.set_pixels_per_point(dpi);
+            crate::i18n::set_language(lang);
+            h.app.show_about = true;
+            h.app.update_phase = Some(tr("Téléchargement…"));
+            let shown = h.warm(size);
+            let mut all = Vec::new();
+            for clipped in &shown.shapes { texts(&clipped.shape, &mut all); }
+            assert!(!all.iter().any(|s| s.contains('□') || s.contains('✦')), "missing icon in {lang}: {all:?}");
+            assert_eq!(all.iter().filter(|s| s.as_str() == tr("Téléchargement…")).count(), 1, "duplicate progress: {all:?}");
+            assert!(text_position(&shown.shapes, tr("Téléchargement → Vérification → Installation → Relance")).is_none(), "old progress glyph");
+            assert!(text_position(&shown.shapes, tr("Vérifier les mises à jour")).is_none(), "about behind operation");
+        }
+    }
 }
 
 #[test]
