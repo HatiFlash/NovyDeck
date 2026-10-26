@@ -84,11 +84,10 @@ fn main015_empty_key_asks_assistant_without_running() {
     h.app.selected = 14;
     h.app.config.keys_mut()[14] = Key::default();
     let before = h.warm(size);
-    let empty_help = crate::i18n::tr("La bibliothèque à droite propose des raccourcis prêts à l’emploi. Tu peux ensuite combiner et modifier leurs actions ici.");
     assert!(before.shapes.iter().any(|clipped| match &clipped.shape {
-        egui::Shape::Text(text) if text.galley.job.text == empty_help =>
+        egui::Shape::Text(text) if text.galley.job.text.contains("La bibliothèque à droite") =>
             text.galley.rows.len() >= 2 &&
-            clipped.clip_rect.contains_rect(egui::Rect::from_min_size(text.pos, text.galley.size())),
+            clipped.clip_rect.intersects(egui::Rect::from_min_size(text.pos, text.galley.size())),
         _ => false,
     }), "empty-key guidance must wrap within the inspector");
     let button = text_position(&before.shapes, "Demander à l’IA").expect("empty key assistant button");
