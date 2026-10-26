@@ -181,9 +181,8 @@ fn jpeg_with_options(k: &crate::model::Key, size: u32, font: &FontArc, frame: Op
         } else {
             size as f32 - height * lines.len() as f32 - 4.0
         };
-        if !k.image.is_empty() {
-            // Dégradé sous le titre plutôt qu'un bandeau noir opaque : l'image reste visible
-            // et le texte lisible (ombre portée ci-dessous).
+        if !k.image.is_empty() && k.label_overlay {
+            // Dégradé sous le titre, si demandé.
             let ramp = (height * 0.8).max(4.0);
             let start = (y0 - ramp).max(0.0);
             for y in (start as u32)..size {
@@ -197,7 +196,7 @@ fn jpeg_with_options(k: &crate::model::Key, size: u32, font: &FontArc, frame: Op
                 }
             }
         }
-        let shadow = !k.image.is_empty();
+        let shadow = !k.image.is_empty() && k.label_overlay;
         for (line_idx, line) in lines.iter().enumerate() {
             let width: f32 = line
                 .chars()

@@ -3141,6 +3141,7 @@ impl App {
                             changed |= ui.add(egui::Slider::new(&mut key.title_size, 10..=20).show_value(false)).changed();
                             ui.label(format!("{} px", key.title_size));
                         });
+                        changed |= ui.checkbox(&mut key.label_overlay, tr("Fond et ombre derrière le titre")).changed();
                         changed|=appearance::color(ui,key);
                         ui.add_space(10.0);
                         ui.separator();

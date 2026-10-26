@@ -537,6 +537,7 @@
     "Fichier introuvable": "File not found",
     "Fichier original préservé": "Original file preserved",
     "Fichier…": "File…",
+    "Fond et ombre derrière le titre": "Background and shadow behind the title",
     "Format d'image non reconnu ({error})": "Unrecognized image format ({error})",
     "Format final : {size}x{size} px": "Final size: {size}x{size} px",
     "GIF trop grand : réduction automatique à 256 px.": "GIF too large: automatically reducing to 256 px.",

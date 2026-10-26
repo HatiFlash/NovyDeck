@@ -417,6 +417,8 @@ pub struct Key {
     pub color: [u8; 3],
     #[serde(default = "default_background")]
     pub background: bool,
+    #[serde(default = "default_background", skip_serializing_if = "is_true")]
+    pub label_overlay: bool,
     pub image: String,
     pub repeat: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -450,6 +452,7 @@ impl Default for Key {
             label: String::new(),
             color: [35, 44, 60],
             background: true,
+            label_overlay: true,
             image: String::new(),
             repeat: 1,
             run_mode: None,
@@ -527,6 +530,7 @@ fn default_icon_scale() -> u8 { 100 }
 fn is_default_icon_scale(value: &u8) -> bool { *value == 100 }
 fn default_title_size() -> u8 { 14 }
 fn is_default_title_size(value: &u8) -> bool { *value == 14 }
+fn is_true(value: &bool) -> bool { *value }
 fn default_background() -> bool {
     true
 }
