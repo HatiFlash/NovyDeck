@@ -24,6 +24,21 @@ fn update_notes_parse_language_bullets_bold_headings_and_links() {
 }
 
 #[test]
+fn update_operation_marks_the_failed_phase_and_completed_steps() {
+    use super::update_ui::{step_state, StepState};
+    for (phase, expected) in [
+        (Some(tr("Téléchargement…")), [StepState::Failed, StepState::Waiting, StepState::Waiting, StepState::Waiting]),
+        (Some(tr("Vérification…")), [StepState::Done, StepState::Failed, StepState::Waiting, StepState::Waiting]),
+        (Some(tr("Installation…")), [StepState::Done, StepState::Done, StepState::Failed, StepState::Waiting]),
+    ] {
+        for (index, state) in expected.into_iter().enumerate() {
+            assert_eq!(step_state(index, phase, true), state, "phase {phase:?} index {index}");
+        }
+    }
+    assert_eq!(step_state(0, Some(tr("Téléchargement…")), false), StepState::Active);
+}
+
+#[test]
 fn update_installation_uses_dedicated_dialog_without_duplicate_or_missing_glyphs() {
     fn texts(shape: &egui::Shape, result: &mut Vec<String>) {
         match shape {
@@ -102,7 +117,7 @@ fn update_after_captures_offline() {
     let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
     let out = PathBuf::from(out);
     let size = vec2(1366.0, 768.0);
-    for (state, lang) in [("disponible", "fr"), ("telechargement", "fr"), ("verification-sha", "fr"), ("installation", "fr"), ("erreur-reseau", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en"), ("quoi-de-neuf-clair-fr", "fr")] {
+    for (state, lang) in [("disponible", "fr"), ("telechargement", "fr"), ("verification-sha", "fr"), ("installation", "fr"), ("erreur-reseau", "fr"), ("erreur-sha", "fr"), ("erreur-installation", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en"), ("quoi-de-neuf-clair-fr", "fr")] {
         let mut h = Harness::new();
         crate::i18n::set_language(lang);
         h.app.startup_checked = true;
@@ -124,7 +139,9 @@ fn update_after_captures_offline() {
                 "telechargement" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Téléchargement…")); },
                 "verification-sha" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Vérification…")); },
                 "installation" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Installation…")); },
-                "erreur-reseau" => { h.app.update_installing = true; h.app.update_result = Some(Err("Mise à jour impossible : connexion interrompue".into())); },
+                "erreur-reseau" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Téléchargement…")); h.app.update_result = Some(Err("Mise à jour impossible : connexion interrompue".into())); },
+                "erreur-sha" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Vérification…")); h.app.update_result = Some(Err("Mise à jour impossible : empreinte invalide".into())); },
+                "erreur-installation" => { h.app.update_installing = true; h.app.update_phase = Some(tr("Installation…")); h.app.update_result = Some(Err("Démarrage de l'installateur impossible".into())); },
                 _ => h.app.update_result = Some(Ok(crate::app_update::Status::Current)),
             }
         }

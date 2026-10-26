@@ -182,33 +182,64 @@ pub(super) fn status(ui: &mut egui::Ui, app: &App) {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum StepState { Done, Active, Failed, Waiting }
+
+pub(super) fn step_state(index: usize, phase: Option<&str>, failed: bool) -> StepState {
+    let current = if phase == Some(tr("Vérification…")) { 1 }
+        else if phase == Some(tr("Installation…")) { 2 } else { 0 };
+    if index < current { StepState::Done }
+    else if index == current && failed { StepState::Failed }
+    else if index == current { StepState::Active }
+    else { StepState::Waiting }
+}
+
 pub(super) fn operation(ctx: &egui::Context, app: &App) -> bool {
     let mut retry = false;
     let error = app.update_result.as_ref().and_then(|result| result.as_ref().err());
     let shown = theme::fixed_window(tr("Installation de la mise à jour"))
-        .id(egui::Id::new("novy_update_operation")).resizable(false).default_width(520.0)
+        .id(egui::Id::new("novy_update_operation")).resizable(false).default_width(570.0)
         .show(ctx, |ui| {
             let p = theme::palette(ui.ctx());
-            ui.set_min_width(ui.available_width().min(500.0));
+            ui.set_min_width(ui.available_width().min(570.0));
             let title = app.update_target.as_ref().map_or_else(
                 || tr("Mise à jour de NovyDeck").to_owned(),
                 |latest| format!("NovyDeck {} → {}", env!("CARGO_PKG_VERSION"), latest.version.trim_start_matches('v')),
             );
-            ui.label(RichText::new(title).size(20.0).strong());
-            let current = if error.is_some() { 0 } else if app.update_phase == Some(tr("Vérification…")) { 1 }
-                else if app.update_phase == Some(tr("Installation…")) { 2 } else { 0 };
+            brand(ui, &title, tr("Mise à jour de NovyDeck"), false);
+            ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 for (index, step) in [tr("Téléchargement"), tr("Vérification SHA-256"), tr("Installation"), tr("Relance")].iter().enumerate() {
-                    let color = if index <= current { p.accent } else { p.text_secondary };
+                    let state = step_state(index, app.update_phase, error.is_some());
+                    let color = match state {
+                        StepState::Done => p.success,
+                        StepState::Active => p.accent,
+                        StepState::Failed => p.danger,
+                        StepState::Waiting => p.text_secondary,
+                    };
                     let (rect, _) = ui.allocate_exact_size(Vec2::splat(17.0), egui::Sense::hover());
-                    ui.painter().circle_filled(rect.center(), 7.0, color);
-                    if index < current { ui.painter().circle_filled(rect.center(), 2.5, p.raised); }
+                    let center = rect.center();
+                    ui.painter().circle_filled(center, 7.0, color);
+                    let stroke = egui::Stroke::new(1.7, p.raised);
+                    match state {
+                        StepState::Done => {
+                            ui.painter().line_segment([center + Vec2::new(-3.5, 0.0), center + Vec2::new(-1.0, 2.5)], stroke);
+                            ui.painter().line_segment([center + Vec2::new(-1.0, 2.5), center + Vec2::new(4.0, -3.0)], stroke);
+                        }
+                        StepState::Failed => {
+                            ui.painter().line_segment([center + Vec2::new(-2.5, -2.5), center + Vec2::new(2.5, 2.5)], stroke);
+                            ui.painter().line_segment([center + Vec2::new(2.5, -2.5), center + Vec2::new(-2.5, 2.5)], stroke);
+                        }
+                        _ => {}
+                    }
                     ui.label(RichText::new(*step).color(color).strong());
                 }
             });
             ui.add_space(10.0);
             if let Some(message) = error {
+                let width = ui.available_width();
                 theme::card(p).show(ui, |ui| {
+                    ui.set_min_width((width - 24.0).max(100.0));
                     ui.horizontal_top(|ui| {
                         let (rect, _) = ui.allocate_exact_size(Vec2::splat(20.0), egui::Sense::hover());
                         ui.painter().circle_filled(rect.center(), 8.0, p.danger);

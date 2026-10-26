@@ -4020,7 +4020,7 @@ impl App {
                     }
                     about::UpdateEvent::Verifying => self.update_phase = Some(tr("Vérification…")),
                     about::UpdateEvent::Downloaded(result) => {
-                        self.update_phase = None;
+                        // Keep the last reported phase so a failure marks the correct step.
                         finished = true;
                         match result {
                             Err(error) => self.update_result = Some(Err(trf("Mise à jour impossible : {error}", &[("error", &error)]))),
