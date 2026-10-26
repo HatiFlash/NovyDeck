@@ -101,6 +101,57 @@ fn workshop_header_stays_one_line_at_compact_and_hidpi() {
 }
 
 #[test]
+fn drag_reorder_can_be_undone_and_redone() {
+    let (mut h, size) = workshop();
+    let before = h.app.config.keys()[0].steps.clone();
+    let positions = handles(&h.warm(size).shapes);
+    drag(&mut h, size, positions[2], positions[0], false);
+    let after = h.app.config.keys()[0].steps.clone();
+    assert_ne!(after, before);
+    let key = |key| Input::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers { ctrl: true, ..Default::default() } };
+    h.frame(size, vec![key(egui::Key::Z)]);
+    assert_eq!(h.app.config.keys()[0].steps, before);
+    h.frame(size, vec![key(egui::Key::Y)]);
+    assert_eq!(h.app.config.keys()[0].steps, after);
+}
+
+#[test]
+fn branch_numbers_are_stable_in_french_and_english() {
+    for lang in ["fr", "en"] {
+        let (mut h, size) = workshop();
+        crate::i18n::set_language(lang);
+        h.app.preferences.language = lang.into();
+        h.app.config.keys_mut()[0].steps = vec![
+            Step::Delay { ms: 1 }, Step::Delay { ms: 2 },
+            Step::IfVariable { name: "x".into(), value: "1".into(), then_steps: vec![Step::Delay { ms: 31 }], else_steps: vec![Step::Delay { ms: 32 }] },
+            Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 41 }] },
+        ];
+        let output = h.warm(size);
+        for number in ["3.A1", "3.B1", "4.1"] {
+            assert!(text_position(&output.shapes, number).is_some(), "{lang}: {number}");
+        }
+    }
+    crate::i18n::set_language("fr");
+}
+
+#[test]
+fn palette_drag_inserts_at_specific_sibling_slot() {
+    let (mut h, size) = workshop();
+    let output = h.warm(size);
+    let source = text_position(&output.shapes, crate::i18n::tr("Attendre")).expect("palette delay");
+    let destination = handles(&output.shapes)[1];
+    let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+    h.frame(size, vec![Input::PointerMoved(source), press(source, true)]);
+    h.frame(size, vec![Input::PointerMoved(destination)]);
+    h.frame(size, vec![Input::PointerMoved(destination)]);
+    h.frame(size, vec![press(destination, false)]);
+    let steps = &h.app.config.keys()[0].steps;
+    assert_eq!(steps.len(), 4, "{steps:?}");
+    assert!(matches!(steps[1], Step::Delay { ms: 1000 } | Step::Delay { ms: 500 } | Step::Delay { ms: 0 }), "slot: {steps:?}");
+    assert!(matches!(steps[2], Step::Delay { ms: 222 }));
+}
+
+#[test]
 fn workshop_cards_show_branch_numbers_and_singular_summary() {
     let (mut h, size) = workshop();
     h.app.config.keys_mut()[0].steps = vec![Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 42 }] }];
