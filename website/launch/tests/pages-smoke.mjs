@@ -69,7 +69,7 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       brokenImages: [...document.images].filter(i => i.complete && !i.naturalWidth).map(i => i.src),
       displayFont: getComputedStyle(document.querySelector("h1")).fontFamily,
       loadedFonts: [...document.fonts].filter(f => f.status === "loaded").map(f => f.family),
-      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.14.0-Setup.exe")),
+      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.15.0-Setup.exe")),
     }));
     if (info.overflow) problems.push("Horizontal overflow");
     if (info.brokenImages.length) problems.push(`Broken images: ${info.brokenImages.join(", ")}`);

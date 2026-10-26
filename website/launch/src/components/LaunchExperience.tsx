@@ -8,8 +8,8 @@ import { ArrowDown, ArrowUpRight, Check, ChevronRight, Download, Menu, Pause, Pl
 import AnimationEngine from "./AnimationEngine";
 
 const DeckScene = dynamic(() => import("./DeckScene"), { ssr: false });
-const release = "https://github.com/HatiFlash/NovyDeck/releases/download/v0.14.0/NovyDeck-0.14.0-Setup.exe";
-const releases = "https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0";
+const release = "https://github.com/HatiFlash/NovyDeck/releases/download/v0.15.0/NovyDeck-0.15.0-Setup.exe";
+const releases = "https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.0";
 const images = {
   keys: "assets/main-hi.webp",
   macros: "assets/atelier.webp",
@@ -25,7 +25,7 @@ const copy = {
   fr: {
     skip: "Aller au contenu", nav: ["Produit", "Fonctionnalités", "Atelier", "Plugins"],
     download: "Télécharger", preview: "Découvrir le produit", locale: "EN", menu: "Ouvrir le menu", close: "Fermer le menu",
-    heroOver: "NOVYDECK / V0.14.0 — WINDOWS", heroTitle1: "Votre deck.", heroTitle2: "Vos règles.",
+    heroOver: "NOVYDECK / V0.15.0 — WINDOWS", heroTitle1: "Votre deck.", heroTitle2: "Vos règles.",
     heroLead: "Donnez une forme à chaque idée. Une application native pour créer vos touches, orchestrer vos actions et étendre votre deck — sans renoncer au contrôle.",
     heroSupport: "FIFINE AmpliGame D6 · Elgato Stream Deck testés", heroCaption: "La liberté de créer, touche après touche.",
     scroll: "Défiler pour explorer", chapter: "CHAPITRE", productOver: "UN OUTIL, TOUT UN UNIVERS", productTitle: "Le bureau devient votre terrain de jeu.",
@@ -61,12 +61,12 @@ const copy = {
     bridgeOver: "VOTRE ENVIRONNEMENT, VOS CHOIX", bridgeTitle: "Des liens utiles. Pas une boîte noire.", bridgeLead: "Home Assistant et Google Assistant passent par des plugins. Le serveur MCP propose des opérations à votre client compatible ; l’utilisateur garde la validation.",
     bridgeNote: "Les intégrations tierces peuvent nécessiter leurs propres services et comptes.",
     filmOver: "LE FILM", filmTitle: "Voyez le produit prendre forme.", filmLead: "Un extrait 1080p de la vidéo officielle. Le D6 est une animation 3D ; les captures de l’application sont réelles.", play: "Lire le film", pause: "Mettre en pause",
-    ctaOver: "À VOUS DE JOUER", ctaTitle: "Donnez un nouveau sens à chaque touche.", ctaLead: "NovyDeck est libre et gratuit. Téléchargez l’installateur Windows 0.14.0 ou consultez les autres fichiers publiés.", other: "Autres téléchargements", ctaSmall: "Windows 10/11 · 64 bits · licence MIT · FIFINE D6 et Elgato Stream Deck testés", footer: "Logiciel libre. Conçu pour que chaque touche soit à vous.", source: "Code source", top: "Retour en haut", file: "Installateur Windows v0.14.0",
+    ctaOver: "À VOUS DE JOUER", ctaTitle: "Donnez un nouveau sens à chaque touche.", ctaLead: "NovyDeck est libre et gratuit. Téléchargez l’installateur Windows 0.15.0 ou consultez les autres fichiers publiés.", other: "Autres téléchargements", ctaSmall: "Windows 10/11 · 64 bits · licence MIT · FIFINE D6 et Elgato Stream Deck testés", footer: "Logiciel libre. Conçu pour que chaque touche soit à vous.", source: "Code source", top: "Retour en haut", file: "Installateur Windows v0.15.0",
   },
   en: {
     skip: "Skip to content", nav: ["Product", "Features", "Workshop", "Plugins"],
     download: "Download", preview: "Explore the product", locale: "FR", menu: "Open menu", close: "Close menu",
-    heroOver: "NOVYDECK / V0.14.0 — WINDOWS", heroTitle1: "Your deck.", heroTitle2: "Your rules.",
+    heroOver: "NOVYDECK / V0.15.0 — WINDOWS", heroTitle1: "Your deck.", heroTitle2: "Your rules.",
     heroLead: "Give every idea a place. A native app to design keys, orchestrate actions and extend your deck — while keeping control.",
     heroSupport: "FIFINE AmpliGame D6 · tested Elgato Stream Deck", heroCaption: "The freedom to create, one key at a time.",
     scroll: "Scroll to explore", chapter: "CHAPTER", productOver: "ONE TOOL, A WHOLE UNIVERSE", productTitle: "Make your desktop your playground.",
@@ -102,7 +102,7 @@ const copy = {
     bridgeOver: "YOUR SETUP, YOUR CHOICE", bridgeTitle: "Useful connections. No black box.", bridgeLead: "Home Assistant and Google Assistant work through plugins. The MCP server proposes operations to a compatible client; the user retains approval.",
     bridgeNote: "Third-party integrations may require their own services and accounts.",
     filmOver: "THE FILM", filmTitle: "Watch the product take shape.", filmLead: "A 1080p excerpt of the official film. The D6 is a 3D animation; app screenshots are real.", play: "Play film", pause: "Pause film",
-    ctaOver: "YOUR TURN", ctaTitle: "Make every key count.", ctaLead: "NovyDeck is free and open-source. Download the Windows 0.14.0 installer or browse the other published files.", other: "Other downloads", ctaSmall: "Windows 10/11 · 64-bit · MIT license · tested FIFINE D6 and Elgato Stream Deck", footer: "Open-source software. Made so every key belongs to you.", source: "Source code", top: "Back to top", file: "Windows installer v0.14.0",
+    ctaOver: "YOUR TURN", ctaTitle: "Make every key count.", ctaLead: "NovyDeck is free and open-source. Download the Windows 0.15.0 installer or browse the other published files.", other: "Other downloads", ctaSmall: "Windows 10/11 · 64-bit · MIT license · tested FIFINE D6 and Elgato Stream Deck", footer: "Open-source software. Made so every key belongs to you.", source: "Source code", top: "Back to top", file: "Windows installer v0.15.0",
   },
 };
 
@@ -189,6 +189,6 @@ export default function LaunchExperience() {
       <Film text={text} />
       <section id="download" className="download-section" aria-labelledby="download-title"><div className="frame download-inner"><p className="eyebrow">08 / {text.ctaOver}</p><h2 id="download-title">{text.ctaTitle}</h2><p>{text.ctaLead}</p><div className="download-actions"><a className="primary-link" href={release}><Download size={18} />{text.file}</a><a className="secondary-link" href={releases} target="_blank" rel="noopener noreferrer">{text.other}<ArrowUpRight size={17} /></a></div><small>{text.ctaSmall}</small></div></section>
     </main>
-    <footer className="site-footer"><div className="frame footer-layout"><div><a className="brand" href="#top"><img src="assets/novydeck-logo.webp" alt="" width="27" height="27" />NovyDeck</a><p>{text.footer}</p></div><nav aria-label={language === "fr" ? "Pied de page" : "Footer"}><a href="https://github.com/HatiFlash/NovyDeck" target="_blank" rel="noopener noreferrer">{text.source}</a><a href={releases} target="_blank" rel="noopener noreferrer">v0.14.0</a><a href="#top">{text.top} ↑</a></nav></div></footer>
+    <footer className="site-footer"><div className="frame footer-layout"><div><a className="brand" href="#top"><img src="assets/novydeck-logo.webp" alt="" width="27" height="27" />NovyDeck</a><p>{text.footer}</p></div><nav aria-label={language === "fr" ? "Pied de page" : "Footer"}><a href="https://github.com/HatiFlash/NovyDeck" target="_blank" rel="noopener noreferrer">{text.source}</a><a href={releases} target="_blank" rel="noopener noreferrer">v0.15.0</a><a href="#top">{text.top} ↑</a></nav></div></footer>
   </>;
 }

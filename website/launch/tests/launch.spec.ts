@@ -42,8 +42,8 @@ test("desktop: sections, media, interactions, download", async ({ page }) => {
   await page.locator("#workflow").scrollIntoViewIfNeeded();
   await page.screenshot({ path: output("workflow-desktop") });
   await expect(page.locator(".flow-step")).toHaveCount(5);
-  const href = await page.getByRole("link", { name: "Installateur Windows v0.14.0" }).getAttribute("href");
-  expect(href).toContain("v0.14.0/NovyDeck-0.14.0-Setup.exe");
+  const href = await page.getByRole("link", { name: "Installateur Windows v0.15.0" }).getAttribute("href");
+  expect(href).toContain("v0.15.0/NovyDeck-0.15.0-Setup.exe");
   for (const section of ["assistant", "plugins", "integrations", "film", "download"]) {
     await page.locator(`#${section}`).scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
