@@ -3256,7 +3256,18 @@ impl App {
                     if long_editor { ui.label(RichText::new(tr("L’atelier de blocs modifie uniquement l’appui court. Pour un fichier, renseigne son chemin dans l’action.")).small().color(p.muted)); }
                     ui.horizontal(|ui|{
                         ui.label(RichText::new(trf("Actions · {steps} étape(s)", &[("steps", &steps.len())])).strong());
-                        iconset::menu(ui, Ico::Add, tr("Ajouter"),|ui|{for (i,label) in crate::automation::NAMES.iter().enumerate(){if ui.add_enabled(steps.len()<256,iconset::button(ui.ctx(), iconset::for_step(&crate::automation::step(i)), tr(*label))).clicked(){add_kind=Some(i);ui.close_menu();}}});
+                        iconset::menu(ui, Ico::Add, tr("Ajouter"), |ui| {
+                            let available = (ui.ctx().screen_rect().height() - 64.0).max(160.0);
+                            egui::ScrollArea::vertical().id_salt("key_add_action_menu")
+                                .auto_shrink([false, false]).max_height(available).show(ui, |ui| {
+                                    for (i, label) in crate::automation::NAMES.iter().enumerate() {
+                                        if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&crate::automation::step(i)), tr(*label))).clicked() {
+                                            add_kind = Some(i);
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                        });
                     });
                     let mut remove=None;let mut movement=None;
                     egui::ScrollArea::vertical().id_salt("step_list").auto_shrink([false, false]).max_height((body_height-40.0).max(100.0)).show(ui,|ui| {
