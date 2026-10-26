@@ -5130,22 +5130,24 @@ fn onoff_branch_ui(
 ) -> bool {
     let mut changed = false;
     ui.separator();
-    ui.label(RichText::new(title).strong());
-    if steps.is_empty() && ui.button(tr("Raccourci clavier")).clicked() {
-        steps.extend(catalog::action(0, &profiles[target.0]).steps);
-        changed = true;
-    }
-    let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
     let mut addition = None;
-    ui.menu_button(caption, |ui| {
-        egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
-            for (kind, label) in crate::automation::NAMES.iter().enumerate() {
-                if kind == 12 || kind == 36 { continue; } // A folder or another toggle needs the workshop.
-                if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&crate::automation::step(kind)), tr(*label))).clicked() {
-                    addition = Some(kind);
-                    ui.close_menu();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).strong());
+        if steps.is_empty() && ui.button(tr("Raccourci clavier")).clicked() {
+            steps.extend(catalog::action(0, &profiles[target.0]).steps);
+            changed = true;
+        }
+        let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
+        ui.menu_button(caption, |ui| {
+            egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+                for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                    if kind == 12 || kind == 36 { continue; } // A folder or another toggle needs the workshop.
+                    if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&catalog::action(kind, &profiles[target.0]).steps[0]), tr(*label))).clicked() {
+                        addition = Some(kind);
+                        ui.close_menu();
+                    }
                 }
-            }
+            });
         });
     });
     let mut removal = None;
