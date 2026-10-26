@@ -7,7 +7,7 @@ fn sample() -> crate::app_update::Latest {
         setup_url: "https://github.com/example/setup.exe".into(),
         sha_url: "https://github.com/example/setup.sha256".into(),
         setup_size: 32_456_789,
-        notes: include_str!("../docs/RELEASE-0.13.0.md").into(),
+        notes: include_str!("../docs/RELEASE-0.14.0.md").into(),
     }
 }
 
@@ -123,6 +123,9 @@ fn update_after_captures_offline() {
         h.app.startup_checked = true;
         h.app.preferences.update_check = Some(false);
         h.app.update_installed = true;
+        // Only the capture fixture simulates an installed 0.13.0; production
+        // reads its actual compiled package version.
+        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("novy_test_installed_version"), String::from("0.13.0")));
         h.app.update_target = Some(sample());
         if state == "quoi-de-neuf-clair-fr" {
             h.app.preferences.dark = false;
@@ -147,6 +150,9 @@ fn update_after_captures_offline() {
         }
         let output = h.warm(size);
         h.png(size, output.clone(), &out.join(format!("apres-{state}.png")));
+        if state == "disponible" {
+            assert!(text_position(&output.shapes, "NovyDeck 0.13.0 → 0.14.0").is_some(), "capture must show a genuine upgrade");
+        }
         let expected = match state {
             "disponible" => Some(tr("Mettre à jour maintenant")),
             "erreur-reseau" => Some(tr("Réessayer")),
