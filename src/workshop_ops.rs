@@ -54,7 +54,34 @@ pub fn get<'a>(steps: &'a mut Vec<Step>, path: &[usize]) -> Option<&'a mut Step>
 
 /// Returns the new selection only if the entire edit succeeded; failures leave the tree intact.
 pub fn apply(steps: &mut Vec<Step>, edit: Edit) -> Option<Vec<usize>> {
-    if let Edit::Drop { .. } = edit { return None; }
+    if let Edit::Drop { from, at, copy } = edit {
+        let (&source, source_parent) = from.split_last()?;
+        let (&destination, destination_parent) = at.split_last()?;
+        if !copy && destination_parent.starts_with(&from) { return None; }
+        let step = children(steps, source_parent)?.get(source)?.clone();
+        let target_len = children(steps, destination_parent)?.len();
+        if destination > target_len || target_len >= 256 && (copy || source_parent != destination_parent) { return None; }
+        let mut next = steps.clone();
+        let mut selected = at.clone();
+        if !copy {
+            children(&mut next, source_parent)?.remove(source);
+            // Removing a preceding sibling shifts the container's index and insertion slot.
+            let mut adjusted_parent = destination_parent.to_vec();
+            if source_parent == destination_parent {
+                if destination > source { *selected.last_mut()? -= 1; }
+            } else if destination_parent.len() > source_parent.len()
+                && destination_parent.starts_with(source_parent)
+                && destination_parent[source_parent.len()] > source {
+                adjusted_parent[source_parent.len()] -= 1;
+                selected = adjusted_parent.clone();
+                selected.push(destination);
+            }
+        }
+        let (&index, parent) = selected.split_last()?;
+        children(&mut next, parent)?.insert(index, step);
+        *steps = next;
+        return Some(selected);
+    }
     let (path, kind) = match &edit {
         Edit::Duplicate(p) => (p, 0),
         Edit::Move(p, _) => (p, 2),
