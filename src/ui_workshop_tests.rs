@@ -174,10 +174,10 @@ fn palette_drag_inserts_at_specific_sibling_slot_and_inside_container() {
         drag_palette(&mut h, size, source, destination);
         let steps = &h.app.config.keys()[0].steps;
         if nested {
-            assert!(matches!(&steps[0], Step::Repeat { steps, .. } if steps.len() == 2 && matches!(steps[0], Step::Delay { ms: 1000 }) && matches!(steps[1], Step::Delay { ms: 222 })), "nested: {steps:?}");
+            assert!(matches!(&steps[0], Step::Repeat { steps, .. } if steps.len() == 2 && matches!(steps[0], Step::Delay { ms: 500 }) && matches!(steps[1], Step::Delay { ms: 222 })), "nested: {steps:?}");
         } else {
             assert_eq!(steps.len(), 4, "sibling: {steps:?}");
-            assert!(matches!(steps[1], Step::Delay { ms: 1000 }), "slot: {steps:?}");
+            assert!(matches!(steps[1], Step::Delay { ms: 500 }), "slot: {steps:?}");
             assert!(matches!(steps[2], Step::Delay { ms: 222 }));
         }
     }
