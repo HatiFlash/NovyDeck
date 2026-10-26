@@ -2680,7 +2680,7 @@ fn startup_offer_shows_notes_and_installation_choice_without_network() {
         notes: "## Français\n- Fonction nouvelle injectée".into(),
     });
     let shown = h.warm(size);
-    for label in ["Mise à jour disponible", "Fonction nouvelle injectée", "Télécharger et installer", "Voir les nouveautés", "Plus tard"] {
+    for label in ["Mise à jour disponible", "Fonction nouvelle injectée", "Mettre à jour maintenant", "Voir sur GitHub", "Plus tard"] {
         assert!(text_position(&shown.shapes, label).is_some(), "{label}");
     }
     assert!(h.app.startup_rx.is_none());
