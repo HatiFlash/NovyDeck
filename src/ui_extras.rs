@@ -883,7 +883,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     }
                 });
             let r = frame.response.rect;
-            let top = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, r.min.y + 20.0));
+            let top = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, r.min.y + 38.0));
             workshop_drop_indicator(ui, top, &path);
             let mut after = path.clone(); *after.last_mut().unwrap() += 1;
             let bottom = egui::Rect::from_min_max(egui::pos2(r.min.x, r.max.y - 18.0), r.max);
