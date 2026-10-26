@@ -21,19 +21,47 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       await page.locator(`#${id}`).scrollIntoViewIfNeeded();
       await page.waitForTimeout(100);
     }
-    await page.getByRole("tab", { name: /04.*Atelier 0\.14/ }).click();
-    const workshop = page.locator("#showcase [role=tabpanel][data-state=active]");
-    const fullImage = workshop.getByRole("link", { name: /Agrandir la capture/ });
-    if (!(await fullImage.getAttribute("href"))?.includes("v014-workshop-fr.webp")) problems.push("Workshop full-size image link missing");
-    if (!(await workshop.locator("img").evaluate(img => img.complete && img.naturalWidth > 0))) problems.push("Workshop screenshot failed to load");
-    await page.getByRole("tab", { name: /05.*Quoi de neuf/ }).click();
-    if (!(await page.locator("#showcase [role=tabpanel][data-state=active] a[href*='v014-update-fr.webp']").count())) problems.push("Update offer image link missing");
-    await page.getByRole("tab", { name: /02.*États ON/ }).click();
-    await page.getByRole("button", { name: "Clair" }).click();
-    await page.getByRole("button", { name: /Switch to English/ }).click();
-    if (await page.locator("html").getAttribute("lang") !== "en") problems.push("Language toggle failed");
-    await page.getByRole("tab", { name: /04.*Workshop 0\.14/ }).click();
-    if (!(await page.locator("#showcase [role=tabpanel][data-state=active] a[href*='v014-workshop-en.webp']").count())) problems.push("English workshop image link missing");
+    if (await page.getByRole("tab").count() !== 10) problems.push("Expected ten showcase tabs");
+    const checkImage = async (panel, description, file, language) => {
+      const image = panel.locator("img");
+      if (!(await panel.locator(`a[href*='${file}']`).count())) problems.push(`${description} full-size image link missing`);
+      await image.scrollIntoViewIfNeeded();
+      try {
+        await image.evaluate(img => new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("image load timeout")), 10_000);
+          const check = () => { if (img.naturalWidth > 0) { clearTimeout(timer); resolve(); } else if (img.complete) { clearTimeout(timer); reject(new Error("broken image")); } };
+          img.addEventListener("load", check, { once: true });
+          img.addEventListener("error", check, { once: true });
+          check();
+        }));
+      } catch (error) { problems.push(`${description} ${language} screenshot failed to load: ${error.message}`); }
+    };
+    const cards = [
+      ["01", "Touches 0.15", "Keys 0.15", "v015-main"],
+      ["02", "Apparence 0.15", "Appearance 0.15", "v015-appearance"],
+      ["03", "Assistant 0.15", "Assistant 0.15", "v015-assistant"],
+      ["04", "Précision plugin 0.15", "Plugin clarification 0.15", "v015-question"],
+    ];
+    for (const language of ["fr", "en"]) {
+      if (language === "en") await page.getByRole("button", { name: /Switch to English/ }).click();
+      if (await page.locator("html").getAttribute("lang") !== language) problems.push(`${language} language toggle failed`);
+      for (const [index, frLabel, enLabel, file] of cards) {
+        await page.getByRole("tab", { name: new RegExp(`${index}.*${language === "fr" ? frLabel : enLabel}`) }).click();
+        const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
+        if (!(await panel.locator(".micro").textContent())?.includes(`${index} / 10`)) problems.push(`${language} counter ${index} incorrect`);
+        await checkImage(panel, file, `${file}-${language}.webp`, language);
+        if (file === "v015-assistant" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "en français" : "French example request")) problems.push(`${language} assistant request-language disclosure missing`);
+        if (file === "v015-question" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "inerte" : "inert")) problems.push(`${language} inert fixture disclosure missing`);
+        if (file === "v015-main" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "connexion simulée" : "simulated connection")) problems.push(`${language} simulated connection disclosure missing`);
+      }
+      for (const [index, frLabel, enLabel, file] of [["05", "Touches", "Keys", "main-hi.webp"], ["06", "États ON", "ON / OFF", "states.webp"], ["07", "Médias", "Media", "crop.webp"], ["08", "Atelier 0.14", "Workshop 0.14", `v014-workshop-${language}.webp`], ["09", "Quoi de neuf", "What’s new", `v014-whats-new-${language}.webp`], ["10", "Assistant", "Assistant", "assistant.webp"]]) {
+        await page.getByRole("tab", { name: new RegExp(`^${index}.*${language === "fr" ? frLabel : enLabel}`) }).click();
+        const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
+        await checkImage(panel, `${index} historic`, file, language);
+        if (index === "09" && !(await panel.locator(`a[href*='v014-update-${language}.webp']`).count())) problems.push(`${language} update offer image link missing`);
+      }
+    }
+    await page.getByRole("button", { name: "Light" }).click();
     const info = await page.evaluate(() => ({
       title: document.title,
       width: innerWidth,

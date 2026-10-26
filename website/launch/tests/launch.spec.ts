@@ -18,13 +18,23 @@ test("desktop: sections, media, interactions, download", async ({ page }) => {
   await page.screenshot({ path: output("story-desktop") });
   await page.locator("#showcase").scrollIntoViewIfNeeded();
   await page.screenshot({ path: output("showcase-desktop") });
-  await page.getByRole("tab", { name: /02.*États ON/ }).click();
+  await expect(page.getByRole("tab")).toHaveCount(10);
+  for (const [index, label, file] of [["01", "Touches 0.15", "main"], ["02", "Apparence 0.15", "appearance"], ["03", "Assistant 0.15", "assistant"], ["04", "Précision plugin 0.15", "question"]]) {
+    await page.getByRole("tab", { name: new RegExp(`${index}.*${label}`) }).click();
+    const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
+    await expect(panel.locator(".micro")).toHaveText(`${index} / 10`);
+    await expect(panel.locator(`a[href*='v015-${file}-fr.webp']`)).toHaveAttribute("aria-label", /Agrandir la capture/);
+    await expect(panel.locator("img")).toBeVisible();
+    await panel.locator("img").scrollIntoViewIfNeeded();
+    await expect.poll(() => panel.locator("img").evaluate(img => (img as HTMLImageElement).naturalWidth), { timeout: 10_000 }).toBeGreaterThan(0);
+  }
+  await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /fixture plugin SoundPad inerte/);
+  await page.getByRole("tab", { name: /06.*États ON/ }).click();
   await expect(page.getByRole("heading", { name: "Le bon état, au bon moment." })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /02.*États ON/ })).toHaveAttribute("data-state", "active");
-  await page.getByRole("tab", { name: /04.*Atelier 0\.14/ }).click();
+  await page.getByRole("tab", { name: /08.*Atelier 0\.14/ }).click();
   await expect(page.getByRole("img", { name: /Capture française de l’Atelier 0\.14/ })).toBeVisible();
   await page.screenshot({ path: output("workshop-014-desktop") });
-  await page.getByRole("tab", { name: /05.*Quoi de neuf/ }).click();
+  await page.getByRole("tab", { name: /09.*Quoi de neuf/ }).click();
   await expect(page.getByRole("link", { name: /offre de mise à jour 0\.13/ })).toHaveAttribute("href", /v014-update-fr\.webp/);
   await page.screenshot({ path: output("whats-new-014-desktop") });
   await page.getByRole("button", { name: "Clair" }).click();
@@ -57,11 +67,20 @@ test("mobile: responsive, navigation and lightweight scene", async ({ page }) =>
   await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: "Atelier" }).click();
   await expect(page.locator("#workflow")).toBeInViewport();
   await page.screenshot({ path: output("workflow-mobile") });
-  await page.getByRole("tab", { name: /03.*Médias/ }).click();
+  await page.getByRole("tab", { name: /07.*Médias/ }).click();
   await expect(page.getByRole("heading", { name: "Cadrez sans abîmer." })).toBeVisible();
   await page.getByRole("button", { name: "Switch to English" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Your deck.");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("tab")).toHaveCount(10);
+  await page.getByRole("tab", { name: /03.*Assistant 0\.15/ }).click();
+  await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /French example request/);
+  await page.getByRole("tab", { name: /06.*ON \/ OFF/ }).click();
+  await expect(page.getByRole("heading", { name: "The right state at the right time." })).toBeVisible();
+  await page.getByRole("tab", { name: /07.*Media/ }).click();
+  await expect(page.getByRole("heading", { name: "Crop without damage." })).toBeVisible();
+  await page.getByRole("tab", { name: /09.*What’s new/ }).click();
+  await expect(page.getByRole("link", { name: /update offer/ })).toHaveAttribute("href", /v014-update-en\.webp/);
   expect(errors).toEqual([]);
 });
 
