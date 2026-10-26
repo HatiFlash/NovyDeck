@@ -63,6 +63,42 @@ fn onoff_conversion_preserves_plugin_state_block_target() {
 }
 
 #[test]
+fn onoff_navigation_remains_a_root_action() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.config.keys_mut()[0].steps = vec![Step::PageNext];
+    let output = h.warm(size);
+    let enable = text_position(&output.shapes, "Actions ON/OFF").expect("disabled ON/OFF button explains the restriction");
+    h.click(size, enable);
+    assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::PageNext]));
+}
+
+#[test]
+fn onoff_branch_removal_rebases_and_clears_plugin_state_target() {
+    let mut h = Harness::new();
+    let size = vec2(1600.0, 1000.0);
+    let plugin = |action: &str| Step::PluginAction {
+        plugin: "test.plugin".into(), action: action.into(),
+        settings: serde_json::json!({}), label: action.into(),
+    };
+    let key = &mut h.app.config.keys_mut()[0];
+    key.steps = vec![Step::Toggle { a: vec![plugin("first"), plugin("second")], b: vec![] }];
+    key.plugin_state = Some(crate::model::PluginStateTarget::Block { path: vec![0, 0, 1] });
+    let output = h.warm(size);
+    let remove = text_position(&output.shapes, "Retirer").expect("first branch action removable in the main inspector");
+    h.click(size, remove);
+    let key = &h.app.config.keys()[0];
+    assert!(matches!(&key.steps[..], [Step::Toggle { a, .. }] if matches!(&a[..], [Step::PluginAction { action, .. }] if action == "second")));
+    assert_eq!(key.plugin_state, Some(crate::model::PluginStateTarget::Block { path: vec![0, 0, 0] }));
+    let output = h.warm(size);
+    let remove = text_position(&output.shapes, "Retirer").expect("remaining plugin action removable");
+    h.click(size, remove);
+    let key = &h.app.config.keys()[0];
+    assert!(matches!(&key.steps[..], [Step::Toggle { a, .. }] if a.is_empty()));
+    assert!(key.plugin_state.is_none(), "removed plugin must not observe another source");
+}
+
+#[test]
 fn onoff_existing_branches_and_extra_steps_are_not_silently_lost() {
     let mut h = Harness::new();
     let size = vec2(1366.0, 768.0);

@@ -3305,6 +3305,8 @@ impl App {
                             if key.steps.len() > 1 {
                                 ui.label(RichText::new(tr("Étapes supplémentaires hors ON/OFF : elles s'exécutent à chaque appui.")).color(theme::WARNING));
                             }
+                            let mut branch_edit = None;
+                            let mut edited_branch = 0;
                             if let Step::Toggle { a, b } = &mut key.steps[index] {
                                 let tab_id = ui.id().with("onoff_action_tab");
                                 let mut branch = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id)).min(1);
@@ -3314,26 +3316,43 @@ impl App {
                                     }
                                 });
                                 ui.ctx().data_mut(|d| d.insert_persisted(tab_id, branch));
+                                edited_branch = branch as usize;
                                 let (steps, title) = if branch == 0 { (a, tr("Action 1")) } else { (b, tr("Action 2")) };
                                 egui::ScrollArea::vertical().id_salt(("onoff_branch_scroll", branch))
                                     .auto_shrink([false, false]).max_height((body_height - 64.0).max(80.0)).show(ui, |ui| {
-                                        changed |= onoff_branch_ui(ui, steps, title, branch as usize, index, &names, &pages,
+                                        changed |= onoff_branch_ui(ui, steps, title, edited_branch, index, &names, &pages,
                                             &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]),
-                                            &mut record_step, &mut pick_audio, &mut removed_step);
+                                            &mut record_step, &mut pick_audio, &mut removed_step, &mut branch_edit);
                                     });
+                            }
+                            if let (Some(edit), Some(crate::model::PluginStateTarget::Block { path })) = (branch_edit, &mut key.plugin_state) {
+                                if path.len() >= 3 && path[0] == index && path[1] == edited_branch {
+                                    let clear = match edit {
+                                        OnOffBranchEdit::Remove(i) => {
+                                            let selected_source = path[2] == i;
+                                            if path[2] > i { path[2] -= 1; }
+                                            selected_source
+                                        }
+                                        OnOffBranchEdit::Replace(i) => path[2] == i,
+                                    };
+                                    if clear { key.plugin_state = None; }
+                                }
                             }
                         }
                     }
                     if long_editor || !(key.steps.len() == 1 && matches!(key.steps[0], Step::Toggle { .. })) {
                     let has_plugin = key.plugin.is_some();
                     let has_toggle = key.steps.iter().any(|step| matches!(step, Step::Toggle { .. }));
+                    let has_navigation = key.steps.iter().any(|step| matches!(step.active(),
+                        Step::Page { .. } | Step::Folder { .. } | Step::Back | Step::PageNext |
+                        Step::PagePrevious | Step::Profile { .. }));
                     let steps = if long_editor { &mut key.long_steps } else { &mut key.steps };
                     if long_editor { ui.label(RichText::new(tr("L’atelier de blocs modifie uniquement l’appui court. Pour un fichier, renseigne son chemin dans l’action.")).small().color(p.muted)); }
                     ui.horizontal(|ui|{
                         ui.label(RichText::new(trf("Actions · {steps} étape(s)", &[("steps", &steps.len())])).strong());
                         if !long_editor {
-                            if ui.add_enabled(!has_plugin && !has_toggle, egui::Button::new(tr("Actions ON/OFF")))
-                                .on_hover_text(tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.")).clicked() {
+                            if ui.add_enabled(!has_plugin && !has_toggle && !has_navigation, egui::Button::new(tr("Actions ON/OFF")))
+                                .on_hover_text(if has_navigation { tr("La navigation ne peut pas être placée dans une action ON/OFF.") } else { tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.") }).clicked() {
                                 enable_onoff = true;
                             }
                         }
@@ -5137,13 +5156,14 @@ fn condition_operator(ui: &mut egui::Ui, op: &mut String) -> bool {
     changed
 }
 // This editor changes only the selected branch; other root steps and the other branch stay intact.
+enum OnOffBranchEdit { Remove(usize), Replace(usize) }
 #[allow(clippy::too_many_arguments)]
 fn onoff_branch_ui(
     ui: &mut egui::Ui, steps: &mut Vec<Step>, title: &str, branch: usize, root: usize,
     profiles: &[String], pages: &[crate::model::Page], audio: &crate::audio::Snapshot,
     tx: &Sender<Option<DialogEffect>>, target: &StepTarget,
     record_step: &mut Option<Vec<usize>>, pick_audio: &mut Option<(Vec<usize>, usize)>,
-    removed_step: &mut bool,
+    removed_step: &mut bool, branch_edit: &mut Option<OnOffBranchEdit>,
 ) -> bool {
     let mut changed = false;
     ui.separator();
@@ -5158,7 +5178,7 @@ fn onoff_branch_ui(
         ui.menu_button(caption, |ui| {
             egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
                 for (kind, label) in crate::automation::NAMES.iter().enumerate() {
-                    if kind == 12 || kind == 36 { continue; } // A folder or another toggle needs the workshop.
+                    if (7..=12).contains(&kind) || kind == 36 { continue; } // Navigation must remain a root action; nested toggles need the workshop.
                     if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&catalog::action(kind, &profiles[target.0]).steps[0]), tr(*label))).clicked() {
                         addition = Some(kind);
                         ui.close_menu();
@@ -5178,7 +5198,7 @@ fn onoff_branch_ui(
                     ui.menu_button(tr("Remplacer"), |ui| {
                         egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
                             for (kind, label) in crate::automation::NAMES.iter().enumerate() {
-                                if kind == 12 || kind == 36 { continue; }
+                                if (7..=12).contains(&kind) || kind == 36 { continue; }
                                 if ui.button(tr(*label)).clicked() { replacement = Some((i, kind)); ui.close_menu(); }
                             }
                         });
@@ -5194,8 +5214,8 @@ fn onoff_branch_ui(
             });
         });
     }
-    if let Some(i) = removal { steps.remove(i); *removed_step = true; changed = true; }
-    if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, &profiles[target.0]).steps); changed = true; }
+    if let Some(i) = removal { steps.remove(i); *branch_edit = Some(OnOffBranchEdit::Remove(i)); *removed_step = true; changed = true; }
+    if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, &profiles[target.0]).steps); *branch_edit = Some(OnOffBranchEdit::Replace(i)); changed = true; }
     if let Some(kind) = addition { steps.extend(catalog::action(kind, &profiles[target.0]).steps); changed = true; }
     changed
 }
