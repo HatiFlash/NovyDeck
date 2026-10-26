@@ -166,7 +166,15 @@ fn main015_captures() {
         theme::apply(&h.ctx, dark);
         h.ctx.set_pixels_per_point(dpi);
         match screen {
-            "deck" => h.app.selected = 8,
+            "deck" => {
+                h.app.selected = 8;
+                h.app.gate.connected = true;
+                h.app.gate.enabled = true;
+                h.app.gate.dirty = false;
+                let revision = h.app.gate.request_apply();
+                assert!(h.app.gate.applied(revision));
+                assert_eq!(h.app.gate.decision(), Decision::Execute);
+            }
             "inspecteur-apparence" => {
                 h.app.selected = 0;
                 h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
