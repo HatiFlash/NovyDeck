@@ -430,6 +430,30 @@ mod tests {
     }
 
     #[test]
+    fn label_overlay_can_be_disabled_without_removing_image_or_state_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cinema.png");
+        image::RgbImage::from_pixel(126, 126, image::Rgb([180, 140, 90])).save(&path).unwrap();
+        let mut key = Key { label: "Cinema OFF".into(), image: path.to_string_lossy().into_owned(), ..Key::default() };
+        let legacy = serde_json::to_value(&key).unwrap();
+        assert!(legacy.get("label_overlay").is_none());
+        let restored: Key = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(preview(&restored, 126).unwrap(), preview(&key, 126).unwrap());
+        let shaded = preview(&key, 126).unwrap();
+        let mut opt_out = legacy;
+        opt_out["label_overlay"] = serde_json::json!(false);
+        key = serde_json::from_value(opt_out).unwrap();
+        let plain = preview(&key, 126).unwrap();
+        assert!(plain.get_pixel(4, 120)[0] > shaded.get_pixel(4, 120)[0] + 60);
+        assert!(plain.pixels().any(|p| p[0] > 160), "custom image retained");
+        assert_ne!(plain, preview(&Key { label: String::new(), ..key.clone() }, 126).unwrap(), "text retained");
+        let saved = serde_json::to_value(&key).unwrap();
+        assert_eq!(saved["label_overlay"], false);
+        assert_eq!(serde_json::to_value(serde_json::from_value::<Key>(saved.clone()).unwrap()).unwrap()["label_overlay"], false);
+        assert_eq!(plain, image::imageops::rotate180(&image::load_from_memory(&for_device(&key, 126, &font().unwrap()).unwrap().0).unwrap().into_rgb8()));
+    }
+
+    #[test]
     fn black_background_and_transparent_images_use_the_saved_background_choice() {
         let dir = tempfile::tempdir().unwrap();
         let mut key = Key {
