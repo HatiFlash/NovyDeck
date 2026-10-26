@@ -3298,6 +3298,32 @@ impl App {
                         });
                         return;
                     }
+                    if !long_editor {
+                        let toggle_index = key.steps.iter().position(|s| matches!(s, Step::Toggle { .. }));
+                        if toggle_index.is_none() {
+                            if ui.button(tr("Actions ON/OFF")).on_hover_text(tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.")).clicked() {
+                                let original = std::mem::take(&mut key.steps);
+                                key.steps.push(Step::Toggle { a: original, b: Vec::new() });
+                                changed = true;
+                            }
+                        }
+                        if let Some(index) = key.steps.iter().position(|s| matches!(s, Step::Toggle { .. })) {
+                            ui.label(RichText::new(tr("Actions ON/OFF · premier appui : Action 1, deuxième appui : Action 2")).strong());
+                            if key.steps.len() > 1 {
+                                ui.label(RichText::new(tr("Étapes supplémentaires hors ON/OFF : elles s'exécutent à chaque appui.")).color(theme::WARNING));
+                            }
+                            if let Step::Toggle { a, b } = &mut key.steps[index] {
+                                egui::ScrollArea::vertical().id_salt("onoff_actions").auto_shrink([false, false]).max_height((body_height - 50.0).max(90.0)).show(ui, |ui| {
+                                    for (branch, steps, title) in [(0, a, tr("Action 1")), (1, b, tr("Action 2"))] {
+                                        ui.push_id(("onoff", branch), |ui| {
+                                            changed |= onoff_branch_ui(ui, steps, title, branch, index, &names, &pages, &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]), &mut record_step, &mut pick_audio, &mut removed_step);
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    if long_editor || !(key.steps.len() == 1 && matches!(key.steps[0], Step::Toggle { .. })) {
                     let steps = if long_editor { &mut key.long_steps } else { &mut key.steps };
                     if long_editor { ui.label(RichText::new(tr("L’atelier de blocs modifie uniquement l’appui court. Pour un fichier, renseigne son chemin dans l’action.")).small().color(p.muted)); }
                     ui.horizontal(|ui|{
@@ -3333,17 +3359,18 @@ impl App {
                                     });
                                 });
                                 if matches!(step,Step::AutoHotkey{..}) {ui.label(RichText::new(tr("Pas besoin d’écrire du code : compose tes actions dans l’Atelier de blocs")).small().color(p.muted));if ui.button(tr("Ouvrir l’Atelier de blocs")).clicked(){open_workflow=true;}}
-                                let mut record=false;let mut audio_icon=None;changed|=edit_step(ui,step,&names,&pages,&mut record,&self.audio,&mut audio_icon,&dialog_tx,&(active,page_id.clone(),selected,vec![i]));if let Some(state)=audio_icon{pick_audio=Some((vec![i],state));}if record && !long_editor {record_step=Some(i);}
+                                let mut record=false;let mut audio_icon=None;changed|=edit_step(ui,step,&names,&pages,&mut record,&self.audio,&mut audio_icon,&dialog_tx,&(active,page_id.clone(),selected,vec![i]));if let Some(state)=audio_icon{pick_audio=Some((vec![i],state));}if record && !long_editor {record_step=Some(vec![i]);}
                             });
                         });}
                     });
                     if let Some(i)=remove{steps.remove(i);changed=true;removed_step=true;}if let Some((a,b))=movement{steps.swap(a,b);changed=true;}
+                    }
                 });
             });
             match advanced { Some(0)=>self.copy_key(), Some(1)=>self.paste_key(self.selected), Some(2)=>self.duplicate_key(self.selected), _=>{} }
             if open_workflow || open_model || open_assistant { self.show_workflow = true; }
             if open_assistant { self.workshop_chat.open = true; self.pending_chat_focus = true; }
-            if let Some(step)=record_step {self.recording=Some((active,self.config.page.clone(),self.selected,vec![step],self.gate.enabled));self.recording_error.clear();self.gate.enabled=false;self.engine.stop();self.refresh_hotkeys();}
+            if let Some(path)=record_step {self.recording=Some((active,self.config.page.clone(),self.selected,path,self.gate.enabled));self.recording_error.clear();self.gate.enabled=false;self.engine.stop();self.refresh_hotkeys();}
             if changed {self.edited(); if removed_step {self.log(tr("Étape retirée — Ctrl+Z pour annuler").into());}}
             if open_icons{self.open_icon_gallery(None);}
             if recrop {
@@ -5090,6 +5117,64 @@ fn condition_operator(ui: &mut egui::Ui, op: &mut String) -> bool {
     });
     changed
 }
+// This editor changes only the selected branch; other root steps and the other branch stay intact.
+#[allow(clippy::too_many_arguments)]
+fn onoff_branch_ui(
+    ui: &mut egui::Ui, steps: &mut Vec<Step>, title: &str, branch: usize, root: usize,
+    profiles: &[String], pages: &[crate::model::Page], audio: &crate::audio::Snapshot,
+    tx: &Sender<Option<DialogEffect>>, target: &StepTarget,
+    record_step: &mut Option<Vec<usize>>, pick_audio: &mut Option<(Vec<usize>, usize)>,
+    removed_step: &mut bool,
+) -> bool {
+    let mut changed = false;
+    ui.separator();
+    ui.label(RichText::new(title).strong());
+    let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
+    let mut addition = None;
+    ui.menu_button(caption, |ui| {
+        egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+            for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                if kind == 12 || kind == 36 { continue; } // A folder or another toggle needs the workshop.
+                if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&crate::automation::step(kind)), tr(*label))).clicked() {
+                    addition = Some(kind);
+                    ui.close_menu();
+                }
+            }
+        });
+    });
+    let mut removal = None;
+    let mut replacement = None;
+    for (i, step) in steps.iter_mut().enumerate() {
+        ui.push_id(i, |ui| {
+            egui::Frame::new().fill(theme::palette(ui.ctx()).raised).corner_radius(8).inner_margin(6).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(tr(step.name()));
+                    if ui.small_button(tr("Retirer")).clicked() { removal = Some(i); }
+                    ui.menu_button(tr("Remplacer"), |ui| {
+                        egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+                            for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                                if kind == 12 || kind == 36 { continue; }
+                                if ui.button(tr(*label)).clicked() { replacement = Some((i, kind)); ui.close_menu(); }
+                            }
+                        });
+                    });
+                });
+                let mut record = false;
+                let mut audio_icon = None;
+                let path = vec![root, branch, i];
+                changed |= edit_step(ui, step, profiles, pages, &mut record, audio, &mut audio_icon, tx,
+                    &(target.0, target.1.clone(), target.2, path.clone()));
+                if record { *record_step = Some(path.clone()); }
+                if let Some(icon) = audio_icon { *pick_audio = Some((path, icon)); }
+            });
+        });
+    }
+    if let Some(i) = removal { steps.remove(i); *removed_step = true; changed = true; }
+    if let Some((i, kind)) = replacement { steps[i] = crate::automation::step(kind); changed = true; }
+    if let Some(kind) = addition { steps.push(crate::automation::step(kind)); changed = true; }
+    changed
+}
+
 #[allow(clippy::too_many_arguments)] // UI editor must carry the stable dialog destination through nested steps.
 fn edit_step(
     ui: &mut egui::Ui,
