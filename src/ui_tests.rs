@@ -719,6 +719,12 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     send(&tx, Event::Key(0, long_press));
     send(&tx, Event::KeyRelease(0, long_press + Duration::from_millis(u64::from(h.app.applied.long_press_ms) + 1)));
     h.app.events();
+    let idle_deadline = Instant::now() + Duration::from_secs(2);
+    while h.app.engine.running.load(Ordering::SeqCst) && Instant::now() < idle_deadline {
+        h.app.events();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(!h.app.engine.running.load(Ordering::SeqCst));
     send(&tx, Event::Key(1, Instant::now()));
     navigate(&mut h, "");
     send(&tx, Event::KeyRelease(1, Instant::now()));
