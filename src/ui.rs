@@ -2059,11 +2059,11 @@ impl App {
                             }
                         }
                         let (label, color) = match self.gate.decision() {
-                            Decision::Execute => (tr("Touches actives"), GREEN),
+                            Decision::Execute => (tr("Exécution des touches : active"), p.text_primary),
                             Decision::Inspect => ("Diagnostic", accent()),
                             Decision::Blocked(_) => (
                                 if !self.gate.enabled {
-                                    tr("En pause")
+                                    tr("Exécution des touches : en pause")
                                 } else if !self.gate.connected {
                                     if self.wanted {
                                         tr("En attente")
@@ -2075,7 +2075,7 @@ impl App {
                                 } else {
                                     tr("Synchronisation…")
                                 },
-                                p.muted,
+                                if self.gate.enabled { p.muted } else { p.warning },
                             ),
                         };
                         if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
@@ -2237,11 +2237,11 @@ impl App {
                             }
                         }
                         let (label, color) = match self.gate.decision() {
-                            Decision::Execute => (tr("Touches actives"), GREEN),
+                            Decision::Execute => (tr("Exécution des touches : active"), p.text_primary),
                             Decision::Inspect => ("Diagnostic", accent()),
                             Decision::Blocked(_) => (
                                 if !self.gate.enabled {
-                                    tr("En pause")
+                                    tr("Exécution des touches : en pause")
                                 } else if !self.gate.connected {
                                     if self.wanted {
                                         tr("En attente")
@@ -2253,7 +2253,7 @@ impl App {
                                 } else {
                                     tr("Synchronisation…")
                                 },
-                                p.muted,
+                                if self.gate.enabled { p.muted } else { p.warning },
                             ),
                         };
                         if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
@@ -2554,14 +2554,14 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(tr("Bibliothèque d'actions")).font(theme::strong(15.0)).color(p.text_primary));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        theme::pill(ui, tr("40 binds"), p.text_tertiary);
+                        theme::pill(ui, tr("40 modèles"), p.text_tertiary);
                     });
                 });
                 ui.add_space(6.0);
                 theme::search_field(ui, &mut self.catalog_search, tr("Rechercher une action…"));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    for (i, label) in [tr("Actions"), tr("Magasin"), tr("Mes binds"), tr("Plugins")]
+                    for (i, label) in [tr("Actions"), tr("Modèles"), tr("Enregistrés"), tr("Plugins")]
                         .iter()
                         .enumerate()
                     {
@@ -2760,7 +2760,7 @@ impl App {
                             .collect()
                     };
                     let selected = self.catalog_selection.filter(|i| *i < items.len());
-                    let detail_height = if selected.is_some() { 212.0 } else { 40.0 };
+                    let detail_height = if selected.is_some() { 128.0 } else { 34.0 };
                     let mut found = 0;
                     egui::ScrollArea::vertical()
                         .id_salt("preset_list")
@@ -2782,7 +2782,7 @@ impl App {
                                 found += 1;
                                 let response = ui
                                     .push_id(i, |ui| {
-                                        let (r, response) = theme::list_row(ui, 54.0, selected == Some(i), egui::Sense::click_and_drag());
+                                        let (r, response) = theme::list_row(ui, 42.0, selected == Some(i), egui::Sense::click_and_drag());
                                         let color = Color32::from_rgb(
                                             key.color[0],
                                             key.color[1],
@@ -2790,7 +2790,7 @@ impl App {
                                         );
                                         let badge = egui::Rect::from_center_size(
                                             r.left_center() + Vec2::new(24.0, 0.0),
-                                            Vec2::splat(34.0),
+                                            Vec2::splat(28.0),
                                         );
                                         let ico = iconset::for_steps(&key.steps);
                                         let _ = color;
@@ -2817,12 +2817,12 @@ impl App {
                                         title.wrap.max_width = (r.width() - 72.0).max(20.0);
                                         title.wrap.max_rows = 1;
                                         ui.painter().galley(
-                                            r.min + Vec2::new(49.0, 8.0),
+                                            r.min + Vec2::new(49.0, 4.0),
                                             ui.painter().layout_job(title),
                                             p.ink,
                                         );
                                         ui.painter().text(
-                                            r.min + Vec2::new(49.0, 30.0),
+                                            r.min + Vec2::new(49.0, 23.0),
                                             egui::Align2::LEFT_TOP,
                                             trf(
                                                 "{name} · {count} action(s)",
@@ -2866,7 +2866,7 @@ impl App {
                         let (_, description, key) = &items[i];
                         egui::ScrollArea::vertical()
                             .id_salt("preset_details")
-                            .max_height(195.0)
+                            .max_height(112.0)
                             .show(ui, |ui| {
                                 ui.label(RichText::new(if self.catalog_tab == 1 { catalog::display_name(&key.label) } else { key.label.as_str() }).strong());
                                 ui.label(RichText::new(description).small().color(p.muted));
@@ -2997,7 +2997,7 @@ impl App {
     fn editor(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
         let running = self.engine.running.load(Ordering::SeqCst);
-        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else{320.0}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
+        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.43).clamp(190.0,290.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.55).clamp(300.0,430.0)}else{380.0}).height_range(160.0..=(ctx.screen_rect().height()*0.68).max(180.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
             let tab_id = egui::Id::new("inspector_tab");
             let mut tab = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id));
             let configured = { let k = &self.config.keys()[self.selected]; !k.steps.is_empty() || !k.long_steps.is_empty() || k.plugin.is_some() };
@@ -4432,15 +4432,21 @@ impl App {
                                         }
                                     });
                             });
-                            if ui.link(tr("Aider à traduire NovyDeck")).clicked() {
+                            if ui.link(format!("{} ↗", tr("Aider à traduire NovyDeck"))).clicked() {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/HatiFlash/NovyDeck/blob/main/docs/TRANSLATING.md"));
                             }
                             ui.separator();
                             let mut check = self.preferences.update_check.unwrap_or(false);
-                            if ui.checkbox(&mut check, tr("Vérifier les mises à jour au démarrage")).changed() {
-                                self.preferences.update_check = Some(check);
-                                self.save_preferences();
-                            }
+                            ui.scope(|ui| {
+                                let p = theme::palette(ui.ctx());
+                                let visuals = &mut ui.style_mut().visuals;
+                                visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.5, p.text_primary);
+                                visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.5, p.text_primary);
+                                if ui.checkbox(&mut check, tr("Vérifier les mises à jour au démarrage")).changed() {
+                                    self.preferences.update_check = Some(check);
+                                    self.save_preferences();
+                                }
+                            });
                         }
                         1 => {
                             iconset::heading(ui, Ico::Brightness, RichText::new(tr("Affichage")).size(17.0).strong());
