@@ -32,6 +32,7 @@ fn readme_captures_013_text_overlay_and_action_menu() {
         h.png(size, output, &out.join(format!("v013-text-overlay-on-{lang}.png")));
         h.click(size, checkbox);
         assert!(!h.app.config.keys()[0].label_overlay);
+        h.app.save();
         let output = h.warm(size);
         h.png(size, output, &out.join(format!("v013-text-overlay-off-{lang}.png")));
         let saved = crate::store::load(&h.app.path).unwrap();
