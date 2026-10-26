@@ -87,6 +87,7 @@ fn main015_empty_key_asks_assistant_without_running() {
     let empty_help = crate::i18n::tr("La bibliothèque à droite propose des raccourcis prêts à l’emploi. Tu peux ensuite combiner et modifier leurs actions ici.");
     assert!(before.shapes.iter().any(|clipped| match &clipped.shape {
         egui::Shape::Text(text) if text.galley.job.text == empty_help =>
+            text.galley.rows.len() >= 2 &&
             clipped.clip_rect.contains_rect(egui::Rect::from_min_size(text.pos, text.galley.size())),
         _ => false,
     }), "empty-key guidance must wrap within the inspector");
