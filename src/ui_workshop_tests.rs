@@ -90,9 +90,13 @@ fn workshop_header_stays_one_line_at_compact_and_hidpi() {
         let (mut h, _) = workshop();
         h.ctx.set_pixels_per_point(dpi);
         let output = h.warm(physical / dpi);
-        let top = text_position(&output.shapes, "NovyDeck").unwrap().y;
+        let top = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("header")).unwrap().rect;
+        let workshop_title = output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
+            (t.galley.job.text.starts_with("Atelier · Touche")).then_some(t.pos.y)
+        } else { None }).next().unwrap();
         let save = text_position(&output.shapes, "Enregistrer").unwrap().y;
-        assert!((save - top).abs() < 22.0, "header wrapped at {physical:?} dpi={dpi}: {top} / {save}");
+        assert!(top.height() < 60.0, "global header wrapped at {physical:?} dpi={dpi}: {top:?}");
+        assert!((save - workshop_title).abs() < 22.0, "workshop header wrapped at {physical:?} dpi={dpi}: {workshop_title} / {save}");
     }
 }
 
