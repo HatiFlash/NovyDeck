@@ -194,7 +194,7 @@ fn main015_captures() {
             assert!(text_position(&frame.shapes, if lang == "fr" { "Touches : actives" } else { "Keys: running" }).is_some(), "0.15 active key status missing");
         }
         if screen == "inspecteur-apparence" {
-            assert!(text_position(&frame.shapes, if lang == "fr" { "Titre sur la touche" } else { "Key title" }).is_some(), "appearance inspector marker missing");
+            assert!(text_position(&frame.shapes, crate::i18n::tr("Titre sur la touche")).is_some(), "appearance inspector marker missing");
         }
         if screen == "reglages" {
             assert!(text_position(&frame.shapes, if lang == "fr" { "Vérifier les mises à jour au démarrage" } else { "Check for updates on startup" }).is_some(), "settings checkbox missing");

@@ -5338,9 +5338,7 @@ fn edit_step(
                     .changed();
                 ui.label("ms");
             });
-            changed |= ui
-                .checkbox(focus, tr("Mettre cette fenêtre au premier plan"))
-                .changed();
+            changed |= theme::checkbox(ui, focus, tr("Mettre cette fenêtre au premier plan")).changed();
         }
         Step::Media { command } => {
             let items = [
