@@ -37,12 +37,28 @@ pub enum Command {
     TestStop,
     TestBrightness,
 }
-pub fn spawn(tx: Sender<Event>, config_path: PathBuf) -> Sender<Command> {
+pub fn spawn(tx: Sender<Event>, config_path: PathBuf, ctx: eframe::egui::Context) -> Sender<Command> {
     let (cmd, rx) = mpsc::channel();
-    std::thread::spawn(move || worker(rx, tx, config_path));
+    std::thread::spawn(move || worker(rx, tx, config_path, ctx));
     cmd
 }
-fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf) {
+fn send_input(tx: &Sender<Event>, ctx: &eframe::egui::Context, event: Event) {
+    if tx.send(event).is_ok() { ctx.request_repaint(); }
+}
+#[cfg(test)]
+#[test]
+fn physical_input_wakes_the_ui_without_waiting_for_a_background_tick() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let ctx = eframe::egui::Context::default();
+    let wakes = Arc::new(AtomicUsize::new(0));
+    let count = wakes.clone();
+    ctx.set_request_repaint_callback(move |_| { count.fetch_add(1, Ordering::SeqCst); });
+    let (tx, rx) = mpsc::channel();
+    send_input(&tx, &ctx, Event::Key(0, Instant::now()));
+    assert!(matches!(rx.try_recv(), Ok(Event::Key(0, _))));
+    assert!(wakes.load(Ordering::SeqCst) > 0, "l'appui HID doit réveiller la fenêtre");
+}
+fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: eframe::egui::Context) {
     // Rapport dès le démarrage, même si le D6 n’est pas connecté.
     // One report file per session: retries append to it instead of rotating the first connection away.
     let session_report: Option<Arc<Report>> = match Report::start(&config_path) {
@@ -254,14 +270,14 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf) {
                                     if config.flip_input_rows && d.driver.model().id == "fifine_d6" { k = display_index(k); }
                                     if down && test_running {
                                         d.note(&format!("Test appui : brut={} ; index décodé={}", report::hex(&data[..n]), k+1));
-                                        let _=tx.send(Event::HardwareTestPress(report::hex(&data[..n]), k));
+                                        send_input(&tx, &ctx, Event::HardwareTestPress(report::hex(&data[..n]), k));
                                     } else if test_running { /* Relâchement ignoré pendant le test. */
                                     } else if down {
                                         if last_press[k].elapsed() >= Duration::from_millis(150) {
                                             last_press[k] = Instant::now();
-                                            let _ = tx.send(Event::Key(k, Instant::now()));
+                                            send_input(&tx, &ctx, Event::Key(k, Instant::now()));
                                         }
-                                    } else { let _ = tx.send(Event::KeyRelease(k, Instant::now())); }
+                                    } else { send_input(&tx, &ctx, Event::KeyRelease(k, Instant::now())); }
                                 }
                                 InputEvent::Encoder(i, direction) => d.note(&format!("Molette {i} : {direction:+} (action non configurée)")),
                                 _ => {}

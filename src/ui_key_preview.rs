@@ -11,6 +11,7 @@ struct Signature {
     icon_scale: u8,
     color: [u8; 3],
     background: bool,
+    label_overlay: bool,
     image: String,
     kind: usize,
     has_actions: bool,
@@ -22,7 +23,7 @@ impl Signature {
         Self {
             face_version: face.map_or(0,|f|f.version),
             label: key.label.clone(), runtime_badge: key.runtime_badge.clone(), title_size: key.title_size, icon_scale: key.icon_scale,
-            color: key.color, background: key.background, image: key.image.clone(),
+            color: key.color, background: key.background, label_overlay: key.label_overlay, image: key.image.clone(),
             kind: crate::icons::kind(key), has_actions: !key.steps.is_empty(), size,
             file: if key.image.is_empty() { None } else {
                 std::fs::metadata(&key.image).ok().map(|m| (m.len(), m.modified().ok()))

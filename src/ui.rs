@@ -360,7 +360,7 @@ impl App {
         let device = if isolated {
             mpsc::channel().0
         } else {
-            device::spawn(tx.clone(), path.clone())
+            device::spawn(tx.clone(), path.clone(), ctx.clone())
         };
         let desktop = if isolated || smoke {
             None
