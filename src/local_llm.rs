@@ -388,7 +388,7 @@ pub fn guard(request: &str, steps: Vec<Step>, knowledge: &Knowledge) -> Vec<Step
     let mut out: Vec<Step> = Vec::new();
     for mut step in steps {
         let keep = match &mut step {
-            Step::PluginAction { plugin, action, .. } => knowledge.plugins.iter().any(|p| {
+            Step::PluginAction { plugin, action, settings, .. } => settings.as_object().is_some_and(|s| s.is_empty()) && knowledge.plugins.iter().any(|p| {
                 p.uuid == *plugin && p.prerequisite.is_none()
                     && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_))
                     && (simple.contains(&format!(" {} ", simplify(p.display_name()))) || simple.contains(&format!(" {} ", simplify(&p.uuid))))
@@ -1032,7 +1032,12 @@ mod tests {
         let unknown_action = Step::PluginAction { plugin: plugin.uuid.clone(), action: "not.installed.action".into(), settings: json!({}), label: "Toggle Mute".into() };
         let mut knowledge = Knowledge::builtin();
         knowledge.plugins.push(plugin);
-        assert_eq!(guard("lance Toggle Mute de SoundPad", vec![installed.clone(), unknown, unknown_action], &knowledge), vec![installed]);
+        assert_eq!(guard("lance Toggle Mute de SoundPad", vec![installed.clone(), unknown, unknown_action], &knowledge), vec![installed.clone()]);
+        let mut invented = installed.clone();
+        if let Step::PluginAction { settings, .. } = &mut invented {
+            *settings = json!({"privateDeviceId": "invented"});
+        }
+        assert!(guard("lance Toggle Mute de SoundPad", vec![invented], &knowledge).is_empty());
     }
 
     #[test]
