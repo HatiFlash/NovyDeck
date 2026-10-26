@@ -3313,15 +3313,21 @@ impl App {
                                 ui.label(RichText::new(tr("Étapes supplémentaires hors ON/OFF : elles s'exécutent à chaque appui.")).color(theme::WARNING));
                             }
                             if let Step::Toggle { a, b } = &mut key.steps[index] {
-                                ui.columns(2, |columns| {
-                                    for (branch, steps, title) in [(0, a, tr("Action 1")), (1, b, tr("Action 2"))] {
-                                        columns[branch].push_id(("onoff", branch), |ui| {
-                                            egui::ScrollArea::vertical().id_salt("branch_scroll").auto_shrink([false, false]).max_height((body_height - 50.0).max(90.0)).show(ui, |ui| {
-                                                changed |= onoff_branch_ui(ui, steps, title, branch, index, &names, &pages, &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]), &mut record_step, &mut pick_audio, &mut removed_step);
-                                            });
-                                        });
+                                let tab_id = ui.id().with("onoff_action_tab");
+                                let mut branch = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id)).min(1);
+                                ui.horizontal(|ui| {
+                                    for (choice, title) in [(0, tr("Action 1")), (1, tr("Action 2"))] {
+                                        if theme::segmented(ui, branch == choice, title).clicked() { branch = choice; }
                                     }
                                 });
+                                ui.ctx().data_mut(|d| d.insert_persisted(tab_id, branch));
+                                let (steps, title) = if branch == 0 { (a, tr("Action 1")) } else { (b, tr("Action 2")) };
+                                egui::ScrollArea::vertical().id_salt(("onoff_branch_scroll", branch))
+                                    .auto_shrink([false, false]).max_height((body_height - 64.0).max(80.0)).show(ui, |ui| {
+                                        changed |= onoff_branch_ui(ui, steps, title, branch as usize, index, &names, &pages,
+                                            &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]),
+                                            &mut record_step, &mut pick_audio, &mut removed_step);
+                                    });
                             }
                         }
                     }

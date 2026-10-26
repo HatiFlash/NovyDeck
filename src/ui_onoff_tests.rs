@@ -14,18 +14,29 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }] if a == &vec![Step::Hotkey { keys: "F9".into() }] && b.is_empty()));
     assert!(text_position(&output.shapes, "Action 1").is_some());
-    assert!(text_position(&output.shapes, "Action 2").is_some());
+    let action2 = text_position(&output.shapes, "Action 2").expect("onglet Action 2");
+    h.click(size, action2);
+    let output = h.warm(size);
     assert_eq!(h.app.config.keys()[0].label, "F9");
     assert!(h.app.config.keys()[0].state_display.is_none());
     let pos = text_position(&output.shapes, "Raccourci clavier").expect("raccourci clavier direct");
     h.click(size, pos);
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { b, .. }] if matches!(&b[..], [Step::Hotkey { .. }])), "steps after catalog click: {:?}, menu at {:?}", h.app.config.keys()[0].steps, pos);
+    let branch = text_position(&output.shapes, "Action 2").expect("onglet Action 2 toujours visible");
+    let mut output = output;
+    for _ in 0..12 {
+        if text_position(&output.shapes, "Enregistrer…").is_some() { break; }
+        output = h.frame(size, vec![
+            Input::PointerMoved(branch + egui::vec2(85.0, 40.0)),
+            Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -55.0), modifiers: egui::Modifiers::NONE },
+        ]);
+    }
     if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
         h.png(size, output.clone(), &std::path::PathBuf::from(dir).join("onoff-compact-action2.png"));
     }
-    let field = text_position(&output.shapes, "Ex. CTRL+SHIFT+S · ALT+TAB · F13").expect("propriétés raccourci Action 2");
-    h.click(size, field + egui::vec2(0.0, -22.0));
+    let record = text_position(&output.shapes, "Enregistrer…").expect("champ Action 2 accessible par défilement");
+    h.click(size, record + egui::vec2(-90.0, 0.0));
     h.frame(size, vec![Input::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers { ctrl: true, ..Default::default() } }, Input::Text("F10".into())]);
     h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }] if matches!(&a[..], [Step::Hotkey { keys }] if keys == "F9") && matches!(&b[..], [Step::Hotkey { keys }] if keys == "F10")));
