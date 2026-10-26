@@ -1392,6 +1392,17 @@
     "Remise en route non confirmée": "Restart not confirmed",
     "Gestion du plugin en cours": "Managing plugin",
     "Le traitement du plugin a été interrompu.": "Plugin operation was interrupted.",
-    "Veuillez patienter : préparation, sauvegarde et reprise du plugin.": "Please wait: preparing, backing up and resuming the plugin."
+    "Veuillez patienter : préparation, sauvegarde et reprise du plugin.": "Please wait: preparing, backing up and resuming the plugin.",
+    "Les nouveautés de cette version": "Highlights in this release",
+    "C'est parti": "Let's go",
+    "Notes complètes sur GitHub": "Full release notes on GitHub",
+    "Installateur · {size} Mo · SHA-256 vérifié avant installation": "Installer · {size} MB · SHA-256 verified before installation",
+    "Profils, médias et plugins conservés. NovyDeck redémarrera après l'installation.": "Profiles, media and plugins are kept. NovyDeck will restart after installation.",
+    "Mettre à jour maintenant": "Update now",
+    "Voir sur GitHub": "View on GitHub",
+    "Réessayer": "Retry",
+    "Téléchargement → Vérification → Installation → Relance": "Download → Verification → Installation → Relaunch",
+    "{size} octets annoncés par la version publiée": "{size} bytes listed by the published release",
+    "Confirmation requise avant téléchargement": "Confirm before downloading"
   }
 }

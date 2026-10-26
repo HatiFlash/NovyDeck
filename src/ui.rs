@@ -4059,15 +4059,7 @@ impl App {
             }
         }
         if self.startup_prompts && self.whats_new {
-            let mut open = true;
-            let mut understood = false;
-            theme::fixed_window(trf("Quoi de neuf dans NovyDeck {version}", &[("version", &env!("CARGO_PKG_VERSION"))]))
-                .open(&mut open).collapsible(false).resizable(true).default_width(450.0)
-                .show(ctx, |ui| {
-                    about::notes(ui, &self.whats_new_notes);
-                    if ui.button(tr("Compris")).clicked() { understood = true; }
-                });
-            if understood || !open {
+            if update_ui::whats_new(ctx, &self.whats_new_notes) {
                 self.whats_new = false;
                 self.preferences.last_seen_version = env!("CARGO_PKG_VERSION").into();
                 self.save_preferences();
@@ -4094,27 +4086,14 @@ impl App {
             }
         }
         if let Some(latest) = self.startup_offer.clone() {
-            let mut open = true;
-            let mut later = false;
-            theme::fixed_window(tr("Mise à jour disponible"))
-                .open(&mut open).collapsible(false).resizable(true).default_width(450.0)
-                .show(ctx, |ui| {
-                    ui.label(trf("NovyDeck {version} est disponible (vous avez {current}).", &[("version", &latest.version), ("current", &env!("CARGO_PKG_VERSION"))]));
-                    about::notes(ui, &latest.notes);
-                    if self.update_installed {
-                        if ui.button(tr("Télécharger et installer")).clicked() {
-                            self.update_confirm = Some(latest.clone());
-                            later = true;
-                        }
-                    } else {
-                        ui.label(tr("Version portable : téléchargez le ZIP depuis la page des nouveautés"));
-                    }
-                    if ui.button(tr("Voir les nouveautés")).clicked() {
-                        ui.ctx().open_url(egui::OpenUrl::new_tab(latest.page.clone()));
-                    }
-                    if ui.button(tr("Plus tard")).clicked() { later = true; }
-                });
-            if later || !open { self.startup_offer = None; }
+            match update_ui::offer(ctx, &latest, self.update_installed) {
+                update_ui::OfferAction::None => {}
+                update_ui::OfferAction::Later => self.startup_offer = None,
+                update_ui::OfferAction::Install => {
+                    self.update_confirm = Some(latest);
+                    self.startup_offer = None;
+                }
+            }
         }
         if self.show_about {
             let mut open = true;
@@ -4155,59 +4134,49 @@ impl App {
                         self.start_update_check(ctx, false);
                     }
                     if let Some(phase) = self.update_phase { motion::loading(ui, phase); }
-                    if let Some(result) = &self.update_result {
-                        match result {
-                            Err(error) => { ui.label(error); }
-                            Ok(crate::app_update::Status::Current) => { ui.label(trf("À jour (version {version})", &[("version", &env!("CARGO_PKG_VERSION"))])); }
-                            Ok(crate::app_update::Status::Ahead) => { ui.label(tr("Cette version est plus récente que la dernière publiée")); }
-                            Ok(crate::app_update::Status::New(latest)) => {
-                                ui.label(trf("Nouvelle version {version} disponible", &[("version", &latest.version)]));
-                                about::notes(ui, &latest.notes);
-                                if self.update_installed {
-                                    if ui.add_enabled(self.update_rx.is_none(), egui::Button::new(tr("Télécharger et installer"))).clicked() {
-                                        self.update_confirm = Some(latest.clone());
-                                    }
-                                } else {
-                                    ui.label(tr("Version portable : téléchargez le ZIP depuis la page des nouveautés"));
-                                }
-                                if ui.button(tr("Voir les nouveautés")).clicked() {
-                                    ui.ctx().open_url(egui::OpenUrl::new_tab(latest.page.clone()));
-                                }
+                    update_ui::status(ui, self);
+                    if self.update_result.as_ref().is_some_and(Result::is_err)
+                        && ui.add(theme::ghost_button(tr("Réessayer"))).clicked() {
+                        self.start_update_check(ctx, false);
+                    }
+                    if let Some(Ok(crate::app_update::Status::New(latest))) = &self.update_result {
+                        ui.label(trf("Nouvelle version {version} disponible", &[("version", &latest.version)]));
+                        update_ui::notes(ui, &latest.notes, false);
+                        if self.update_installed {
+                            if ui.add_enabled(self.update_rx.is_none(), theme::primary(tr("Mettre à jour maintenant"))).clicked() {
+                                self.update_confirm = Some(latest.clone());
                             }
+                        } else {
+                            ui.label(tr("Version portable : téléchargez le ZIP depuis la page des nouveautés"));
+                        }
+                        if ui.add(theme::ghost_button(tr("Voir sur GitHub"))).clicked() {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(latest.page.clone()));
                         }
                     }
                 });
             self.show_about = open;
         }
         if let Some(latest) = self.update_confirm.clone() {
-            let mut confirm = true;
-            theme::fixed_window(tr("Installer la mise à jour"))
-                .open(&mut confirm).collapsible(false).resizable(false).default_width(390.0)
-                .show(ctx, |ui| {
-                    ui.label(trf("Nouvelle version {version} disponible", &[("version", &latest.version)]));
-                    about::notes(ui, &latest.notes);
-                    ui.label(trf("NovyDeck va se fermer, installer la version {version} puis redémarrer. Vos profils, médias et plugins sont conservés.", &[("version", &latest.version)]));
-                    ui.horizontal(|ui| {
-                        if ui.button(tr("Installer maintenant")).clicked() {
-                            self.update_confirm = None;
-                            self.update_phase = Some(tr("Téléchargement…"));
-                            let (tx, rx) = mpsc::channel();
-                            self.update_rx = Some(rx);
-                            let context = ctx.clone();
-                            std::thread::spawn(move || {
-                                let signal = tx.clone();
-                                let result = crate::app_update::download_with_progress(&latest, || {
-                                    let _ = signal.send(about::UpdateEvent::Verifying);
-                                    context.request_repaint();
-                                }).map_err(|e| e.to_string());
-                                let _ = tx.send(about::UpdateEvent::Downloaded(result));
-                                context.request_repaint();
-                            });
-                        }
-                        if ui.button(tr("Annuler")).clicked() { self.update_confirm = None; }
+            match update_ui::confirm(ctx, &latest) {
+                Some(true) => {
+                    self.update_confirm = None;
+                    self.update_phase = Some(tr("Téléchargement…"));
+                    let (tx, rx) = mpsc::channel();
+                    self.update_rx = Some(rx);
+                    let context = ctx.clone();
+                    std::thread::spawn(move || {
+                        let signal = tx.clone();
+                        let result = crate::app_update::download_with_progress(&latest, || {
+                            let _ = signal.send(about::UpdateEvent::Verifying);
+                            context.request_repaint();
+                        }).map_err(|e| e.to_string());
+                        let _ = tx.send(about::UpdateEvent::Downloaded(result));
+                        context.request_repaint();
                     });
-                });
-            if !confirm { self.update_confirm = None; }
+                }
+                Some(false) => self.update_confirm = None,
+                None => {}
+            }
         }
         if let Some(offer) = self.ffmpeg_offer.clone() {
             let mut open = true;
@@ -4597,7 +4566,7 @@ impl App {
         self.housekeeping();
         self.assistant_events();
         let management_modal=self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some();
-        let modal = management_modal || self.show_workflow
+        let modal = management_modal || self.whats_new || self.startup_offer.is_some() || self.update_confirm.is_some() || self.update_rx.is_some() || self.show_workflow
             || plugin_market_ui::is_open()
             || self.show_assets
             || self.show_desktop_settings
