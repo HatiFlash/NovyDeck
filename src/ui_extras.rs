@@ -1257,21 +1257,6 @@ impl App {
                     let clip = ui.clip_rect();
                     #[cfg(test)]
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
-                    let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
-                        || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
-                    if dragging && ctx.input(|i| i.pointer.primary_down()) {
-                        if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                            if clip.contains(pos) {
-                                let edge = 48.0;
-                                let delta = if pos.y < clip.top() + edge { -18.0 }
-                                    else if pos.y > clip.bottom() - edge { 18.0 } else { 0.0 };
-                                if delta != 0.0 {
-                                    ctx.data_mut(|d| d.insert_temp(scroll_id, delta));
-                                    ctx.request_repaint();
-                                }
-                            }
-                        }
-                    }
                     let steps = &self.config.keys()[selected].steps;
                     if steps.is_empty() {
                         ui.add_space(24.0);
@@ -1297,6 +1282,23 @@ impl App {
                         }
                         if let Some(step) = plugin_choices_menu(ui, &installed_plugins, "") { add_plugin = Some(step); }
                     });
+                    // Evaluate after the cards: the handle registers drag_started during
+                    // this frame's card rendering, not before the scroll area is shown.
+                    let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
+                        || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
+                    if dragging && ctx.input(|i| i.pointer.primary_down()) {
+                        if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                            if clip.contains(pos) {
+                                let edge = 48.0;
+                                let delta = if pos.y < clip.top() + edge { -18.0 }
+                                    else if pos.y > clip.bottom() - edge { 18.0 } else { 0.0 };
+                                if delta != 0.0 {
+                                    ctx.data_mut(|d| d.insert_temp(scroll_id, delta));
+                                    ctx.request_repaint();
+                                }
+                            }
+                        }
+                    }
                 });
             }
             if let Err(e) = validate_key(&self.config.keys()[selected], &self.config) {
