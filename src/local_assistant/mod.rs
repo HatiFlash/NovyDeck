@@ -579,6 +579,11 @@ fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Res
         parser::normalize(&a.name).split_whitespace().filter(|w| w.len() > 2).all(|w| contains_phrase(&n, w))
     }).collect();
     let candidates = if !exact.is_empty() { &exact } else { &partial };
+    // Une action nommée ne suffit pas à autoriser une planification différée :
+    // aucune étape de calendrier n'est déduite implicitement d'un adverbe temporel.
+    if !candidates.is_empty() && has(&n, &["tomorrow", "demain", "next week", "la semaine prochaine", "tonight", "ce soir"]) {
+        return Some(Err(Status::Inconnue));
+    }
     let unsafe_target = has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]);
     let question = |fr: String, en: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue {
         question: if crate::i18n::current() == "en" { en } else { fr },

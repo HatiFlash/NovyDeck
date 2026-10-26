@@ -95,6 +95,8 @@ fn plugin_request_corpus() {
         ("draw a unicorn", Unknown),
         ("launch plugin GhostPad", Unknown),
         ("start recording tomorrow", Unknown),
+        ("démarre Start Recording de OBS-like demain", Unknown),
+        ("Switch Scene from OBS-like next week", Unknown),
     ];
     let mut counts = [0usize; 3];
     let mut gaps = Vec::new();
@@ -165,4 +167,26 @@ fn plugin_request_corpus() {
     eprintln!("CORPUS plugins: pass={} question={} inconnue={} écarts={}", counts[0], counts[1], counts[2], gaps.len());
     for gap in &gaps { eprintln!("  {gap}"); }
     assert!(gaps.is_empty(), "{} écarts dans le corpus plugins: {}", gaps.len(), gaps.join(" | "));
+
+    // Question et choix restent anglais, y compris les refus du modèle.
+    crate::i18n::set_language("en");
+    for (request, prefix, choices) in [
+        ("Toggle Mute from GhostPad", "Which installed plugin", 2),
+        ("Toggle Mute", "Which action from which plugin", 2),
+        ("SoundPad", "Which action from", 2),
+        ("Toggle Mute from SoundPad on my mic", "Which target or device", 0),
+    ] {
+        let p = propose_with(request, &Config::default(), &knowledge);
+        assert!(matches!(&p.status, Status::Ambigue { question, choix, .. }
+            if question.starts_with(prefix) && choix.len() == choices
+                && choix.iter().all(|item| item.starts_with("Launch "))), "{request}: {p:?}");
+    }
+    let unknown = super::from_model_guarded(vec![], vec![("org.example.ghost".into(), "missing".into())], &Config::default(), &knowledge);
+    assert!(matches!(&unknown.status, Status::Ambigue { question, choix, .. }
+        if question.starts_with("The proposed plugin is not installed") && choix.is_empty()), "{unknown:?}");
+    let rejected = super::from_model_guarded(vec![], vec![(knowledge.plugins[0].uuid.clone(), knowledge.plugins[0].actions[0].uuid.clone())], &Config::default(), &knowledge);
+    assert!(matches!(&rejected.status, Status::Ambigue { question, choix, .. }
+        if question.starts_with("Which action from") && question.contains("settings")
+            && choix.iter().all(|item| item.starts_with("Launch "))), "{rejected:?}");
+    crate::i18n::set_language("fr");
 }
