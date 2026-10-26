@@ -1243,15 +1243,7 @@ impl App {
                         &[], &mut record, 0, highlight, &mut pick_audio, &dialog_tx, &target, &validation_config, true, &installed_plugins);
                 });
             } else {
-                let scroll_id = egui::Id::new("workshop_drag_scroll_offset");
-                let requested = ctx.data_mut(|d| d.remove_temp::<f32>(scroll_id));
-                let mut area = egui::ScrollArea::vertical().id_salt("workflow_scroll");
-                if let Some(delta) = requested {
-                    let current = egui::scroll_area::State::load(ctx, ui.make_persistent_id("workflow_scroll"))
-                        .map_or(0.0, |s| s.offset.y);
-                    area = area.vertical_scroll_offset((current + delta).max(0.0));
-                }
-                area.show(ui, |ui| {
+                egui::ScrollArea::vertical().id_salt("workflow_scroll").show(ui, |ui| {
                     let clip = ui.clip_rect();
                     #[cfg(test)]
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
@@ -1291,7 +1283,7 @@ impl App {
                                 let delta = if pos.y < clip.top() + edge { -18.0 }
                                     else if pos.y > clip.bottom() - edge { 18.0 } else { 0.0 };
                                 if delta != 0.0 {
-                                    ctx.data_mut(|d| d.insert_temp(scroll_id, delta));
+                                    ui.scroll_with_delta(egui::vec2(0.0, -delta));
                                     ctx.request_repaint();
                                 }
                             }
