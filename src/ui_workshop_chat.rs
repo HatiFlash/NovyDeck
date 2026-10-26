@@ -576,14 +576,18 @@ impl App {
             self.save_preferences();
         }
         if let Some(option) = choice {
-            self.workshop_chat.input = format!(
-                "{} : {}",
-                self.workshop_chat
-                    .pending
-                    .as_ref()
-                    .map_or("", |p| p.request.as_str()),
+            // Les choix de plugin sont des demandes complètes : ne pas réinjecter la
+            // qualification inconnue ou la cible non décrite de la demande initiale.
+            self.workshop_chat.input = if (option.starts_with("Lance ") && option.contains(" de "))
+                || (option.starts_with("Launch ") && option.contains(" from ")) {
                 option
-            );
+            } else {
+                format!(
+                    "{} : {}",
+                    self.workshop_chat.pending.as_ref().map_or("", |p| p.request.as_str()),
+                    option
+                )
+            };
             self.workshop_chat.pending = None;
         }
         if let Some(action) = action {

@@ -523,40 +523,65 @@ pub fn propose_with(text: &str, config: &Config, knowledge: &crate::local_llm::K
     }
 }
 
-fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Result<Step, String>> {
+fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Result<Step, Status>> {
     let n = parser::normalize(clause);
     let named = |name: &str| !name.trim().is_empty() && contains_phrase(&n, &parser::normalize(name));
     let available: Vec<_> = plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_))).collect();
     let mentioned: Vec<_> = available.iter().copied().filter(|p| named(p.display_name()) || named(&p.uuid)).collect();
-    let candidates: Vec<_> = (if mentioned.is_empty() { &available } else { &mentioned })
-        .iter().flat_map(|p| p.actions.iter().filter(|a| named(&a.name) || named(&a.uuid)).map(move |a| (*p, a)))
-        .collect();
+    let pool = if mentioned.is_empty() { &available } else { &mentioned };
+    let exact: Vec<_> = pool.iter().flat_map(|p| p.actions.iter().filter(|a| named(&a.name) || named(&a.uuid)).map(move |a| (*p, a))).collect();
+    // Une partie d'un nom d'action ne suffit jamais à insérer. Seul le nom complet
+    // (éventuellement avec les mots dans un autre ordre) est une preuve suffisante.
+    let partial: Vec<_> = if exact.is_empty() && !mentioned.is_empty() {
+        pool.iter().flat_map(|p| p.actions.iter().filter(|a| {
+            let action = parser::normalize(&a.name);
+            action.split_whitespace().any(|word| word.len() > 2 && contains_phrase(&n, word))
+        }).map(move |a| (*p, a))).collect()
+    } else { vec![] };
+    let complete: Vec<_> = partial.iter().copied().filter(|(_, a)| {
+        parser::normalize(&a.name).split_whitespace().filter(|w| w.len() > 2).all(|w| contains_phrase(&n, w))
+    }).collect();
+    let candidates = if !exact.is_empty() { &exact } else { &partial };
+    let unsafe_target = has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]);
+    let choices = |items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| -> Vec<String> {
+        items.iter().filter(|(p, a)| !unsafe_target && p.inspector.is_none() && a.inspector.is_none()).take(6).map(|(p, a)| {
+            if crate::i18n::current() == "en" {
+                format!("Launch {} from {}", a.name, p.display_name())
+            } else {
+                format!("Lance {} de {}", a.name, p.display_name())
+            }
+        }).collect()
+    };
+    let question = |message: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue { question: message, choix: choices(items) };
     // « de X » après une action désigne un plugin précis : ne pas choisir un plugin
     // homonyme installé lorsque X n'appartient pas à l'inventaire.
-    let unknown_qualifier = mentioned.is_empty() && candidates.iter().any(|(_, a)| {
+    let unknown_qualifier = mentioned.is_empty() && exact.iter().any(|(_, a)| {
         [a.name.as_str(), a.uuid.as_str()].iter().any(|name| {
             let token = parser::normalize(name);
             n.split_once(&token).is_some_and(|(_, rest)| rest.trim_start().starts_with("de ") || rest.trim_start().starts_with("from "))
         })
     });
     if unknown_qualifier {
-        return Some(Err("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into()));
+        return Some(Err(question("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into(), &exact)));
     }
     match candidates.as_slice() {
-        [(p, a)] => {
+        [(p, a)] if !exact.is_empty() || complete.len() == 1 && partial.len() == 1 => {
             // Les champs de l'inspecteur tiers ne figurent pas dans le manifeste :
             // ni appareil ni réglages implicites ne peuvent être déduits ici.
             if a.inspector.is_some() || p.inspector.is_some() {
-                return Some(Err(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name())));
+                return Some(Err(question(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name()), &vec![])));
             }
-            if has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]) {
-                return Some(Err(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name())));
+            if unsafe_target {
+                return Some(Err(question(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name()), &vec![])));
             }
             Some(Ok(Step::PluginAction { plugin: p.uuid.clone(), action: a.uuid.clone(), settings: serde_json::json!({}), label: a.name.clone() }))
         }
-        [] if !mentioned.is_empty() => Some(Err(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")))),
+        [] if !mentioned.is_empty() => {
+            let actions: Vec<_> = mentioned.iter().flat_map(|p| p.actions.iter().map(move |a| (*p, a))).collect();
+            Some(Err(question(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), &actions)))
+        }
         [] => None,
-        _ => Some(Err(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")))),
+        _ => Some(Err(question(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), candidates))),
     }
 }
 
@@ -572,9 +597,9 @@ fn propose_plain(text: &str, config: &Config, knowledge: &crate::local_llm::Know
         if let Some(intent) = plugin_intent(&clause, &knowledge.plugins) {
             match intent {
                 Ok(step) => { result.steps.push(step); continue; }
-                Err(question) => {
+                Err(status) => {
                     result.steps.clear();
-                    result.status = Status::Ambigue { question, choix: vec![] };
+                    result.status = status;
                     return result;
                 }
             }
