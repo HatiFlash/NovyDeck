@@ -19,22 +19,22 @@ test("desktop: sections, media, interactions, download", async ({ page }) => {
   await page.locator("#showcase").scrollIntoViewIfNeeded();
   await page.screenshot({ path: output("showcase-desktop") });
   await expect(page.getByRole("tab")).toHaveCount(10);
-  for (const [index, label, file] of [["01", "Touches 0.15", "main"], ["02", "Apparence 0.15", "appearance"], ["03", "Assistant 0.15", "assistant"], ["04", "Précision plugin 0.15", "question"]]) {
+  for (const [index, label, file] of [["01", "Actions ON/OFF", "v0151-onoff"], ["02", "Supprimer dans l’Atelier", "v0151-workshop"], ["03", "Assistant 0.15", "v015-assistant"], ["04", "Précision plugin 0.15", "v015-question"]]) {
     await page.getByRole("tab", { name: new RegExp(`${index}.*${label}`) }).click();
     const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
     await expect(panel.locator(".micro")).toHaveText(`${index} / 10`);
-    await expect(panel.locator(`a[href*='v015-${file}-fr.webp']`)).toHaveAttribute("aria-label", /Agrandir la capture/);
+    await expect(panel.locator(`a[href*='${file}-fr.webp']`)).toHaveAttribute("aria-label", /Agrandir la capture/);
     await expect(panel.locator("img")).toBeVisible();
     await panel.locator("img").scrollIntoViewIfNeeded();
     await expect.poll(() => panel.locator("img").evaluate(img => (img as HTMLImageElement).naturalWidth), { timeout: 10_000 }).toBeGreaterThan(0);
   }
   await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /fixture plugin SoundPad inerte/);
-  await page.getByRole("tab", { name: /06.*États ON/ }).click();
+  await page.getByRole("tab", { name: /07.*États ON/ }).click();
   await expect(page.getByRole("heading", { name: "Le bon état, au bon moment." })).toBeVisible();
-  await page.getByRole("tab", { name: /08.*Atelier 0\.14/ }).click();
+  await page.getByRole("tab", { name: /09.*Atelier 0\.14/ }).click();
   await expect(page.getByRole("img", { name: /Capture française de l’Atelier 0\.14/ })).toBeVisible();
   await page.screenshot({ path: output("workshop-014-desktop") });
-  await page.getByRole("tab", { name: /09.*Quoi de neuf/ }).click();
+  await page.getByRole("tab", { name: /10.*Quoi de neuf/ }).click();
   await expect(page.getByRole("link", { name: /offre de mise à jour 0\.13/ })).toHaveAttribute("href", /v014-update-fr\.webp/);
   await page.screenshot({ path: output("whats-new-014-desktop") });
   await page.getByRole("button", { name: "Clair" }).click();
@@ -42,8 +42,8 @@ test("desktop: sections, media, interactions, download", async ({ page }) => {
   await page.locator("#workflow").scrollIntoViewIfNeeded();
   await page.screenshot({ path: output("workflow-desktop") });
   await expect(page.locator(".flow-step")).toHaveCount(5);
-  const href = await page.getByRole("link", { name: "Installateur Windows v0.15.0" }).getAttribute("href");
-  expect(href).toContain("v0.15.0/NovyDeck-0.15.0-Setup.exe");
+  const href = await page.getByRole("link", { name: "Installateur Windows v0.15.1" }).getAttribute("href");
+  expect(href).toContain("v0.15.1/NovyDeck-0.15.1-Setup.exe");
   for (const section of ["assistant", "plugins", "integrations", "film", "download"]) {
     await page.locator(`#${section}`).scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
@@ -67,7 +67,7 @@ test("mobile: responsive, navigation and lightweight scene", async ({ page }) =>
   await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: "Atelier" }).click();
   await expect(page.locator("#workflow")).toBeInViewport();
   await page.screenshot({ path: output("workflow-mobile") });
-  await page.getByRole("tab", { name: /07.*Médias/ }).click();
+  await page.getByRole("tab", { name: /08.*Médias/ }).click();
   await expect(page.getByRole("heading", { name: "Cadrez sans abîmer." })).toBeVisible();
   await page.getByRole("button", { name: "Switch to English" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Your deck.");
@@ -75,11 +75,11 @@ test("mobile: responsive, navigation and lightweight scene", async ({ page }) =>
   await expect(page.getByRole("tab")).toHaveCount(10);
   await page.getByRole("tab", { name: /03.*Assistant 0\.15/ }).click();
   await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /French example request/);
-  await page.getByRole("tab", { name: /06.*ON \/ OFF/ }).click();
+  await page.getByRole("tab", { name: /07.*ON \/ OFF/ }).click();
   await expect(page.getByRole("heading", { name: "The right state at the right time." })).toBeVisible();
-  await page.getByRole("tab", { name: /07.*Media/ }).click();
+  await page.getByRole("tab", { name: /08.*Media/ }).click();
   await expect(page.getByRole("heading", { name: "Crop without damage." })).toBeVisible();
-  await page.getByRole("tab", { name: /09.*What’s new/ }).click();
+  await page.getByRole("tab", { name: /10.*What’s new/ }).click();
   await expect(page.getByRole("link", { name: /update offer/ })).toHaveAttribute("href", /v014-update-en\.webp/);
   expect(errors).toEqual([]);
 });
