@@ -613,6 +613,47 @@ fn physical_navigation_reaches_upload_and_waits_for_matching_ack() {
     assert_eq!(h.app.gate.decision(), Decision::Execute);
 }
 #[test]
+fn physical_folder_press_does_not_activate_destination_on_repeats_or_release() {
+    let mut h = Harness::new();
+    h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
+    h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
+    h.app.config.profiles[0].pages[0].keys[0].steps = vec![Step::Back];
+    h.app.applied = h.app.config.clone();
+    let (tx, rx) = mpsc::channel();
+    h.app.engine = Engine::new(tx.clone());
+    h.app.events = rx;
+    let (device, commands) = mpsc::channel();
+    h.app.device = device;
+    h.app.wanted = true;
+    h.app.gate.enabled = true;
+    h.app.gate.connected = true;
+    let revision = h.app.gate.request_apply();
+    h.app.gate.applied(revision);
+    let press = Instant::now();
+    tx.send(Event::Key(0, press)).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while h.app.config.page != "folder" && Instant::now() < deadline {
+        h.app.events();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(h.app.config.page, "folder");
+    let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(1)).unwrap() else { panic!("missing update") };
+    tx.send(Event::Applied(revision)).unwrap();
+    tx.send(Event::Key(0, Instant::now())).unwrap();
+    tx.send(Event::KeyRelease(0, Instant::now())).unwrap();
+    h.app.events();
+    std::thread::sleep(Duration::from_millis(40));
+    h.app.events();
+    assert_eq!(h.app.config.page, "folder", "same physical gesture returned home");
+    tx.send(Event::Key(0, Instant::now())).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while h.app.config.page == "folder" && Instant::now() < deadline {
+        h.app.events();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(h.app.config.page.is_empty(), "new distinct press should navigate back");
+}
+#[test]
 fn page_management_preserves_other_pages_and_removes_dangling_folder_keys() {
     let mut h = Harness::new();
     h.app.create_page(false);
