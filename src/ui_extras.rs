@@ -1230,7 +1230,7 @@ impl App {
                 });
             } else {
                 let scroll_id = egui::Id::new("workshop_drag_scroll_offset");
-                let requested = ctx.data_mut(|d| d.remove::<f32>(scroll_id));
+                let requested = ctx.data_mut(|d| d.remove_temp::<f32>(scroll_id));
                 let mut area = egui::ScrollArea::vertical().id_salt("workflow_scroll");
                 if let Some(delta) = requested {
                     let current = egui::scroll_area::State::load(ctx, ui.make_persistent_id("workflow_scroll"))
