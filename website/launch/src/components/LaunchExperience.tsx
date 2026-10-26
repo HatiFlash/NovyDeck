@@ -36,7 +36,7 @@ const copy = {
       { n: "03 / L’IDENTITÉ", title: "Une interface qui vous ressemble.", body: "Personnalisez les faces ON/OFF et choisissez votre thème. NovyDeck distingue l’état confirmé par un plugin d’une simple bascule locale.", note: "Aucun état inconnu n’est présenté comme confirmé." },
     ],
     sceneLabel: "Reconstitution 3D illustrative du FIFINE D6 · textures issues du projet", sceneFoot: "Interaction liée au défilement · sans vidéo simulant une interface",
-    showcaseOver: "VOIR, PUIS AGIR", showcaseTitle: "Le détail change tout.", showcaseLead: "Six vues du logiciel, des touches à l’Atelier et à « Quoi de neuf ». Explorez de vraies captures, sans maquette inventée.",
+    showcaseOver: "VOIR, PUIS AGIR", showcaseTitle: "Le détail change tout.", showcaseLead: "Nouveautés 0.15 : état des touches actif ou en pause, bibliothèque Modèles et Enregistrés, réglages Apparence dans l’inspecteur, conversation avec l’assistant et aperçu des propositions en blocs. Actions et réglages de plugins validés, pas supposés. Les captures ci-dessous sont historiques 0.14.",
     showcase: [
       { label: "Touches", number: "01", title: "Le deck, en grand.", body: "Glissez une idée sur une touche. Réglez son action, son image et son comportement avant l’exécution.", detail: "Capture réelle du profil de démonstration ; aucun périphérique connecté.", img: images.keys, alt: "Interface NovyDeck avec les 15 touches du profil de démonstration" },
       { label: "États ON / OFF", number: "02", title: "Le bon état, au bon moment.", body: "Deux faces pour une touche ; une source d’état plugin compatible peut confirmer la face active.", detail: "Un état inconnu garde la face de base au lieu d’inventer OFF.", img: images.state, alt: "Configuration des faces ON et OFF de NovyDeck" },
@@ -73,7 +73,7 @@ const copy = {
       { n: "03 / IDENTITY", title: "An interface that feels like yours.", body: "Customize ON/OFF key faces and pick a theme. NovyDeck distinguishes a plugin-confirmed state from a local toggle.", note: "An unknown state is never presented as confirmed." },
     ],
     sceneLabel: "Illustrative 3D reconstruction of the FIFINE D6 · textures from the project", sceneFoot: "Scroll-linked interaction · no simulated app video",
-    showcaseOver: "SEE, THEN DO", showcaseTitle: "The details make the difference.", showcaseLead: "Six genuine app views, from keys to the Workshop and What’s New. Explore real screenshots, not invented mockups.",
+    showcaseOver: "SEE, THEN DO", showcaseTitle: "The details make the difference.", showcaseLead: "0.15 highlights: keys shown as running or paused, Templates and Saved library sections, Appearance controls in the inspector, assistant conversation, and block previews for proposals. Plugin actions and settings are validated, not assumed. The screenshots below are historical 0.14 captures.",
     showcase: [
       { label: "Keys", number: "01", title: "The whole deck at a glance.", body: "Put an idea on a key. Set its action, image and behavior before execution.", detail: "Real demo-profile screenshot; no device connected.", img: images.keys, alt: "NovyDeck interface with the 15 demo-profile keys" },
       { label: "ON / OFF", number: "02", title: "The right state at the right time.", body: "Two faces for one key; a compatible plugin state source can confirm the active face.", detail: "An unknown state keeps the base face instead of claiming OFF.", img: images.state, alt: "NovyDeck ON and OFF key face configuration" },
