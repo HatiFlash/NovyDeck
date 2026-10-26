@@ -4103,6 +4103,7 @@ impl App {
         }
         if self.show_about && !self.update_installing {
             let mut open = true;
+            let mut open_offer = false;
             theme::fixed_window(tr("À propos de NovyDeck"))
                 .open(&mut open).collapsible(false).resizable(false).default_width(370.0)
                 .show(ctx, |ui| {
@@ -4148,11 +4149,11 @@ impl App {
                         ui.label(trf("Nouvelle version {version} disponible", &[("version", &latest.version)]));
                         if ui.add(theme::primary(tr("Voir la mise à jour"))).clicked() {
                             self.startup_offer = Some(latest.clone());
-                            open = false;
+                            open_offer = true;
                         }
                     }
                 });
-            self.show_about = open;
+            self.show_about = open && !open_offer;
         }
         if self.update_installing {
             if update_ui::operation(ctx, self) {
