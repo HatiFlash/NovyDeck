@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/Release-v0.13.0-3478F6.svg" alt="Version 0.13.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0"><img src="https://img.shields.io/badge/Release-v0.14.0-3478F6.svg" alt="Version 0.14.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,20 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.14.0
+
+### Modification directe des blocs dans l'Atelier
+
+Faites glisser un bloc par sa poignée pour le réordonner ou l'imbriquer dans une branche. Maintenez **Ctrl** pendant le glissement pour le dupliquer ; appuyez sur **Échap** pour annuler. **Annuler** et **Rétablir** couvrent les modifications, et le défilement automatique suit le glissement près du bord d'un panneau. Modifiez le bloc sélectionné dans le panneau **Propriétés**.
+
+### Cartes Quoi de neuf actualisées et progression honnête
+
+La fenêtre de mise à jour présente des cartes actualisées des changements disponibles. La progression du téléchargement et de l'installation reste indéterminée si l'opération ne fournit pas de mesure numérique fiable ; NovyDeck n'affiche pas de pourcentage estimé.
+
+### Assistant et actions des plugins installés
+
+L'assistant local peut proposer les actions présentes dans les manifestes des plugins installés. Cela ne signifie pas qu'il comprend tous les plugins : les comportements et réglages non documentés ne peuvent pas être déduits, et les propositions restent à relire et à confirmer.
 
 ## Nouveautés 0.13.0
 

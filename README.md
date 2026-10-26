@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/Release-v0.13.0-3478F6.svg" alt="Release v0.13.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0"><img src="https://img.shields.io/badge/Release-v0.14.0-3478F6.svg" alt="Release v0.14.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,20 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.14.0
+
+### Direct block editing in the Workshop
+
+Drag a block by its handle to reorder it or nest it in a branch. Hold **Ctrl** while dragging to duplicate it; press **Esc** to cancel. **Undo** and **Redo** cover edits, and dragging near a panel edge autoscrolls. Edit the selected block in the **Properties** panel.
+
+### Refreshed What's new cards and honest progress
+
+The update window presents refreshed cards for the available changes. Download and installation progress is indeterminate when the operation provides no reliable numeric measurement; NovyDeck does not display a guessed percentage.
+
+### Assistant and installed plugin actions
+
+The local assistant can propose actions present in the manifests of installed plugins. This is not universal plugin comprehension: undocumented behavior or settings cannot be inferred, and suggestions remain subject to review and confirmation.
 
 ## What's new in 0.13.0
 
