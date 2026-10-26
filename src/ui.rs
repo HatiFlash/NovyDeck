@@ -2568,7 +2568,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(tr("Bibliothèque d'actions")).font(theme::strong(15.0)).color(p.text_primary));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        theme::pill(ui, trf("{count} modèles", &[("count", &catalog::presets().len())]), p.text_tertiary);
+                        theme::pill(ui, &trf("{count} modèles", &[("count", &catalog::presets().len())]), p.text_tertiary);
                     });
                 });
                 ui.add_space(6.0);
