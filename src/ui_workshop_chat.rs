@@ -499,29 +499,34 @@ impl App {
                                     .corner_radius(10)
                                     .inner_margin(10)
                                     .show(ui, |ui| {
-                                        ui.label(RichText::new(preview_count(pending.proposal.steps.len())).strong());
-                                        ui.label(RichText::new(crate::i18n::tr("Proposition · sans exécution")).small().color(theme::palette(ctx).muted));
-                                        if let Some(before) = &pending.original {
-                                            ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &before.len())]));
-                                            for step in before { ui.label(super::extras::block_summary(step)); }
-                                            ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
-                                        }
-                                        preview_steps(ui, &pending.proposal.steps, 0);
-                                        for missing in &pending.proposal.missing {
-                                            ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
-                                        }
-                                        if pending.proposal.steps.iter().any(sensitive) {
-                                            ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Action sensible : vérifier avant insertion."));
-                                        }
-                                        for note in &pending.proposal.notes {
-                                            if crate::i18n::current() == "en" && note.starts_with("Condition : « ") {
-                                                if let Some(Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. }) = pending.proposal.steps.first() {
-                                                    ui.label(crate::i18n::trf("Condition : {exe} est lancé ? Sinon s'applique quand il ne l'est pas.", &[("exe", exe)]));
-                                                    continue;
+                                        egui::ScrollArea::vertical()
+                                            .id_salt("chat_preview_steps")
+                                            .max_height((screen.height() * 0.24).min(190.0))
+                                            .show(ui, |ui| {
+                                                ui.label(RichText::new(preview_count(pending.proposal.steps.len())).strong());
+                                                ui.label(RichText::new(crate::i18n::tr("Proposition · sans exécution")).small().color(theme::palette(ctx).muted));
+                                                if let Some(before) = &pending.original {
+                                                    ui.label(crate::i18n::trf("Avant : {count} bloc(s)", &[("count", &before.len())]));
+                                                    for step in before { ui.label(super::extras::block_summary(step)); }
+                                                    ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
                                                 }
-                                            }
-                                            ui.label(note);
-                                        }
+                                                preview_steps(ui, &pending.proposal.steps, 0);
+                                                for missing in &pending.proposal.missing {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
+                                                }
+                                                if pending.proposal.steps.iter().any(sensitive) {
+                                                    ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Action sensible : vérifier avant insertion."));
+                                                }
+                                                for note in &pending.proposal.notes {
+                                                    if crate::i18n::current() == "en" && note.starts_with("Condition : « ") {
+                                                        if let Some(Step::IfCondition { condition: crate::conditions::Condition::AppRunning { exe }, .. }) = pending.proposal.steps.first() {
+                                                            ui.label(crate::i18n::trf("Condition : {exe} est lancé ? Sinon s'applique quand il ne l'est pas.", &[("exe", exe)]));
+                                                            continue;
+                                                        }
+                                                    }
+                                                    ui.label(note);
+                                                }
+                                            });
                                     });
                             }
                             Status::Inconnue => {
