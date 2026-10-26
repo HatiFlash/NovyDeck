@@ -184,6 +184,27 @@ fn palette_drag_inserts_at_specific_sibling_slot_and_inside_container() {
 }
 
 #[test]
+fn dragging_near_bottom_scrolls_workshop_list() {
+    let (mut h, size) = workshop();
+    h.app.config.keys_mut()[0].steps = (0..22).map(|i| Step::Delay { ms: i }).collect();
+    let out = h.warm(size);
+    let from = handles(&out.shapes)[0];
+    let target = egui::pos2(from.x + 30.0, size.y - 90.0);
+    let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+    h.frame(size, vec![Input::PointerMoved(from), press(from, true)]);
+    h.frame(size, vec![Input::PointerMoved(target)]);
+    assert!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some());
+    let before = h.warm(size);
+    for _ in 0..25 { h.frame(size, vec![Input::PointerMoved(target)]); }
+    let after = h.warm(size);
+    let last_visible = |shapes: &[egui::epaint::ClippedShape]| {
+        (1..=22).rev().find(|i| text_position(shapes, &i.to_string()).is_some()).unwrap_or(0)
+    };
+    assert!(last_visible(&after.shapes) > last_visible(&before.shapes), "list did not scroll while dragging at bottom: {} -> {}", last_visible(&before.shapes), last_visible(&after.shapes));
+    h.frame(size, vec![press(target, false)]);
+}
+
+#[test]
 fn workshop_cards_show_branch_numbers_and_singular_summary() {
     let (mut h, size) = workshop();
     h.app.config.keys_mut()[0].steps = vec![Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 42 }] }];
