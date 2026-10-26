@@ -89,15 +89,26 @@ fn capture(out: &Path, screen: &str, width: u32, height: u32, dpi: f32, dark: bo
     }
 }
 
-#[test]
-fn ui_audit_captures() {
-    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else { return; };
+fn audit_output() -> Option<PathBuf> {
+    let out = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from)?;
     std::fs::create_dir_all(&out).expect("dossier de captures");
+    Some(out)
+}
+
+#[test]
+fn ui_audit_captures_a() {
+    let Some(out) = audit_output() else { return; };
     let all = ["deck", "inspecteur-action", "inspecteur-apparence", "inspecteur-avance", "ajouter",
         "atelier-simple", "atelier-avance", "bibliotheque", "assistant", "magasin-plugins",
         "plugins-installes", "reglages", "pages-dossiers", "touche-vide"];
-    let extended = ["deck", "inspecteur-action", "inspecteur-apparence", "inspecteur-avance", "atelier-simple", "atelier-avance"];
     for screen in all { capture(&out, screen, 1366, 768, 1.0, true, "fr"); }
+    crate::i18n::set_language("fr");
+}
+
+#[test]
+fn ui_audit_captures_b() {
+    let Some(out) = audit_output() else { return; };
+    let extended = ["deck", "inspecteur-action", "inspecteur-apparence", "inspecteur-avance", "atelier-simple", "atelier-avance"];
     for screen in extended {
         capture(&out, screen, 1920, 1080, 1.5, true, "fr");
         capture(&out, screen, 1366, 768, 1.0, false, "fr");
