@@ -117,7 +117,7 @@ fn update_after_captures_offline() {
     let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
     let out = PathBuf::from(out);
     let size = vec2(1366.0, 768.0);
-    for (state, lang) in [("disponible", "fr"), ("telechargement", "fr"), ("verification-sha", "fr"), ("installation", "fr"), ("erreur-reseau", "fr"), ("erreur-sha", "fr"), ("erreur-installation", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en"), ("quoi-de-neuf-clair-fr", "fr")] {
+    for (state, lang) in [("disponible", "fr"), ("disponible-en", "en"), ("telechargement", "fr"), ("verification-sha", "fr"), ("installation", "fr"), ("erreur-reseau", "fr"), ("erreur-sha", "fr"), ("erreur-installation", "fr"), ("a-jour", "fr"), ("quoi-de-neuf", "fr"), ("quoi-de-neuf-en", "en"), ("quoi-de-neuf-clair-fr", "fr")] {
         let mut h = Harness::new();
         crate::i18n::set_language(lang);
         h.app.startup_checked = true;
@@ -135,7 +135,7 @@ fn update_after_captures_offline() {
             h.app.startup_prompts = true;
             h.app.whats_new = true;
             h.app.whats_new_notes = sample().notes;
-        } else if state == "disponible" { h.app.startup_offer = Some(sample()); }
+        } else if state.starts_with("disponible") { h.app.startup_offer = Some(sample()); }
         else {
             h.app.show_about = true;
             match state {
@@ -150,11 +150,11 @@ fn update_after_captures_offline() {
         }
         let output = h.warm(size);
         h.png(size, output.clone(), &out.join(format!("apres-{state}.png")));
-        if state == "disponible" {
+        if state.starts_with("disponible") {
             assert!(text_position(&output.shapes, "NovyDeck 0.13.0 → 0.14.0").is_some(), "capture must show a genuine upgrade");
         }
         let expected = match state {
-            "disponible" => Some(tr("Mettre à jour maintenant")),
+            "disponible" | "disponible-en" => Some(tr("Mettre à jour maintenant")),
             "erreur-reseau" => Some(tr("Réessayer")),
             s if s.starts_with("quoi-de-neuf") => Some(tr("C'est parti")),
             _ => None,
@@ -179,7 +179,7 @@ fn update_before_captures_offline() {
             h.app.startup_prompts = true;
             h.app.whats_new = true;
             h.app.whats_new_notes = sample().notes;
-        } else if state == "disponible" { h.app.startup_offer = Some(sample()); }
+        } else if state.starts_with("disponible") { h.app.startup_offer = Some(sample()); }
         else {
             h.app.show_about = true;
             match state {
