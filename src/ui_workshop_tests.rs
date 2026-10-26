@@ -141,7 +141,7 @@ fn palette_delay(shapes: &[egui::epaint::ClippedShape]) -> egui::Pos2 {
     shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
         let pos = t.pos + t.galley.size() * 0.5;
         (t.galley.job.text == crate::i18n::tr("Attendre") && s.clip_rect.contains(pos)).then_some(pos)
-    } else { None }).min_by(|a, b| a.x.total_cmp(&b.x)).expect("visible palette delay")
+    } else { None }).max_by(|a, b| a.x.total_cmp(&b.x)).expect("visible palette delay")
 }
 
 fn drag_palette(h: &mut Harness, size: egui::Vec2, source: egui::Pos2, destination: egui::Pos2) {
@@ -149,6 +149,7 @@ fn drag_palette(h: &mut Harness, size: egui::Vec2, source: egui::Pos2, destinati
     h.frame(size, vec![Input::PointerMoved(source)]);
     h.frame(size, vec![press(source, true)]);
     h.frame(size, vec![Input::PointerMoved(destination)]);
+    assert_eq!(h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))), Some(5), "source {source:?} -> {destination:?}: palette drag not registered");
     h.frame(size, vec![Input::PointerMoved(destination)]);
     h.frame(size, vec![press(destination, false)]);
 }
