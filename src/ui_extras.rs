@@ -390,7 +390,12 @@ pub(super) fn block_summary(step: &Step) -> String {
         Step::Text { text } => crate::i18n::trf("Écrire {text}", &[("text", &(text.chars().take(50).collect::<String>()))] ),
         Step::Launch { program, .. } => crate::i18n::trf("Lancer {program}", &[("program", &(program))] ),
         Step::Toggle { a, b } => crate::i18n::trf("Basculer : {a} / {b} blocs", &[("a", &(a.len())), ("b", &(b.len()))] ),
-        Step::Repeat { count, steps } => crate::i18n::trf(if steps.len() == 1 { "Répéter {count} fois ({blocks} bloc)" } else { "Répéter {count} fois ({blocks} blocs)" }, &[("count", &(count)), ("blocks", &(steps.len()))] ),
+        Step::Repeat { count, steps } => {
+            let blocks = steps.len();
+            let args: &[(&str, &dyn std::fmt::Display)] = &[("count", count), ("blocks", &blocks)];
+            if steps.len() == 1 { crate::i18n::trf("Répéter {count} fois ({blocks} bloc)", args) }
+            else { crate::i18n::trf("Répéter {count} fois ({blocks} blocs)", args) }
+        },
         Step::UdpSend { host, port, .. } => crate::i18n::trf("UDP : {host}:{port}", &[("host", &(host)), ("port", &(port))] ),
         Step::HttpRequest { method, url, .. } => crate::i18n::trf("HTTP {method} : {url}", &[("method", &(method)), ("url", &(url))] ),
         Step::D6Brightness { mode, value } => crate::i18n::trf("Luminosité : {mode} {value} %", &[("mode", &(mode)), ("value", &(value))] ),
@@ -883,7 +888,9 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                 });
             let r = frame.response.rect;
             let body = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, (card_body_bottom + 9.0).min(r.max.y)));
-            let card = ui.interact(body, ui.id().with("workshop_card"), egui::Sense::click());
+            let card = ui.interact(body, ui.id().with("workshop_card"), egui::Sense::click())
+                .on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.",
+                    &[("name", &step_label(step)), ("summary", &named_summary(step, plugins))]));
             if card.clicked() && card.interact_pointer_pos().is_some_and(|pos| !handle_rect.contains(pos) && !menu_rect.contains(pos)) {
                 *selection = if chosen { None } else { Some(path.clone()) };
                 if matches!(step.active(), Step::PluginAction { .. }) {
