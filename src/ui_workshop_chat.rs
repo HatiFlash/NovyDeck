@@ -264,6 +264,7 @@ impl App {
                         .hint_text(crate::i18n::tr("Décris une action..."))
                         .desired_width((ui.available_width() - 84.0).max(60.0)),
                 );
+                if self.pending_chat_focus { response.request_focus(); self.pending_chat_focus = false; }
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     || ui.button(crate::i18n::tr("Envoyer")).clicked()
                 {

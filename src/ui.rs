@@ -262,6 +262,7 @@ pub struct App {
     tray_ready: bool,
     quitting: bool,
     show_workflow: bool,
+    pending_chat_focus: bool,
     workshop_chat: workshop_chat_ui::WorkshopChat,
     local_ai: crate::local_llm::Runtime,
     local_ai_check: Option<crate::local_llm::Job>,
@@ -503,6 +504,7 @@ impl App {
             tray_ready: false,
             quitting: false,
             show_workflow: false,
+            pending_chat_focus: false,
             workshop_chat: Default::default(),
             local_ai: Default::default(),
             local_ai_check: None,
@@ -3340,7 +3342,7 @@ impl App {
             });
             match advanced { Some(0)=>self.copy_key(), Some(1)=>self.paste_key(self.selected), Some(2)=>self.duplicate_key(self.selected), _=>{} }
             if open_workflow || open_model || open_assistant { self.show_workflow = true; }
-            if open_assistant { self.workshop_chat.open = true; }
+            if open_assistant { self.workshop_chat.open = true; self.pending_chat_focus = true; }
             if let Some(step)=record_step {self.recording=Some((active,self.config.page.clone(),self.selected,vec![step],self.gate.enabled));self.recording_error.clear();self.gate.enabled=false;self.engine.stop();self.refresh_hotkeys();}
             if changed {self.edited(); if removed_step {self.log(tr("Étape retirée — Ctrl+Z pour annuler").into());}}
             if open_icons{self.open_icon_gallery(None);}

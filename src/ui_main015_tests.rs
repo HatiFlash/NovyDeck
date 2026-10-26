@@ -93,6 +93,12 @@ fn main015_empty_key_asks_assistant_without_running() {
     assert!(h.app.config.keys()[14].steps.is_empty());
     assert!(h.app.workshop_chat.pending.is_none() && h.app.workshop_chat.thinking.is_none());
     assert!(h.app.workshop_journal.confirm_real == false);
+    assert!(h.app.pending_chat_focus);
+    h.app.pending_chat_focus = false;
+    let chat = h.warm(size);
+    let text_edit = chat.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "Décris une action..."));
+    assert!(text_edit, "chat request TextEdit is rendered after opening");
+    assert!(!h.app.pending_chat_focus, "focus is consumed on the next frame");
 }
 
 #[test]
