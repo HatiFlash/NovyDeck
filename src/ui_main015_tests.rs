@@ -39,11 +39,24 @@ fn main015_inspector_room_for_steps_and_appearance() {
         h.app.selected = 0;
         h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 100 }; 4];
         let out = h.warm(size);
+        let inspector = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("key_inspector"))
+            .expect("inspector panel").rect;
+        fn step_in_inspector(shapes: &[egui::epaint::ClippedShape], marker: &str, inspector: Rect) -> bool {
+            fn contains(shape: &egui::Shape, marker: &str, clip: Rect, inspector: Rect) -> bool {
+                match shape {
+                    egui::Shape::Text(t) if t.galley.job.text == marker => {
+                        let center = t.pos + t.galley.size() * 0.5;
+                        clip.contains(center) && inspector.contains(center) && center.x > inspector.center().x
+                    }
+                    egui::Shape::Vec(parts) => parts.iter().any(|part| contains(part, marker, clip, inspector)),
+                    _ => false,
+                }
+            }
+            shapes.iter().any(|shape| contains(&shape.shape, marker, shape.clip_rect, inspector))
+        }
         for i in 1..=2 {
             let marker = format!("{i:02}");
-            let visible = text_position(&out.shapes, &marker).is_some();
-            if !visible { eprintln!("step {i} not initially visible at {physical:?} @ {dpi}"); }
-            assert!(visible, "step {i} at {physical:?} @ {dpi}");
+            assert!(step_in_inspector(&out.shapes, &marker, inspector), "step {i} in inspector at {physical:?} @ {dpi}");
         }
         h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
         let appearance = h.warm(size);
