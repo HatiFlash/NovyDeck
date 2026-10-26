@@ -101,6 +101,14 @@ fn modal<T>(ctx: &egui::Context, response: Option<egui::InnerResponse<T>>) {
     }
 }
 
+fn installed_version_for_display(ctx: &egui::Context) -> String {
+    #[cfg(test)]
+    if let Some(version) = ctx.data(|d| d.get_temp::<String>(egui::Id::new("novy_test_installed_version"))) {
+        return version;
+    }
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
 fn brand(ui: &mut egui::Ui, title: &str, subtitle: &str, sha: bool) {
     let p = theme::palette(ui.ctx());
     let width = ui.available_width();
@@ -151,7 +159,7 @@ pub(super) fn offer(ctx: &egui::Context, latest: &crate::app_update::Latest, ins
         .open(&mut open).resizable(false).default_width(570.0)
         .show(ctx, |ui| {
             ui.set_max_width(ui.available_width().min(570.0));
-            brand(ui, &format!("NovyDeck {} → {}", env!("CARGO_PKG_VERSION"), latest.version.trim_start_matches('v')),
+            brand(ui, &format!("NovyDeck {} → {}", installed_version_for_display(ctx), latest.version.trim_start_matches('v')),
                 &trf("Installateur · {size} Mo", &[("size", &format!("{:.1}", latest.setup_size as f64 / 1_000_000.0))]), true);
             ui.add_space(8.0);
             notes(ui, &latest.notes, true);
@@ -204,7 +212,7 @@ pub(super) fn operation(ctx: &egui::Context, app: &App) -> bool {
             ui.set_min_width(ui.available_width().min(570.0));
             let title = app.update_target.as_ref().map_or_else(
                 || tr("Mise à jour de NovyDeck").to_owned(),
-                |latest| format!("NovyDeck {} → {}", env!("CARGO_PKG_VERSION"), latest.version.trim_start_matches('v')),
+                |latest| format!("NovyDeck {} → {}", installed_version_for_display(ctx), latest.version.trim_start_matches('v')),
             );
             brand(ui, &title, tr("Mise à jour de NovyDeck"), false);
             ui.add_space(8.0);
@@ -274,7 +282,7 @@ pub(super) fn confirm(ctx: &egui::Context, latest: &crate::app_update::Latest) -
         .id(egui::Id::new("novy_update_confirm"))
         .open(&mut open).resizable(false).default_width(530.0)
         .show(ctx, |ui| {
-            brand(ui, &format!("NovyDeck {} → {}", env!("CARGO_PKG_VERSION"), latest.version.trim_start_matches('v')), tr("Confirmation requise avant téléchargement"), true);
+            brand(ui, &format!("NovyDeck {} → {}", installed_version_for_display(ctx), latest.version.trim_start_matches('v')), tr("Confirmation requise avant téléchargement"), true);
             notes(ui, &latest.notes, true);
             ui.label(trf("NovyDeck va se fermer, installer la version {version} puis redémarrer. Vos profils, médias et plugins sont conservés.", &[("version", &latest.version)]));
             ui.horizontal_wrapped(|ui| {
