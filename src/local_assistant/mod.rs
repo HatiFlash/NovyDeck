@@ -742,8 +742,29 @@ mod tests {
         let mut knowledge = crate::local_llm::Knowledge::builtin();
         knowledge.plugins = vec![plugin];
         let p = propose_with("active Toggle Mute de SoundPad", &Config::default(), &knowledge);
-        assert!(matches!(&p.status, Status::Ambigue { question, .. } if question.contains("réglages")), "{p:?}");
+        assert!(matches!(&p.status, Status::Ambigue { question, choix } if question.contains("réglages") && choix.is_empty()), "{p:?}");
         assert!(p.steps.is_empty() && !p.insertable());
+    }
+    #[test]
+    fn plugin_choices_follow_interface_language_and_partial_names_stay_ambiguous() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut pad = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        pad.name = "SoundPad".into();
+        pad.actions[0].name = "Toggle Mute".into();
+        pad.actions[1].name = "Mute Channel".into();
+        let mut knowledge = crate::local_llm::Knowledge::builtin();
+        knowledge.plugins = vec![pad];
+        crate::i18n::set_language("en");
+        let p = propose_with("mute de SoundPad", &Config::default(), &knowledge);
+        let Status::Ambigue { choix, .. } = &p.status else { panic!("{p:?}") };
+        assert_eq!(choix.len(), 2);
+        assert!(p.steps.is_empty());
+        for (choice, action) in choix.iter().zip(&knowledge.plugins[0].actions) {
+            assert!(choice.starts_with("Launch ") && choice.contains(" from SoundPad"));
+            let resolved = propose_with(choice, &Config::default(), &knowledge);
+            assert!(resolved.insertable() && matches!(&resolved.steps[..], [Step::PluginAction { action: id, .. }] if id == &action.uuid), "{choice}: {resolved:?}");
+        }
+        crate::i18n::set_language("fr");
     }
     fn recognized(text: &str) -> Step {
         let p = first(text);
