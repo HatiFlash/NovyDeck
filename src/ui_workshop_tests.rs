@@ -50,6 +50,53 @@ fn mouse_drag_places_block_before_first_and_duplicates_with_ctrl() {
 }
 
 #[test]
+fn drag_into_then_else_repeat_and_back_out() {
+    for branch in [0, 1, 2] {
+        let (mut h, size) = workshop();
+        let condition = Step::IfVariable { name: "x".into(), value: "1".into(), then_steps: vec![], else_steps: vec![] };
+        let container = if branch == 2 { Step::Repeat { count: 2, steps: vec![] } } else { condition };
+        h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 111 }, container];
+        let output = h.warm(size);
+        let source = handles(&output.shapes)[0];
+        let target = text_position(&output.shapes, if branch == 0 { "ALORS" } else if branch == 1 { "SINON" } else { "RÉPÉTER" }).unwrap();
+        // The empty branch's slot follows its label.
+        drag(&mut h, size, source, target + egui::vec2(5.0, 18.0), false);
+        assert_eq!(h.app.config.keys()[0].steps.len(), 1, "branch {branch}");
+        let output = h.warm(size);
+        let source = handles(&output.shapes)[1];
+        let destination = handles(&output.shapes)[0];
+        drag(&mut h, size, source, destination, false);
+        assert!(matches!(h.app.config.keys()[0].steps[0], Step::Delay { ms: 111 }), "branch {branch}");
+    }
+}
+
+#[test]
+fn escape_cancels_pending_drag_without_changing_order() {
+    let (mut h, size) = workshop();
+    let output = h.warm(size);
+    let points = handles(&output.shapes);
+    let original = h.app.config.keys()[0].steps.clone();
+    let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+    h.frame(size, vec![Input::PointerMoved(points[2]), press(points[2], true)]);
+    h.frame(size, vec![Input::PointerMoved(points[0])]);
+    h.frame(size, vec![Input::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }]);
+    h.frame(size, vec![press(points[0], false)]);
+    assert_eq!(h.app.config.keys()[0].steps, original);
+}
+
+#[test]
+fn workshop_header_stays_one_line_at_compact_and_hidpi() {
+    for (physical, dpi) in [(egui::vec2(1366.0, 768.0), 1.0), (egui::vec2(1920.0, 1080.0), 1.5)] {
+        let (mut h, _) = workshop();
+        h.ctx.set_pixels_per_point(dpi);
+        let output = h.warm(physical / dpi);
+        let top = text_position(&output.shapes, "NovyDeck").unwrap().y;
+        let save = text_position(&output.shapes, "Enregistrer").unwrap().y;
+        assert!((save - top).abs() < 22.0, "header wrapped at {physical:?} dpi={dpi}: {top} / {save}");
+    }
+}
+
+#[test]
 fn workshop_cards_show_branch_numbers_and_singular_summary() {
     let (mut h, size) = workshop();
     h.app.config.keys_mut()[0].steps = vec![Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 42 }] }];
