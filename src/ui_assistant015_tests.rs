@@ -81,3 +81,70 @@ fn assistant015_singular_count_and_choices_fit_fr_en_at_two_dpi() {
     }
     crate::i18n::set_language("fr");
 }
+
+#[test]
+fn assistant015_captures_rule_proposal_and_plugin_question() {
+    let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (physical, dpi, dark, lang) in [
+        (vec2(1366.0, 768.0), 1.0, true, "fr"),
+        (vec2(1366.0, 768.0), 1.0, false, "fr"),
+        (vec2(1366.0, 768.0), 1.0, true, "en"),
+        (vec2(1920.0, 1080.0), 1.5, true, "fr"),
+    ] {
+        for state in ["proposition", "question"] {
+            let mut h = Harness::new();
+            crate::i18n::set_language(lang);
+            h.app.preferences.language = lang.into();
+            h.app.preferences.dark = dark;
+            theme::apply(&h.ctx, dark);
+            h.ctx.set_pixels_per_point(dpi);
+            h.app.show_workflow = true;
+            h.app.workshop_chat.open = true;
+            h.app.preferences.workshop_chat_mode = "local".into();
+            h.app.selected = 0;
+            h.app.config.keys_mut()[0].steps.clear();
+            let request = if state == "proposition" {
+                "ouvre le navigateur brave s'il est pas ouvert et si il deja ouvert ouvre un nouvel onglet"
+            } else {
+                "utilise SoundPad"
+            };
+            if state == "proposition" {
+                h.app.workshop_chat_send(request.into(), None);
+            } else {
+                let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+                let mut pad = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+                pad.name = "SoundPad".into();
+                pad.actions[0].name = "Toggle Mute".into();
+                pad.actions[1].name = "Record Clip".into();
+                let mut knowledge = crate::local_llm::Knowledge::builtin();
+                knowledge.plugins = vec![pad];
+                let proposal = crate::local_assistant::propose_with(request, &h.app.config, &knowledge);
+                h.app.workshop_chat.say(crate::i18n::trf("Vous : {request}", &[("request", &request)]));
+                h.app.workshop_chat.pending = Some(super::workshop_chat_ui::ChatPreview {
+                    proposal,
+                    scope: (h.app.config.active, h.app.config.page.clone(), h.app.selected),
+                    original: None,
+                    request: request.into(),
+                    ai: false,
+                });
+            }
+            let size = physical / dpi;
+            let output = h.warm(size);
+            let theme_name = if dark { "sombre" } else { "clair" };
+            let filename = format!("assistant015-{state}-{}x{}-{theme_name}-{lang}.png", physical.x as u32, physical.y as u32);
+            h.png(size, output.clone(), &dir.join(filename));
+            let pending = h.app.workshop_chat.pending.as_ref().expect("proposition après capture");
+            if state == "proposition" {
+                assert!(matches!(pending.proposal.status, crate::local_assistant::Status::Reconnue));
+                assert!(matches!(&pending.proposal.steps[..], [Step::IfCondition { then_steps, else_steps, .. }] if then_steps.len() + else_steps.len() >= 3));
+                let add = if lang == "fr" { "Ajouter" } else { "Add" };
+                assert!(visible_rect(&output.shapes, add).is_some(), "{add} invisible");
+            } else {
+                assert!(matches!(&pending.proposal.status, crate::local_assistant::Status::Ambigue { choix, .. } if choix.len() == 2 && choix.iter().any(|s| s.contains("Toggle Mute")) && choix.iter().any(|s| s.contains("Record Clip"))));
+            }
+        }
+    }
+    crate::i18n::set_language("fr");
+}
