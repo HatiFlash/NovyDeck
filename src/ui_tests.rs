@@ -654,6 +654,89 @@ fn physical_folder_press_does_not_activate_destination_on_repeats_or_release() {
     assert!(h.app.config.page.is_empty(), "new distinct press should navigate back");
 }
 #[test]
+fn physical_navigation_never_sends_plugin_release_to_destination_or_returned_home() {
+    let mut h = Harness::new();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
+    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("edges.js");
+    std::fs::write(&script, r#"
+const args=process.argv.slice(2),get=k=>args[args.indexOf(k)+1];
+const ws=new WebSocket(`ws://127.0.0.1:${get('-port')}`);
+ws.addEventListener('open',()=>ws.send(JSON.stringify({event:get('-registerEvent'),uuid:get('-pluginUUID')})));
+ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDown'||v.event==='keyUp')ws.send(JSON.stringify({event:'logMessage',context:v.context,payload:{message:v.event,context:v.context}}));});
+"#).unwrap();
+    plugin.folder = dir.path().into();
+    plugin.runtime = crate::plugins::Runtime::Node(script);
+    let binding = crate::model::PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
+    h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
+    h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
+    h.app.config.keys_mut()[1].plugin = Some(binding.clone());
+    h.app.config.profiles[0].pages[0].keys[0].plugin = Some(binding);
+    h.app.config.profiles[0].pages[0].keys[1].steps = vec![Step::Back];
+    h.app.applied = h.app.config.clone();
+    let (tx, rx) = mpsc::channel();
+    h.app.engine = Engine::new(tx.clone());
+    h.app.events = rx;
+    let (device, commands) = mpsc::channel();
+    h.app.device = device;
+    h.app.wanted = true;
+    h.app.gate.enabled = true;
+    h.app.gate.connected = true;
+    let revision = h.app.gate.request_apply();
+    h.app.gate.applied(revision);
+    let mut manager = crate::plugin_runtime::Manager::new(vec![plugin]);
+    manager.sync(&h.app.applied);
+    h.app.plugins = Some(manager);
+    let send = |tx: &mpsc::Sender<Event>, event| { tx.send(event).unwrap(); };
+    let mut apply = |h: &mut Harness| {
+        let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(2)).unwrap() else {panic!("missing update")};
+        tx.send(Event::Applied(revision)).unwrap();
+        h.app.events();
+    };
+    let mut navigate = |h: &mut Harness, expected: &str| {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while h.app.config.page != expected && Instant::now() < deadline {
+            h.app.events();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(h.app.config.page, expected);
+        apply(h);
+    };
+    // Hold another plugin key across the page transition; its release cannot migrate either.
+    send(&tx, Event::Key(1, Instant::now()));
+    h.app.events();
+    send(&tx, Event::Key(0, Instant::now()));
+    navigate(&mut h, "folder");
+    send(&tx, Event::KeyRelease(0, Instant::now()));
+    send(&tx, Event::KeyRelease(1, Instant::now()));
+    h.app.events();
+    // A distinct press on the destination plugin must still work.
+    send(&tx, Event::Key(0, Instant::now()));
+    send(&tx, Event::KeyRelease(0, Instant::now()));
+    h.app.events();
+    send(&tx, Event::Key(1, Instant::now()));
+    navigate(&mut h, "");
+    send(&tx, Event::KeyRelease(1, Instant::now()));
+    h.app.events();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut edges = Vec::new();
+    while Instant::now() < deadline {
+        while let Ok(reply) = h.app.plugins.as_ref().unwrap().rx.try_recv() {
+            if let crate::plugin_runtime::Reply::Message(_, v) = reply {
+                if let Some(message) = v["payload"]["message"].as_str() {
+                    if message == "keyDown" || message == "keyUp" { edges.push((message.to_owned(), v["context"].as_str().unwrap().to_owned())); }
+                }
+            }
+        }
+        if edges.len() >= 3 { break; }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(edges, vec![("keyDown".into(), "deckforge-0--1".into()),
+                           ("keyDown".into(), "deckforge-0-folder-0".into()),
+                           ("keyUp".into(), "deckforge-0-folder-0".into())]);
+}
+#[test]
 fn page_management_preserves_other_pages_and_removes_dangling_folder_keys() {
     let mut h = Harness::new();
     h.app.create_page(false);
