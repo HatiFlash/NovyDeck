@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.0"><img src="https://img.shields.io/badge/Release-v0.15.0-3478F6.svg" alt="Release v0.15.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.1"><img src="https://img.shields.io/badge/Release-v0.15.1-3478F6.svg" alt="Release v0.15.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,22 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.15.1
+
+### ON/OFF actions directly in the key inspector
+
+Select a key on the main screen, open **Action**, and turn on **ON/OFF actions**. The existing short-press steps become **Action 1**. Choose the **Action 2** tab and select a shortcut or another action there—no Workshop visit required. Alternate presses run Action 1 and Action 2. The **Appearance** tab's two-state display changes the key's visuals, not its actions. Advanced sequences can still be edited in the Workshop; root navigation and keys with attached plugins cannot be converted in this simplified editor.
+
+![0.15.1 Action 2 configured with F10 in the English main inspector, off-screen Windows UI capture](docs/images/v0151-onoff-en.png)
+
+### Workshop block menus restored
+
+The **…** menu now opens on both root and nested blocks. Use **Delete** to remove the selected block without deleting its neighbors or other branch; the menu and drag handle are no longer covered by the card-selection hit area.
+
+![0.15.1 nested Workshop block menu showing Delete, off-screen Windows UI capture](docs/images/v0151-workshop-en.png)
+
+These are off-screen UI captures from the Windows test harness, not tests on a connected deck. See the [0.15.1 release notes](docs/RELEASE-0.15.1.md).
 
 ## What's new in 0.15.0
 
