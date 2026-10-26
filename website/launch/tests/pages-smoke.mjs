@@ -37,8 +37,8 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       } catch (error) { problems.push(`${description} ${language} screenshot failed to load: ${error.message}`); }
     };
     const cards = [
-      ["01", "Touches 0.15", "Keys 0.15", "v015-main"],
-      ["02", "Apparence 0.15", "Appearance 0.15", "v015-appearance"],
+      ["01", "Actions ON/OFF", "ON/OFF actions", "v0151-onoff"],
+      ["02", "Supprimer dans l’Atelier", "Delete in Workshop", "v0151-workshop"],
       ["03", "Assistant 0.15", "Assistant 0.15", "v015-assistant"],
       ["04", "Précision plugin 0.15", "Plugin clarification 0.15", "v015-question"],
     ];
@@ -50,15 +50,16 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
         const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
         if (!(await panel.locator(".micro").textContent())?.includes(`${index} / 10`)) problems.push(`${language} counter ${index} incorrect`);
         await checkImage(panel, file, `${file}-${language}.webp`, language);
+        if (file === "v0151-onoff" && !(await panel.locator("img").getAttribute("alt"))?.includes("Action 2")) problems.push(`${language} ON/OFF action screenshot missing`);
+        if (file === "v0151-workshop" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "Supprimer" : "Delete")) problems.push(`${language} nested menu screenshot missing`);
         if (file === "v015-assistant" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "en français" : "French example request")) problems.push(`${language} assistant request-language disclosure missing`);
         if (file === "v015-question" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "inerte" : "inert")) problems.push(`${language} inert fixture disclosure missing`);
-        if (file === "v015-main" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "connexion simulée" : "simulated connection")) problems.push(`${language} simulated connection disclosure missing`);
       }
-      for (const [index, frLabel, enLabel, file] of [["05", "Touches", "Keys", "main-hi.webp"], ["06", "États ON", "ON / OFF", "states.webp"], ["07", "Médias", "Media", "crop.webp"], ["08", "Atelier 0.14", "Workshop 0.14", `v014-workshop-${language}.webp`], ["09", "Quoi de neuf", "What’s new", `v014-whats-new-${language}.webp`], ["10", "Assistant", "Assistant", "assistant.webp"]]) {
+      for (const [index, frLabel, enLabel, file] of [["05", "Apparence 0.15", "Appearance 0.15", `v015-appearance-${language}.webp`], ["06", "Touches", "Keys", "main-hi.webp"], ["07", "États ON", "ON / OFF", "states.webp"], ["08", "Médias", "Media", "crop.webp"], ["09", "Atelier 0.14", "Workshop 0.14", `v014-workshop-${language}.webp`], ["10", "Quoi de neuf", "What’s new", `v014-whats-new-${language}.webp`]]) {
         await page.getByRole("tab", { name: new RegExp(`^${index}.*${language === "fr" ? frLabel : enLabel}`) }).click();
         const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
         await checkImage(panel, `${index} historic`, file, language);
-        if (index === "09" && !(await panel.locator(`a[href*='v014-update-${language}.webp']`).count())) problems.push(`${language} update offer image link missing`);
+        if (index === "10" && !(await panel.locator(`a[href*='v014-update-${language}.webp']`).count())) problems.push(`${language} update offer image link missing`);
       }
     }
     await page.getByRole("button", { name: "Light" }).click();
@@ -69,7 +70,7 @@ for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844
       brokenImages: [...document.images].filter(i => i.complete && !i.naturalWidth).map(i => i.src),
       displayFont: getComputedStyle(document.querySelector("h1")).fontFamily,
       loadedFonts: [...document.fonts].filter(f => f.status === "loaded").map(f => f.family),
-      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.15.0-Setup.exe")),
+      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.15.1-Setup.exe")),
     }));
     if (info.overflow) problems.push("Horizontal overflow");
     if (info.brokenImages.length) problems.push(`Broken images: ${info.brokenImages.join(", ")}`);
