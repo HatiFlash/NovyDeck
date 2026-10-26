@@ -85,18 +85,19 @@ impl WorkshopChat {
 }
 
 fn preview_count(count: usize) -> String {
-    let key = if count == 1 { "{count} bloc" } else { "{count} blocs" };
-    crate::i18n::trf(key, &[("count", &count)])
+    if count == 1 {
+        crate::i18n::trf("{count} bloc", &[("count", &count)])
+    } else {
+        crate::i18n::trf("{count} blocs", &[("count", &count)])
+    }
 }
 
 fn preview_steps(ui: &mut egui::Ui, steps: &[Step], depth: usize) {
     for step in steps {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.add_space((depth * 14) as f32);
-            ui.vertical(|ui| {
-                iconset::heading(ui, iconset::for_step(step), RichText::new(step.name()).strong());
-                ui.label(RichText::new(super::extras::block_summary(step)).small());
-            });
+            iconset::heading(ui, iconset::for_step(step), RichText::new(step.name()).strong());
+            ui.label(RichText::new(super::extras::block_summary(step)).small().color(theme::palette(ui.ctx()).muted));
         });
         if depth >= 6 { continue; }
         match step.active() {
@@ -491,10 +492,7 @@ impl App {
                                             }
                                             ui.label(crate::i18n::trf("Après : {count} bloc(s)", &[("count", &pending.proposal.steps.len())]));
                                         }
-                                        egui::ScrollArea::vertical()
-                                            .id_salt("chat_preview")
-                                            .max_height((screen.height() * 0.24).min(175.0))
-                                            .show(ui, |ui| preview_steps(ui, &pending.proposal.steps, 0));
+                                        preview_steps(ui, &pending.proposal.steps, 0);
                                         for missing in &pending.proposal.missing {
                                             ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À compléter : {field}", &[("field", &missing.field)]));
                                         }
