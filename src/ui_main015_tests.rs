@@ -228,6 +228,10 @@ fn main015_captures() {
         }
         if screen == "inspecteur-apparence" {
             assert!(text_position(&frame.shapes, crate::i18n::tr("Titre sur la touche")).is_some(), "appearance inspector marker missing");
+            assert!(text_position(&frame.shapes, crate::i18n::tr("Couleur")).is_some(), "translated color label missing");
+            if lang == "en" {
+                assert!(text_position(&frame.shapes, "Couleur").is_none(), "French color label in English inspector");
+            }
         }
         if screen == "reglages" {
             assert!(text_position(&frame.shapes, crate::i18n::tr("Vérifier les mises à jour au démarrage")).is_some(), "settings checkbox missing");
