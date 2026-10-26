@@ -12,6 +12,7 @@ fn drag(h: &mut Harness, size: egui::Vec2, from: egui::Pos2, to: egui::Pos2, ctr
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: mods };
     h.frame(size, vec![Input::PointerMoved(from), press(from, true)]);
     h.frame(size, vec![Input::PointerMoved(to)]);
+    assert!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some(), "drag never started from {from:?} to {to:?}");
     let pending = h.frame(size, vec![Input::PointerMoved(to)]);
     if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
         std::fs::create_dir_all(&dir).unwrap();
