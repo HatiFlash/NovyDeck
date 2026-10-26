@@ -8,6 +8,11 @@ fn visible_rect(shapes: &[egui::epaint::ClippedShape], label: &str) -> Option<Re
     })
 }
 
+fn visible_containing(shapes: &[egui::epaint::ClippedShape], fragment: &str) -> bool {
+    shapes.iter().any(|s| matches!(&s.shape, Shape::Text(t)
+        if t.galley.job.text.contains(fragment) && s.clip_rect.contains_rect(t.visual_bounding_rect())))
+}
+
 fn preview(h: &mut Harness, request: &str, steps: Vec<Step>) {
     h.app.workshop_chat.open = true;
     h.app.workshop_chat.say(crate::i18n::trf("Vous : {request}", &[("request", &request)]));
@@ -49,7 +54,7 @@ fn assistant015_request_precedes_real_preview_and_add_inserts_only_on_click() {
         let mut scrolled = out.clone();
         let mut found = false;
         for _ in 0..8 {
-            if visible_rect(&scrolled.shapes, "ENFANT REPETER").is_some() {
+            if visible_containing(&scrolled.shapes, "ENFANT REPETER") {
                 found = true;
                 break;
             }
