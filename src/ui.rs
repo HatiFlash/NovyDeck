@@ -5131,6 +5131,10 @@ fn onoff_branch_ui(
     let mut changed = false;
     ui.separator();
     ui.label(RichText::new(title).strong());
+    if steps.is_empty() && ui.button(tr("Raccourci clavier")).clicked() {
+        steps.push(crate::automation::step(0));
+        changed = true;
+    }
     let caption = if branch == 0 { tr("Ajouter à Action 1") } else { tr("Ajouter à Action 2") };
     let mut addition = None;
     ui.menu_button(caption, |ui| {

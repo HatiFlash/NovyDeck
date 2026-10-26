@@ -17,10 +17,7 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     assert!(text_position(&output.shapes, "Action 2").is_some());
     assert_eq!(h.app.config.keys()[0].label, "F9");
     assert!(h.app.config.keys()[0].state_display.is_none());
-    let pos = text_position(&output.shapes, "Ajouter à Action 2").expect("ajouter la seconde action");
-    h.click(size, pos);
-    let output = h.warm(size);
-    let pos = text_position(&output.shapes, "Raccourci clavier").expect("catalogue d'actions");
+    let pos = text_position(&output.shapes, "Raccourci clavier").expect("raccourci clavier direct");
     h.click(size, pos);
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { b, .. }] if matches!(&b[..], [Step::Hotkey { .. }])), "steps after catalog click: {:?}, menu at {:?}", h.app.config.keys()[0].steps, pos);
