@@ -1,5 +1,6 @@
 //! Tests of the actual egui widgets, without opening or controlling Windows.
 #[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
+#[path = "ui_update_tests.rs"] mod update_tests;
 #[path = "ui_audit_tests.rs"] mod audit_tests;
 #[path = "ui_release013_tests.rs"] mod release013_tests;
 #[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
@@ -2531,9 +2532,15 @@ fn update_offer_widgets_follow_installation_mode_without_network() {
         h.app.update_result = Some(Ok(crate::app_update::Status::New(latest.clone())));
         let output = h.warm(size);
         assert!(text_position(&output.shapes, "Nouvelle version v0.8.14 disponible").is_some());
-        assert!(text_position(&output.shapes, "Voir les nouveautés").is_some());
-        assert_eq!(text_position(&output.shapes, "Télécharger et installer").is_some(), installed);
-        assert_eq!(text_position(&output.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_some(), !installed);
+        assert!(text_position(&output.shapes, "Voir la mise à jour").is_some());
+        assert!(text_position(&output.shapes, "Mettre à jour maintenant").is_none());
+        assert!(text_position(&output.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_none());
+        let pos = text_position(&output.shapes, "Voir la mise à jour").unwrap();
+        h.click(size, pos);
+        assert_eq!(h.app.startup_offer.as_ref().map(|l| l.version.as_str()), Some("v0.8.14"));
+        let offer = h.warm(size);
+        assert_eq!(text_position(&offer.shapes, "Mettre à jour maintenant").is_some(), installed);
+        assert_eq!(text_position(&offer.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_some(), !installed);
         assert!(h.app.update_rx.is_none());
     }
 }
@@ -2615,8 +2622,8 @@ fn whats_new_is_only_for_existing_installations_with_new_notes() {
     let shown = h.warm(size);
     let title = format!("Quoi de neuf dans NovyDeck {}", env!("CARGO_PKG_VERSION"));
     assert!(text_position(&shown.shapes, &title).is_some());
-    assert!(text_position(&shown.shapes, "- Changement après mise à jour").is_some());
-    let acknowledge = text_position(&shown.shapes, "Compris").unwrap();
+    assert!(text_position(&shown.shapes, "Changement après mise à jour").is_some());
+    let acknowledge = text_position(&shown.shapes, "C'est parti").unwrap();
     h.click(size, acknowledge);
     assert_eq!(h.app.preferences.last_seen_version, env!("CARGO_PKG_VERSION"));
     assert!(!h.app.whats_new);
@@ -2674,7 +2681,7 @@ fn startup_offer_shows_notes_and_installation_choice_without_network() {
         notes: "## Français\n- Fonction nouvelle injectée".into(),
     });
     let shown = h.warm(size);
-    for label in ["Mise à jour disponible", "- Fonction nouvelle injectée", "Télécharger et installer", "Voir les nouveautés", "Plus tard"] {
+    for label in ["Mise à jour disponible", "Fonction nouvelle injectée", "Mettre à jour maintenant", "Voir sur GitHub", "Plus tard"] {
         assert!(text_position(&shown.shapes, label).is_some(), "{label}");
     }
     assert!(h.app.startup_rx.is_none());
