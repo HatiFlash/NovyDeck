@@ -8,6 +8,7 @@
 #[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
 #[path="ui_plugin_block_tests.rs"] mod plugin_block_tests;
 #[path="ui_plugin_state_tests.rs"] mod plugin_state_tests;
+#[path="ui_onoff_tests.rs"] mod onoff_tests;
 
 #[test]
 fn workshop_ai_requires_consent_and_local_never_offers_it() {
