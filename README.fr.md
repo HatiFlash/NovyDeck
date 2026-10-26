@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.11.1"><img src="https://img.shields.io/badge/Release-v0.11.1-3478F6.svg" alt="Version 0.11.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.13.0"><img src="https://img.shields.io/badge/Release-v0.13.0-3478F6.svg" alt="Version 0.13.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,38 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.13.0
+
+### Navigation physique sans action involontaire
+
+Ouvrir un dossier ou revenir à l'accueil doit consommer l'appui de navigation, sans activer la touche située au même emplacement dans l'écran de destination. Le suivi de l'appui physique est conservé pendant la synchronisation de page et ignore les rapports d'appui répétés jusqu'au relâchement.
+
+### Retour visuel plus réactif
+
+Les événements de touche HID réveillent explicitement l'interface au lieu d'attendre un rafraîchissement déclenché par une autre activité. Le cache d'aperçu LCD suit également le choix du fond du titre. Ce sont les chemins logiciels testés qui sont corrigés : aucune mesure de latence sur un D6 physique n'est annoncée, et les mises à jour des plugins dépendent encore de leur réponse.
+
+### Texte sans fond ajouté
+
+Dans l'onglet **Apparence** d'une touche, décochez **Fond et ombre derrière le titre** pour garder seulement le texte sur votre image. Les profils existants conservent leur rendu par défaut. Ce choix est enregistré et s'applique à l'aperçu comme à l'image envoyée au périphérique.
+
+| Fond activé | Fond désactivé |
+| --- | --- |
+| ![Titre avec son fond, capture française hors écran](docs/images/v013-text-overlay-on-fr.png) | ![Titre sans fond, capture française hors écran](docs/images/v013-text-overlay-off-fr.png) |
+
+### Menu Ajouter une action défilable
+
+Dans l'onglet **Action** de l'inspecteur de touche, le menu **Ajouter** a maintenant une hauteur bornée et permet d'atteindre la dernière action par défilement, y compris en petite fenêtre et en HiDPI.
+
+![Menu Ajouter après défilement jusqu'à la dernière action](docs/images/v013-action-menu-fr.png)
+
+### Wallpaper Engine : Arrêt / Lecture
+
+Mettez à jour le plugin séparé Wallpaper Engine en **1.0.6** dans le magasin, puis choisissez **Stop / Play (all screens)** dans ses actions installées. Une touche alterne Arrêt et Lecture, sans supprimer les commandes séparées ni Pause / Lecture. La bascule utilise un **état local partagé des commandes**, pas une lecture en direct de Wallpaper Engine. Le premier appui envoie Arrêt ; une commande échouée ne fait pas basculer l'état. Mettre à jour NovyDeck ne met pas automatiquement ce plugin à jour.
+
+![Réglages Wallpaper Engine Arrêt Lecture, inspecteur français hors ligne](docs/images/v013-wallpaper-stopplay-fr.png)
+
+Les captures utilisent des médias de démonstration générés ou un inspecteur hors ligne, pas le profil de l'utilisateur. Les contrôles reposent sur le laboratoire Windows et des témoins inertes, pas sur un deck physique ni une installation Wallpaper Engine réelle. Voir les [notes 0.13.0](docs/RELEASE-0.13.0.md).
 
 ## Nouveautés 0.12.0
 
