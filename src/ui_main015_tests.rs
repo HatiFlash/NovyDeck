@@ -140,25 +140,57 @@ fn main015_capture(screen: &str, physical: Vec2, dpi: f32, dark: bool, lang: &st
 }
 
 #[test]
-fn main015_captures_a() {
+fn main015_captures() {
     let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
     let out = std::path::PathBuf::from(out);
     std::fs::create_dir_all(&out).unwrap();
-    for screen in ["deck", "inspecteur-action", "inspecteur-apparence", "touche-vide", "reglages"] {
-        main015_capture(screen, vec2(1366.0, 768.0), 1.0, true, "fr", &out);
-        main015_capture(screen, vec2(1366.0, 768.0), 1.0, false, "fr", &out);
-    }
-    crate::i18n::set_language("fr");
-}
-
-#[test]
-fn main015_captures_b() {
-    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") else { return; };
-    let out = std::path::PathBuf::from(out);
-    std::fs::create_dir_all(&out).unwrap();
-    for screen in ["deck", "inspecteur-action", "inspecteur-apparence", "touche-vide", "reglages"] {
-        main015_capture(screen, vec2(1366.0, 768.0), 1.0, true, "en", &out);
-        main015_capture(screen, vec2(1920.0, 1080.0), 1.5, true, "fr", &out);
+    for (screen, physical, dpi, dark, lang) in [
+        ("deck", vec2(1366.0, 768.0), 1.0, true, "fr"),
+        ("deck", vec2(1366.0, 768.0), 1.0, false, "fr"),
+        ("deck", vec2(1366.0, 768.0), 1.0, true, "en"),
+        ("deck", vec2(1920.0, 1080.0), 1.5, true, "fr"),
+        ("inspecteur-apparence", vec2(1366.0, 768.0), 1.0, true, "fr"),
+        ("inspecteur-apparence", vec2(1366.0, 768.0), 1.0, false, "fr"),
+        ("inspecteur-apparence", vec2(1366.0, 768.0), 1.0, true, "en"),
+        ("reglages", vec2(1366.0, 768.0), 1.0, true, "fr"),
+        ("reglages", vec2(1366.0, 768.0), 1.0, false, "fr"),
+        ("reglages", vec2(1366.0, 768.0), 1.0, true, "en"),
+        ("touche-vide", vec2(1366.0, 768.0), 1.0, true, "fr"),
+        ("touche-vide", vec2(1366.0, 768.0), 1.0, false, "fr"),
+    ] {
+        let size = physical / dpi;
+        let mut h = demo_harness();
+        crate::i18n::set_language(lang);
+        h.app.preferences.language = lang.into();
+        h.app.preferences.dark = dark;
+        theme::apply(&h.ctx, dark);
+        h.ctx.set_pixels_per_point(dpi);
+        match screen {
+            "deck" => h.app.selected = 8,
+            "inspecteur-apparence" => {
+                h.app.selected = 0;
+                h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+            }
+            "touche-vide" => {
+                h.app.selected = 14;
+                h.app.config.keys_mut()[14] = Key::default();
+            }
+            "reglages" => h.app.settings = true,
+            _ => unreachable!(),
+        }
+        let frame = h.warm(size);
+        let theme = if dark { "sombre" } else { "clair" };
+        let name = format!("v015-main-{screen}-{}x{}-{theme}-{lang}.png", physical.x as u32, physical.y as u32);
+        h.png(size, frame.clone(), &out.join(name));
+        if screen == "deck" {
+            assert!(text_position(&frame.shapes, if lang == "fr" { "Touches : actives" } else { "Keys: running" }).is_some(), "0.15 active key status missing");
+        }
+        if screen == "inspecteur-apparence" {
+            assert!(text_position(&frame.shapes, if lang == "fr" { "Titre sur la touche" } else { "Key title" }).is_some(), "appearance inspector marker missing");
+        }
+        if screen == "reglages" {
+            assert!(text_position(&frame.shapes, if lang == "fr" { "Vérifier les mises à jour au démarrage" } else { "Check for updates on startup" }).is_some(), "settings checkbox missing");
+        }
     }
     crate::i18n::set_language("fr");
 }
