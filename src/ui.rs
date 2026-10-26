@@ -2074,6 +2074,7 @@ impl App {
                         if ctx.screen_rect().width() >= 1200.0 { ui.label(RichText::new(label).size(12.0).strong().color(color)); }
                 });
             });
+            });
     }
     fn header_standard(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
