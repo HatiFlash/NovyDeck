@@ -39,8 +39,8 @@ fn mouse_drag_places_block_before_first_and_duplicates_with_ctrl() {
     let output = h.warm(size);
     let points = handles(&output.shapes);
     assert_eq!(points.len(), 3, "a handle per card");
-    drag(&mut h, size, points[2], points[0], false);
-    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })));
+    let released = drag(&mut h, size, points[2], points[0], false);
+    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "steps={:?} drop={:?} drag={:?} text={:?}", h.app.config.keys()[0].steps, h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_at"))), h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))), text_position(&released.shapes, "⋮⋮"));
     let output = h.warm(size);
     let points = handles(&output.shapes);
     drag(&mut h, size, points[0], points[2], true);
