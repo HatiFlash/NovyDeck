@@ -44,6 +44,7 @@ pub fn validate(mut proposal: Proposal, config: &Config) -> Proposal {
                 proposal.status = Status::Ambigue {
                     question: format!("Paramètre invalide : {text}. Que souhaites-tu corriger ?"),
                     choix: vec!["Corriger le bloc".into()],
+                    choix_autonomes: false,
                 };
             } else {
                 // Valider séparément tous les blocs complets (la règle de navigation
@@ -65,6 +66,7 @@ pub fn validate(mut proposal: Proposal, config: &Config) -> Proposal {
                     proposal.status = Status::Ambigue {
                         question: format!("Séquence invalide : {e}. Que faut-il modifier ?"),
                         choix: vec!["Modifier la séquence".into()],
+                        choix_autonomes: false,
                     };
                 } else {
                     proposal.notes.push(format!(

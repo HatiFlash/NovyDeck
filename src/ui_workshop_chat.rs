@@ -399,7 +399,7 @@ impl App {
                             action = Some(3);
                         }
                         match &pending.proposal.status {
-                            Status::Ambigue { question, choix } => {
+                            Status::Ambigue { question, choix, .. } => {
                                 ui.label(question);
                                 if self.preferences.workshop_chat_mode == "auto"
                                     && !stale
@@ -578,8 +578,9 @@ impl App {
         if let Some(option) = choice {
             // Les choix de plugin sont des demandes complètes : ne pas réinjecter la
             // qualification inconnue ou la cible non décrite de la demande initiale.
-            self.workshop_chat.input = if (option.starts_with("Lance ") && option.contains(" de "))
-                || (option.starts_with("Launch ") && option.contains(" from ")) {
+            self.workshop_chat.input = if self.workshop_chat.pending.as_ref().is_some_and(|p| {
+                matches!(p.proposal.status, Status::Ambigue { choix_autonomes: true, .. })
+            }) {
                 option
             } else {
                 format!(

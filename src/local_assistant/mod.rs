@@ -196,6 +196,7 @@ fn clarification(question: &str, choices: &[&str]) -> Status {
     Status::Ambigue {
         question: question.into(),
         choix: choices.iter().map(|s| (*s).into()).collect(),
+        choix_autonomes: false,
     }
 }
 
@@ -552,7 +553,11 @@ fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Res
             }
         }).collect()
     };
-    let question = |message: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue { question: message, choix: choices(items) };
+    let question = |fr: String, en: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue {
+        question: if crate::i18n::current() == "en" { en } else { fr },
+        choix: choices(items),
+        choix_autonomes: true,
+    };
     // « de X » après une action désigne un plugin précis : ne pas choisir un plugin
     // homonyme installé lorsque X n'appartient pas à l'inventaire.
     let unknown_qualifier = mentioned.is_empty() && exact.iter().any(|(_, a)| {
@@ -562,26 +567,26 @@ fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Res
         })
     });
     if unknown_qualifier {
-        return Some(Err(question("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into(), &exact)));
+        return Some(Err(question("Quel plugin installé veux-tu utiliser ? Précise son nom exact et son action.".into(), "Which installed plugin do you want to use? Specify its exact name and action.".into(), &exact)));
     }
     match candidates.as_slice() {
         [(p, a)] if !exact.is_empty() || complete.len() == 1 && partial.len() == 1 => {
             // Les champs de l'inspecteur tiers ne figurent pas dans le manifeste :
             // ni appareil ni réglages implicites ne peuvent être déduits ici.
             if a.inspector.is_some() || p.inspector.is_some() {
-                return Some(Err(question(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name()), &vec![])));
+                return Some(Err(question(format!("Quels réglages pour « {} » de « {} » ? Configure-les dans l'inspecteur du plugin ; je ne connais pas ses champs internes.", a.name, p.display_name()), format!("What settings for '{}' from '{}'? Configure them in the plugin inspector; I don't know its internal fields.", a.name, p.display_name()), &[])));
             }
             if unsafe_target {
-                return Some(Err(question(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name()), &vec![])));
+                return Some(Err(question(format!("Quelle cible ou quel appareil pour « {} » de « {} » ? Le manifeste ne décrit pas ce réglage.", a.name, p.display_name()), format!("Which target or device for '{}' from '{}'? The manifest does not describe this setting.", a.name, p.display_name()), &[])));
             }
             Some(Ok(Step::PluginAction { plugin: p.uuid.clone(), action: a.uuid.clone(), settings: serde_json::json!({}), label: a.name.clone() }))
         }
         [] if !mentioned.is_empty() => {
             let actions: Vec<_> = mentioned.iter().flat_map(|p| p.actions.iter().map(move |a| (*p, a))).collect();
-            Some(Err(question(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), &actions)))
+            Some(Err(question(format!("Quelle action de « {} » veux-tu utiliser ? Précise son nom parmi les actions installées.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), format!("Which action from '{}' do you want to use? Specify its name from the installed actions.", mentioned.iter().map(|p| p.display_name()).collect::<Vec<_>>().join(", ")), &actions)))
         }
         [] => None,
-        _ => Some(Err(question(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), candidates))),
+        _ => Some(Err(question(format!("Quelle action de quel plugin ? Plusieurs correspondent : {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), format!("Which action from which plugin? Several match: {}.", candidates.iter().map(|(p, a)| format!("{} — {}", p.display_name(), a.name)).collect::<Vec<_>>().join(" ; ")), candidates))),
     }
 }
 
@@ -701,7 +706,7 @@ mod tests {
             let proposal = propose_with(request, &Config::default(), &knowledge);
             let actual = match &proposal.status {
                 Status::Reconnue if proposal.insertable() => { counts[0] += 1; "pass" }
-                Status::Ambigue { question, choix } if !question.is_empty() && !proposal.insertable() => {
+                Status::Ambigue { question, choix, .. } if !question.is_empty() && !proposal.insertable() => {
                     assert!(proposal.steps.is_empty(), "{request}: {proposal:?}");
                     let expected_choices: &[(&str, &str)] = match request {
                         "utilise SoundPad" => &[("SoundPad", "Toggle Mute"), ("SoundPad", "Record Clip")],
@@ -742,7 +747,7 @@ mod tests {
         let mut knowledge = crate::local_llm::Knowledge::builtin();
         knowledge.plugins = vec![plugin];
         let p = propose_with("active Toggle Mute de SoundPad", &Config::default(), &knowledge);
-        assert!(matches!(&p.status, Status::Ambigue { question, choix } if question.contains("réglages") && choix.is_empty()), "{p:?}");
+        assert!(matches!(&p.status, Status::Ambigue { question, choix, .. } if question.contains("réglages") && choix.is_empty()), "{p:?}");
         assert!(p.steps.is_empty() && !p.insertable());
     }
     #[test]

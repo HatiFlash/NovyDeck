@@ -161,6 +161,43 @@ fn workshop_chat_previews_a_natural_request_without_running_it() {
     }
 }
 #[test]
+fn workshop_chat_plugin_choice_is_complete_and_insertable() {
+    for (language, expected_question, expected_choice) in [
+        ("fr", "Quelle action", "Lance Toggle Mute de SoundPad"),
+        ("en", "Which action", "Launch Toggle Mute from SoundPad"),
+    ] {
+        let mut h = Harness::new();
+        crate::i18n::set_language(language);
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        plugin.name = "SoundPad".into();
+        plugin.actions[0].name = "Toggle Mute".into();
+        plugin.actions[1].name = "Record Clip".into();
+        let plugin_id = plugin.uuid.clone();
+        let action_id = plugin.actions[0].uuid.clone();
+        h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
+        h.app.show_workflow = true;
+        h.app.workshop_chat.open = true;
+        h.app.preferences.workshop_chat_mode = "local".into();
+        h.app.workshop_chat_send("utilise SoundPad".into(), None);
+        let pending = h.app.workshop_chat.pending.as_ref().unwrap();
+        assert!(matches!(&pending.proposal.status, Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question)));
+        let size = vec2(1366.0, 768.0);
+        let output = h.warm(size);
+        let pos = text_position(&output.shapes, expected_choice).expect("choix visible");
+        h.click(size, pos);
+        assert_eq!(h.app.workshop_chat.input, expected_choice);
+        assert!(h.app.workshop_chat.pending.is_none());
+        let request = std::mem::take(&mut h.app.workshop_chat.input);
+        h.app.workshop_chat_send(request, None);
+        let proposal = &h.app.workshop_chat.pending.as_ref().unwrap().proposal;
+        assert!(proposal.insertable(), "{proposal:?}");
+        assert!(matches!(&proposal.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &plugin_id && action == &action_id));
+    }
+    crate::i18n::set_language("fr");
+}
+
+#[test]
 fn gallery_imports_a_user_icon_without_overwriting_and_applies_it() {
     let mut h = Harness::new();
     let source_dir = tempfile::tempdir().unwrap();
