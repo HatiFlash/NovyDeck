@@ -1457,7 +1457,7 @@ fn workshop_simple_mode_click_on_nested_block_opens_its_properties() {
         h.ctx.data_mut(|d| { d.insert_temp(egui::Id::new("workshop_palette_open"), true); d.remove::<Vec<usize>>(egui::Id::new("workshop_path")); });
         h.app.workshop_chat.open = chat;
         let output = h.warm(size);
-        let card = text_position(&output.shapes, "Lancer une application · Lancer brave.exe").expect("carte imbriquée visible");
+        let card = text_position(&output.shapes, "Lancer une application").expect("carte imbriquée visible");
         h.click(size, card);
         let output = h.warm(size);
         assert_eq!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), Some(vec![0, 1, 0]));

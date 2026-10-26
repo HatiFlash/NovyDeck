@@ -816,6 +816,9 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             let error = if step.is_disabled() { None } else {
                 crate::model::validate_key(&Key { steps: vec![step.clone()], ..Key::default() }, config).err()
             };
+            let mut card_body_bottom = 0.0;
+            let mut handle_rect = egui::Rect::NOTHING;
+            let mut menu_rect = egui::Rect::NOTHING;
             let frame = egui::Frame::new().fill(p.surface)
                 .stroke(egui::Stroke::new(if chosen { 1.5_f32 } else { 1.0_f32 }, if chosen { accent() } else { p.line }))
                 .corner_radius(10).inner_margin(9).show(ui, |ui| {
@@ -825,20 +828,15 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
                     ui.horizontal(|ui| {
                         let handle = ui.add(egui::Label::new("⋮⋮").sense(egui::Sense::drag())).on_hover_text(crate::i18n::tr("Glisser pour déplacer ; Ctrl pour dupliquer"));
+                        handle_rect = handle.rect;
                         if handle.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_drag"), path.clone())); }
                         block_glyph(ui, step, color);
                         ui.colored_label(color, format!("{numbering}{}", i + 1));
                         let summary = named_summary(step, plugins);
                         let title = step_label(step);
-                        let label = ui.add(egui::Label::new(RichText::new(title).strong()).truncate().sense(egui::Sense::click()));
-                        if label.clicked() {
-                            *selection = if chosen { None } else { Some(path.clone()) };
-                            if matches!(step.active(),Step::PluginAction { .. }) {
-                                ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.clone()));
-                            }
-                        }
+                        ui.add(egui::Label::new(RichText::new(title).strong()).truncate());
                         if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
-                        ui.menu_button("...", |ui| {
+                        let menu = ui.menu_button("...", |ui| {
                             if ui.button(crate::i18n::tr("Dupliquer")).clicked() { *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path.clone()))); ui.close_menu(); }
                             if ui.button(crate::i18n::tr("Supprimer")).clicked() { *action = Some(WorkshopAction::Remove(path.clone())); ui.close_menu(); }
                             if ui.add_enabled(i > 0, egui::Button::new(crate::i18n::tr("Monter"))).clicked() {
@@ -855,8 +853,9 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                                 *insert_at = Some(dest); ui.close_menu();
                             }
                         });
+                        menu_rect = menu.response.rect;
                     });
-                    ui.label(RichText::new(named_summary(step, plugins)).small().color(p.muted));
+                    card_body_bottom = ui.label(RichText::new(named_summary(step, plugins)).small().color(p.muted)).rect.bottom();
                     let branches: Vec<(&str, &[Step])> = match step.active() {
                         Step::IfCondition { then_steps, else_steps, .. }
                         | Step::IfWindow { then_steps, else_steps, .. }
@@ -883,6 +882,14 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     }
                 });
             let r = frame.response.rect;
+            let body = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, (card_body_bottom + 9.0).min(r.max.y)));
+            let card = ui.interact(body, ui.id().with("workshop_card"), egui::Sense::click());
+            if card.clicked() && card.interact_pointer_pos().is_some_and(|pos| !handle_rect.contains(pos) && !menu_rect.contains(pos)) {
+                *selection = if chosen { None } else { Some(path.clone()) };
+                if matches!(step.active(), Step::PluginAction { .. }) {
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("plugin_block_open"), path.clone()));
+                }
+            }
             let top = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, r.min.y + 38.0));
             workshop_drop_indicator(ui, top, &path);
             let mut after = path.clone(); *after.last_mut().unwrap() += 1;

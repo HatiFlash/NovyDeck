@@ -550,6 +550,7 @@
     "Glisse un bind sur une touche, puis personnalise ses actions dans l’inspecteur.": "Drag a binding onto a key, then customize its actions in the inspector.",
     "Glisse une action ou un bind sur cette touche.": "Drag an action or binding onto this key.",
     "Glisse une action sur une touche. Elle s’ajoute à la fin de sa macro.": "Drag an action onto a key. It is added to the end of its macro.",
+    "Glisser pour déplacer ; Ctrl pour dupliquer": "Drag to move; Ctrl to duplicate",
     "Glisser sur une touche, ou cliquer pour ajouter à la touche sélectionnée": "Drag onto a key, or click to add to the selected key",
     "Graphite": "Graphite",
     "Gratuit · hors ligne · modifiable": "Free · offline · customizable",
