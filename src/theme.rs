@@ -496,7 +496,7 @@ pub fn checkbox(ui: &mut egui::Ui, checked: &mut bool, label: &str) -> egui::Res
     let p = palette(ui.ctx());
     let icon = ui.spacing().icon_width;
     let font = egui::TextStyle::Body.resolve(ui.style());
-    let galley = ui.fonts_mut(|fonts| fonts.layout_no_wrap(label.to_owned(), font, p.text_primary));
+    let galley = ui.fonts(|fonts| fonts.layout_no_wrap(label.to_owned(), font, p.text_primary));
     let height = ui.spacing().interact_size.y.max(galley.size().y);
     let size = Vec2::new(icon + ui.spacing().icon_spacing + galley.size().x, height);
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
