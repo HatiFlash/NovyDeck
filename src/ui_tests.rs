@@ -672,7 +672,7 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
     h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
     h.app.config.keys_mut()[1] = Key { plugin: Some(binding.clone()), ..Key::default() };
-    h.app.config.profiles[0].pages[0].keys[0] = Key { plugin: Some(binding), ..Key::default() };
+    h.app.config.profiles[0].pages[0].keys[0] = Key { plugin: Some(binding), long_steps: vec![Step::Delay { ms: 1 }], ..Key::default() };
     h.app.config.profiles[0].pages[0].keys[1].steps = vec![Step::Back];
     h.app.applied = h.app.config.clone();
     let (tx, rx) = mpsc::channel();
@@ -715,6 +715,10 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     send(&tx, Event::Key(0, Instant::now()));
     send(&tx, Event::KeyRelease(0, Instant::now()));
     h.app.events();
+    let long_press = Instant::now();
+    send(&tx, Event::Key(0, long_press));
+    send(&tx, Event::KeyRelease(0, long_press + Duration::from_millis(u64::from(h.app.applied.long_press_ms) + 1)));
+    h.app.events();
     send(&tx, Event::Key(1, Instant::now()));
     navigate(&mut h, "");
     send(&tx, Event::KeyRelease(1, Instant::now()));
@@ -729,10 +733,12 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
                 }
             }
         }
-        if edges.len() >= 3 { break; }
+        if edges.len() >= 5 { break; }
         std::thread::sleep(Duration::from_millis(20));
     }
     assert_eq!(edges, vec![("keyDown".into(), "deckforge-0--1".into()),
+                           ("keyDown".into(), "deckforge-0-folder-0".into()),
+                           ("keyUp".into(), "deckforge-0-folder-0".into()),
                            ("keyDown".into(), "deckforge-0-folder-0".into()),
                            ("keyUp".into(), "deckforge-0-folder-0".into())]);
 }
@@ -946,9 +952,10 @@ fn lcd_preview_cache_refreshes_labels_colors_icons_and_changed_image_files() {
         .unwrap()
         .id();
     assert_ne!(new, label);
+    let before_overlay = h.app.key_previews.texture(&h.ctx, 5, &changed, 126, None).unwrap().id();
     changed.label_overlay = false;
     let without_overlay = h.app.key_previews.texture(&h.ctx, 5, &changed, 126, None).unwrap().id();
-    assert_ne!(label, without_overlay, "le cache de l'aperçu doit suivre le choix fond/ombre");
+    assert_ne!(before_overlay, without_overlay, "le cache de l'aperçu doit suivre le choix fond/ombre");
     changed.color = [12, 34, 56];
     let color = h
         .app

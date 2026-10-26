@@ -159,6 +159,9 @@ pub struct App {
     long_press: LongPress,
     /// Physical edges survive a page apply; a release must not trigger the new page.
     physical_down: [bool; 32],
+    /// Only release a plugin gesture to the same visible binding and applied generation.
+    plugin_presses: [Option<(u64, crate::plugin_runtime::Visible)>; 32],
+    plugin_generation: u64,
     long_editor: bool,
     wanted: bool,
     status: String,
@@ -403,6 +406,8 @@ impl App {
             gate,
             long_press: LongPress::default(),
             physical_down: [false; 32],
+            plugin_presses: std::array::from_fn(|_| None),
+            plugin_generation: 0,
             long_editor: false,
             wanted: false,
             status: tr("Aucun périphérique").into(),
@@ -920,6 +925,7 @@ impl App {
                         self.selected = self.selected.min(14);
                         self.long_press.clear();
                         self.physical_down.fill(false);
+                        self.plugin_presses.fill(None);
                         self.gate.disconnect();
                         self.engine.stop();
                     } else {
@@ -928,6 +934,7 @@ impl App {
                 }
                 Event::Applied(revision) => {
                     if self.gate.applied(revision) {
+                        self.plugin_generation = self.plugin_generation.wrapping_add(1);
                         self.long_press.clear();
                         if let Some((r, c)) = self.pending.take() {
                             if r == revision {
@@ -953,6 +960,7 @@ impl App {
                     if index >= self.device_keys() || index >= self.applied.keys().len() || index >= self.physical_down.len() { continue; }
                     if self.physical_down[index] { continue; }
                     self.physical_down[index] = true;
+                    self.plugin_presses[index] = None;
                     if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
                     let wake = self.sleep.press(Instant::now());
                     if wake { self.wake_display(); self.long_press.clear(); continue; }
@@ -970,7 +978,14 @@ impl App {
                             self.log(trf("Touche {key} : {reason}", &[("key", &format!("{:02}", index + 1)), ("reason", &reason)]))
                         }
                         Decision::Execute => {
-                            if index < self.device_keys() && index < self.applied.keys().len() && self.applied.keys()[index].plugin.is_some() { if let Some(plugins)=&self.plugins { plugins.key(index,true); } }
+                            if self.applied.keys()[index].plugin.is_some() {
+                                if let Some(plugins) = &self.plugins {
+                                    if let Some(visible) = plugins.visible().values().find(|v| v.index == index).cloned() {
+                                        plugins.key(index, true);
+                                        self.plugin_presses[index] = Some((self.plugin_generation, visible));
+                                    }
+                                }
+                            }
                             let has_long = !self.applied.keys()[index].long_steps.is_empty();
                             if self.long_press.press(index, at, has_long) {
                                 self.execute_physical(index, false);
@@ -981,9 +996,19 @@ impl App {
                 Event::KeyRelease(index, at) => {
                     if index >= self.physical_down.len() || !self.physical_down[index] { continue; }
                     self.physical_down[index] = false;
+                    let plugin_press = self.plugin_presses[index].take();
                     if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
                     if index < self.device_keys() && index < self.applied.keys().len() {
-                        if self.gate.decision()==Decision::Execute && self.applied.keys()[index].plugin.is_some() { if let Some(plugins)=&self.plugins { plugins.key(index,false); } }
+                        if self.gate.decision() == Decision::Execute {
+                            if let (Some((generation, pressed)), Some(plugins)) = (plugin_press, &self.plugins) {
+                                if generation == self.plugin_generation
+                                    && plugins.visible().get(&pressed.context).is_some_and(|now|
+                                        now.index == index && now.plugin == pressed.plugin && now.action == pressed.action)
+                                {
+                                    plugins.key(index, false);
+                                }
+                            }
+                        }
                         if let Some(long) = self.long_press.release(index, at, self.applied.long_press_ms) {
                             self.execute_physical(index, long);
                         }
