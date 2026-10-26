@@ -43,6 +43,20 @@ fn nested_block_menu_opens_and_removes_only_that_branch_child() {
     assert!(matches!(h.app.config.keys()[0].steps[1], Step::Delay { ms: 333 }));
 }
 
+#[test]
+fn root_block_menu_opens_and_removes_only_selected_block() {
+    let (mut h, size) = workshop();
+    h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 111 }, Step::Delay { ms: 222 }];
+    let output = h.warm(size);
+    let menu = text_position(&output.shapes, "...").expect("visible root menu button");
+    h.click(size, menu);
+    let output = h.warm(size);
+    let remove = text_position(&output.shapes, crate::i18n::tr("Supprimer"))
+        .expect("root menu opened");
+    h.click(size, remove);
+    assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::Delay { ms: 222 }]));
+}
+
 fn drag(h: &mut Harness, size: egui::Vec2, from: egui::Pos2, to: egui::Pos2, ctrl: bool) -> egui::FullOutput {
     let mods = egui::Modifiers { ctrl, ..Default::default() };
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: mods };
