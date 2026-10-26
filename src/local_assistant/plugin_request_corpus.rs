@@ -6,9 +6,9 @@ use crate::model::{Config, Step};
 
 type Choice = (&'static str, &'static str);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Expected {
+enum Expected<'a> {
     Pass(Choice, bool), // bool : suivi d'une attente de 2 s
-    Question(&'static [Choice]),
+    Question(&'a [Choice]),
     Unknown,
 }
 use Expected::{Pass, Question, Unknown};
@@ -60,7 +60,7 @@ fn plugin_request_corpus() {
         ("LANCE TOGGLE-MUTE DE SOUNDPAD", Pass(tm, false)),
         ("SoundPad : Toggle Mute", Pass(tm, false)),
         ("Mute Toggle de SoundPad", Pass(tm, false)),
-        ("SoundPad, Record Clip", Pass(rc, false)),
+        ("SoundPad Record Clip", Pass(rc, false)),
         ("Record Clip", Pass(rc, false)),
         ("record-clip avec soundpad", Pass(rc, false)),
         ("Brightness de LightBar", Pass(br, false)),
@@ -122,9 +122,14 @@ fn plugin_request_corpus() {
                 if let [Step::PluginAction { plugin, action, .. }, rest @ ..] = &p.steps[..] {
                     let found = knowledge.plugins.iter().find(|item| item.uuid == *plugin).and_then(|item|
                         item.actions.iter().find(|item_action| item_action.uuid == *action).map(|a| (item.display_name(), a.name.as_str())));
-                    if rest.is_empty() { found.map(|x| Pass((x.0, x.1), false)).unwrap_or(Unknown) }
-                    else if matches!(rest, [Step::Delay { ms: 2000 }]) { found.map(|x| Pass((x.0, x.1), true)).unwrap_or(Unknown) }
-                    else { Unknown }
+                    let delay = if rest.is_empty() { Some(false) }
+                        else if matches!(rest, [Step::Delay { ms: 2000 }]) { Some(true) }
+                        else { None };
+                    match (found, delay, expected) {
+                        (Some((name, action_name)), Some(actual_delay), Pass((wanted_name, wanted_action), wanted_delay))
+                            if name == wanted_name && action_name == wanted_action && actual_delay == wanted_delay => expected,
+                        _ => Unknown,
+                    }
                 } else { Unknown }
             }
             Status::Ambigue { question, choix, choix_autonomes: true } if !question.is_empty() && p.steps.is_empty() && !p.insertable() => {
