@@ -100,6 +100,39 @@ fn main015_empty_key_asks_assistant_without_running() {
 }
 
 #[test]
+fn main015_overlay_checkbox_is_square_and_persists_in_both_themes() {
+    let size = vec2(1366.0, 768.0);
+    for dark in [true, false] {
+        let mut h = demo_harness();
+        h.app.preferences.dark = dark;
+        theme::apply(&h.ctx, dark);
+        h.app.selected = 0;
+        h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+        let frame = h.warm(size);
+        let label = "Fond et ombre derrière le titre";
+        let label_pos = text_position(&frame.shapes, label).expect("overlay checkbox label");
+        let squares = frame.shapes.iter().filter(|clipped| match &clipped.shape {
+            egui::Shape::Rect(shape) => {
+                let r = shape.rect;
+                r.width() >= 14.0 && r.width() <= 24.0
+                    && (r.width() - r.height()).abs() < 0.1
+                    && shape.corner_radius == egui::CornerRadius::same(4)
+                    && r.center().y > label_pos.y - 16.0 && r.center().y < label_pos.y + 16.0
+                    && r.max.x < label_pos.x
+            }
+            _ => false,
+        }).count();
+        assert!(squares >= 2, "square checkbox fill and border in {dark:?} theme");
+        let before = h.app.config.keys()[0].label_overlay;
+        h.click(size, label_pos);
+        assert_eq!(h.app.config.keys()[0].label_overlay, !before);
+        h.app.save();
+        let saved = crate::store::load(&h.app.path).unwrap();
+        assert_eq!(saved.keys()[0].label_overlay, !before);
+    }
+}
+
+#[test]
 fn main015_update_checkbox_remains_clickable() {
     let mut h = Harness::new();
     let size = vec2(1366.0, 768.0);
@@ -197,7 +230,7 @@ fn main015_captures() {
             assert!(text_position(&frame.shapes, crate::i18n::tr("Titre sur la touche")).is_some(), "appearance inspector marker missing");
         }
         if screen == "reglages" {
-            assert!(text_position(&frame.shapes, if lang == "fr" { "Vérifier les mises à jour au démarrage" } else { "Check for updates on startup" }).is_some(), "settings checkbox missing");
+            assert!(text_position(&frame.shapes, crate::i18n::tr("Vérifier les mises à jour au démarrage")).is_some(), "settings checkbox missing");
         }
     }
     crate::i18n::set_language("fr");
