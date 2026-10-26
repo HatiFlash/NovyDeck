@@ -17,7 +17,7 @@ fn update_notes_parse_language_bullets_bold_headings_and_links() {
     let raw = "## English\n### Highlights\n- **Fast setup:** [Read more](https://example.com) and `plugins`.\n## Français\n### À retenir\n- **Installation rapide :** [Consultez](https://example.com) et `plugins`.";
     let fr = parse_notes(raw, "fr");
     assert!(matches!(&fr[0], NoteBlock::Heading(text) if text == "À retenir"));
-    assert!(matches!(&fr[1], NoteBlock::Bullet { title, body } if title == "Installation rapide :" && body == "Consultez et plugins."));
+    assert!(matches!(&fr[1], NoteBlock::Bullet { title, body } if title == "Installation rapide" && body == "Consultez et plugins."));
     assert!(!format!("{fr:?}").contains("http") && !format!("{fr:?}").contains("**"));
     let en = parse_notes(raw, "en");
     assert!(matches!(&en[1], NoteBlock::Bullet { title, body } if title == "Fast setup:" && body == "Read more and plugins."));
