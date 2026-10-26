@@ -31,6 +31,7 @@ fn assistant015_request_precedes_real_preview_and_add_inserts_only_on_click() {
     for (language, count_label) in [("fr", "3 blocs"), ("en", "3 blocks")] {
         let mut h = Harness::new();
         crate::i18n::set_language(language);
+        h.app.config.keys_mut()[h.app.selected].steps.clear();
         preview(&mut h, "test chronologie", vec![
             Step::Delay { ms: 345 },
             Step::IfWindow { title: "Bloc conditionnel".into(), then_steps: vec![Step::Text { text: "BRANCHE ALORS".into() }], else_steps: vec![] },
