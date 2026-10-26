@@ -50,7 +50,14 @@ fn assistant015_request_precedes_real_preview_and_add_inserts_only_on_click() {
         assert!(user.top() < count.top(), "demande avant proposition");
         // The preview has its own scroll area: the last nested step need not
         // be laid out in the initial viewport, but must become visible on scroll.
-        let pointer = count.center() + vec2(50.0, 80.0);
+        // Aim the wheel inside the actual preview viewport, not an offset from
+        // its heading (which can fall outside the nested ScrollArea).
+        let preview_clip = out.shapes.iter().find_map(|s| match &s.shape {
+            Shape::Text(t) if t.galley.job.text == count_label => Some(s.clip_rect),
+            _ => None,
+        }).expect("preview viewport");
+        assert!(preview_clip.contains_rect(count));
+        let pointer = preview_clip.center();
         let mut scrolled = out.clone();
         let mut found = false;
         for _ in 0..8 {
