@@ -3317,7 +3317,7 @@ impl App {
                     });
                     let mut remove=None;let mut movement=None;
                     egui::ScrollArea::vertical().id_salt("step_list").auto_shrink([false, false]).max_height((body_height-40.0).max(100.0)).show(ui,|ui| {
-                        if steps.is_empty(){ui.add_space(8.0);if let Some(image)=iconset::image(ui.ctx(), Ico::Actions, 20.0){ui.add(image);}ui.label(RichText::new(tr("Glisse une action ou un raccourci sur cette touche.")).font(theme::strong(15.0)));ui.label(RichText::new(tr("La bibliothèque à droite propose des raccourcis prêts à l’emploi. Tu peux ensuite combiner et modifier leurs actions ici.")).color(p.text_tertiary));}
+                        if steps.is_empty(){ui.add_space(8.0);if let Some(image)=iconset::image(ui.ctx(), Ico::Actions, 20.0){ui.add(image);}ui.label(RichText::new(tr("Glisse une action ou un raccourci sur cette touche.")).font(theme::strong(15.0)));ui.add(egui::Label::new(RichText::new(tr("La bibliothèque à droite propose des raccourcis prêts à l’emploi. Tu peux ensuite combiner et modifier leurs actions ici.")).color(p.text_tertiary)).wrap());}
                         if steps.is_empty(){ui.horizontal_wrapped(|ui| {if ui.add(theme::ghost_button(tr("Ouvrir l’Atelier de blocs"))).clicked(){open_workflow=true;}if ui.add(theme::ghost_button(tr("Partir d’un modèle"))).clicked(){open_model=true;}if ui.add(theme::ghost_button(tr("Demander à l’IA"))).clicked(){open_assistant=true;}});}
                         let count=steps.len();
                         for(i,step) in steps.iter_mut().enumerate(){ui.push_id(i,|ui|{

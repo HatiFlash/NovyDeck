@@ -32,7 +32,7 @@ On the main deck screen, the header now labels whether key actions are running o
 
 ### More room in the key inspector
 
-Select a key to view its action steps in the inspector; the layout keeps initial steps visible at compact and HiDPI sizes. The **Appearance** tab remains scrollable for its controls. Its square checked box and the Appearance tab itself were introduced in 0.13.0; they are shown here as context, not new 0.15.0 features.
+Select a key to view its action steps in the inspector; the layout keeps initial steps visible at compact and HiDPI sizes. The **Appearance** tab remains scrollable for its controls. The **Background and shadow behind the title** option has existed since 0.13.0; its clearer square checkbox is part of this 0.15.0 polish.
 
 ![0.15.0 English key inspector, including the Appearance tab](docs/images/v015-appearance-en.png)
 
@@ -382,7 +382,7 @@ NovyDeck works offline. Local AI stays on your PC and is optional and disabled b
 ## Latest release
 
 - **0.15.0:** clearer deck header and Templates/Saved library labels; roomier key inspector; assistant conversations with structured, reviewable proposals and plugin clarification.
-- **0.14.0:** transactional plugin updates/removal, compact installed library, scrolling action picker, independent block inspectors, plugin ON/OFF faces and direct-action test.
+- **0.14.0:** direct block editing and drag-and-drop in the Workshop; clearer What's New cards and update progress; assistant proposals for installed plugin actions.
 - **0.10.1:** cleaner deck header (texts inside the card, grouped page arrows greyed out on a single page); English fixes (Undo, library categories, step names, Add menu).
 - **0.10.0:** redesigned interface with a new design system: graphite deck stage without neon glow, outline-free buttons, clearer key inspector with underlined tabs, cleaner action library, deeper colours in all themes and Semibold titles. Profiles, media and plugins are kept.
 - **0.9.3:** security badges in the plugin store (automatic GitHub scan); official plugins 1.0.2 with logos and cleaner settings; no console during in-app updates; fixed secondary windows; ON/OFF state kept across pages.

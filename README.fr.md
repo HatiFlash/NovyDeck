@@ -32,7 +32,7 @@ Sur l'écran principal du deck, l'en-tête indique si l'exécution des touches e
 
 ### Plus de place dans l'inspecteur de touche
 
-Sélectionnez une touche pour afficher ses étapes d'action dans l'inspecteur ; la disposition garde les premières étapes visibles en petite fenêtre et en HiDPI. L'onglet **Apparence** reste défilable pour accéder à ses réglages. Sa case carrée cochée et l'onglet Apparence lui-même datent de la version 0.13 ; ils sont montrés comme contexte, pas comme nouveautés de la 0.15.
+Sélectionnez une touche pour afficher ses étapes d'action dans l'inspecteur ; la disposition garde les premières étapes visibles en petite fenêtre et en HiDPI. L'onglet **Apparence** reste défilable pour accéder à ses réglages. L'option **Fond et ombre derrière le titre** existe depuis la 0.13.0 ; sa case carrée plus lisible fait partie des finitions de la 0.15.0.
 
 ![Inspecteur de touche français 0.15.0, avec l'onglet Apparence](docs/images/v015-appearance-fr.png)
 
@@ -40,7 +40,7 @@ Sélectionnez une touche pour afficher ses étapes d'action dans l'inspecteur ; 
 
 Depuis une touche vide, choisissez **Demander à l’IA** pour ouvrir **Atelier → Assistant**. Les demandes et réponses apparaissent dans l'ordre de la conversation. Une proposition reconnue affiche son nombre de blocs et un aperçu structuré, y compris les branches imbriquées ; il faut la relire puis choisir **Ajouter** ou **Appliquer** avant de modifier la touche. Les règles déterministes intégrées restent disponibles sans modèle IA. Un modèle IA local facultatif peut traiter des demandes au-delà de ces règles ; il ne comprend pas universellement les plugins, et leurs actions et réglages sont validés plutôt que supposés. Cela ne garantit ni un modèle particulier ni un fonctionnement matériel réussi.
 
-![Proposition et aperçu structuré de l'assistant en français 0.15.0 ; la demande d'exemple anglaise provient d'une fixture de test hors ligne](docs/images/v015-assistant-fr.png)
+![Proposition et aperçu structuré de l'assistant en français 0.15.0 ; la demande d'exemple provient d'une fixture de test hors ligne](docs/images/v015-assistant-fr.png)
 
 La vue distincte de clarification montre l'assistant demandant quel plugin ou quelle action est visé. Elle utilise la fixture SoundPad hors ligne, et non un vrai plugin installé ; elle ne démontre pas une compréhension réelle des plugins.
 
@@ -382,7 +382,7 @@ NovyDeck fonctionne hors ligne. L'IA locale reste sur votre PC ; elle est facult
 ## Dernière version
 
 - **0.15.0 :** en-tête du deck plus clair et sections Modèles/Enregistrés ; inspecteur de touche plus spacieux ; conversations avec l'assistant, propositions structurées à relire et clarification de plugin.
-- **0.14.0 :** mises à jour/désinstallation transactionnelles, bibliothèque compacte, sélecteur défilable, inspecteurs de blocs indépendants, faces ON/OFF et test direct des actions plugin.
+- **0.14.0 :** modification directe et glisser-déposer des blocs dans l'Atelier ; cartes Quoi de neuf et progression de mise à jour plus claires ; propositions de l'assistant pour les actions des plugins installés.
 - **0.10.1 :** en-tête du deck plus propre (textes dans la carte, flèches de page groupées et grisées s'il n'y a qu'une page) ; corrections de l'interface anglaise (Undo, catégories, noms d'étapes, menu Add).
 - **0.10.0 :** interface redessinée avec un nouveau design system : scène du deck graphite sans néon, boutons sans contour, inspecteur de touche plus clair avec onglets soulignés, bibliothèque épurée, couleurs plus profondes dans tous les thèmes et titres en semi-gras. Profils, médias et plugins conservés.
 - **0.9.3 :** badges de sécurité dans le magasin (analyse automatique sur GitHub) ; plugins officiels 1.0.2 avec logos et réglages repensés ; plus de console pendant la mise à jour ; fenêtres secondaires fixes ; état ON/OFF conservé entre les pages.
