@@ -162,6 +162,19 @@ mod tests {
         assert_eq!(tree, before);
     }
     #[test]
+    fn drag_between_branches_and_guard_own_descendants() {
+        let mut tree = vec![delay(1), Step::Repeat { count: 2, steps: vec![delay(2)] }, delay(3)];
+        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0], at: vec![1, 0, 1], copy: false }), Some(vec![0, 0, 1]));
+        assert_eq!(tree.len(), 2);
+        assert!(matches!(&tree[0], Step::Repeat { steps, .. } if steps == &vec![delay(2), delay(1)]));
+        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0, 0, 1], at: vec![2], copy: true }), Some(vec![2]));
+        assert_eq!(tree.len(), 3);
+        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0, 0, 0], at: vec![3], copy: false }), Some(vec![3]));
+        let before = tree.clone();
+        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0], at: vec![0, 0, 0], copy: false }), None);
+        assert_eq!(tree, before);
+    }
+    #[test]
     fn branches_are_distinct() {
         let mut tree = vec![Step::IfVariable {
             name: "x".into(),
