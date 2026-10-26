@@ -1,4 +1,6 @@
 mod intent_parser;
+#[cfg(test)]
+mod plugin_request_corpus;
 mod proposal;
 mod structured;
 mod templates;
