@@ -671,8 +671,8 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     let binding = crate::model::PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
     h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
     h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
-    h.app.config.keys_mut()[1].plugin = Some(binding.clone());
-    h.app.config.profiles[0].pages[0].keys[0].plugin = Some(binding);
+    h.app.config.keys_mut()[1] = Key { plugin: Some(binding.clone()), ..Key::default() };
+    h.app.config.profiles[0].pages[0].keys[0] = Key { plugin: Some(binding), ..Key::default() };
     h.app.config.profiles[0].pages[0].keys[1].steps = vec![Step::Back];
     h.app.applied = h.app.config.clone();
     let (tx, rx) = mpsc::channel();
