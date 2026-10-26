@@ -1032,7 +1032,7 @@ mod tests {
         let unknown_action = Step::PluginAction { plugin: plugin.uuid.clone(), action: "not.installed.action".into(), settings: json!({}), label: "Toggle Mute".into() };
         let mut knowledge = Knowledge::builtin();
         knowledge.plugins.push(plugin);
-        assert_eq!(guard("lance Toggle Mute de SoundPad", vec![installed.clone(), unknown, unknown_action], &knowledge), vec![installed]);
+        assert_eq!(guard("lance Toggle Mute de SoundPad", vec![installed.clone(), unknown, unknown_action], &knowledge), vec![installed.clone()]);
         let mut invented = installed.clone();
         if let Step::PluginAction { settings, .. } = &mut invented {
             *settings = json!({"privateDeviceId": "invented"});
