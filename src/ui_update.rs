@@ -55,7 +55,7 @@ pub(super) fn parse_notes(markdown: &str, lang: &str) -> Vec<NoteBlock> {
     blocks
 }
 
-fn notes(ui: &mut egui::Ui, markdown: &str, cards: bool) {
+pub(super) fn notes(ui: &mut egui::Ui, markdown: &str, cards: bool) {
     let blocks = parse_notes(markdown, crate::i18n::current());
     if blocks.is_empty() { return; }
     let p = theme::palette(ui.ctx());
