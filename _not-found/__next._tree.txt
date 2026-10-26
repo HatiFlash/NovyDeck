@@ -1,4 +1,4 @@
-:HL["/NovyDeck/_next/static/chunks/03zxm_otl48hl.css","style"]
+:HL["/NovyDeck/_next/static/chunks/1vc4a9xz95yxx.css","style"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"/_not-found","h":96,"c":"$Q2"}]]
-0:{"b":"Dl_XoMX5Qz1ZdQGsJ02vf","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"axRwZ6CQdbiwG270UxhAR","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
