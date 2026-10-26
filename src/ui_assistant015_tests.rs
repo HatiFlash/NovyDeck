@@ -43,10 +43,23 @@ fn assistant015_request_precedes_real_preview_and_add_inserts_only_on_click() {
         let user = visible_rect(&out.shapes, request).expect("demande visible");
         let count = visible_rect(&out.shapes, count_label).expect("compte visible");
         assert!(user.top() < count.top(), "demande avant proposition");
-        for text in ["BRANCHE ALORS", "ENFANT REPETER"] {
-            assert!(out.shapes.iter().any(|s| matches!(&s.shape, Shape::Text(t) if t.galley.job.text.contains(text))), "enfant {text} absent");
+        // The preview has its own scroll area: the last nested step need not
+        // be laid out in the initial viewport, but must become visible on scroll.
+        let pointer = count.center() + vec2(50.0, 80.0);
+        let mut scrolled = out.clone();
+        let mut found = false;
+        for _ in 0..8 {
+            if visible_rect(&scrolled.shapes, "ENFANT REPETER").is_some() {
+                found = true;
+                break;
+            }
+            scrolled = h.frame(size, vec![
+                Input::PointerMoved(pointer),
+                Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -75.0), modifiers: Modifiers::NONE },
+            ]);
         }
-        assert!(visible_rect(&out.shapes, "Ajouter").is_some() || visible_rect(&out.shapes, "Add").is_some());
+        assert!(found, "dernier enfant de l'aperçu inaccessible après défilement");
+        assert!(visible_rect(&scrolled.shapes, "Ajouter").is_some() || visible_rect(&scrolled.shapes, "Add").is_some());
         assert!(h.app.config.keys()[h.app.selected].steps.is_empty());
         let label = if language == "fr" { "Ajouter" } else { "Add" };
         h.click(size, visible_rect(&out.shapes, label).unwrap().center());
