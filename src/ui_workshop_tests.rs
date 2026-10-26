@@ -199,9 +199,9 @@ fn dragging_near_bottom_scrolls_workshop_list() {
     assert!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some());
     assert!(h.ctx.input(|i| i.pointer.primary_down() && i.pointer.hover_pos() == Some(target)), "drag pointer not held over edge");
     h.frame(size, vec![Input::PointerMoved(target)]);
-    assert_eq!(h.ctx.data(|d| d.get_temp::<f32>(egui::Id::new("workshop_drag_scroll_offset"))), Some(18.0), "scroll edge never requested an offset; clip={clip:?} target={target:?}, diagnostic={:?}", h.ctx.data(|d| d.get_temp::<(bool, bool, Option<egui::Pos2>)>(egui::Id::new("workshop_scroll_diagnostic"))));
+    assert_eq!(h.ctx.data(|d| d.get_temp::<f32>(egui::Id::new("workshop_drag_scroll_offset"))), Some(18.0), "scroll edge never requested an offset; clip={clip:?} target={target:?}");
     let before = h.warm(size);
-    for _ in 0..25 { h.frame(size, vec![Input::PointerMoved(target)]); }
+    for _ in 0..8 { h.frame(size, vec![Input::PointerMoved(target)]); }
     let after = h.warm(size);
     let last_visible = |shapes: &[egui::epaint::ClippedShape]| {
         (1..=22).rev().find(|i| text_position(shapes, &i.to_string()).is_some()).unwrap_or(0)

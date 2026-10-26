@@ -1245,21 +1245,20 @@ impl App {
             } else {
                 let scroll_id = egui::Id::new("workshop_drag_scroll_offset");
                 let requested = ctx.data_mut(|d| d.remove_temp::<f32>(scroll_id));
-                let mut area = egui::ScrollArea::vertical().id_salt("workflow_scroll");
+                // The card handle owns the drag; the scroll area must not interpret it
+                // as a touch-scroll gesture and override the edge-scroll offset.
+                let mut area = egui::ScrollArea::vertical().id_salt("workflow_scroll").drag_to_scroll(false);
                 if let Some(delta) = requested {
                     let current = egui::scroll_area::State::load(ctx, ui.make_persistent_id("workflow_scroll"))
                         .map_or(0.0, |s| s.offset.y);
                     area = area.vertical_scroll_offset((current + delta).max(0.0));
                 }
-                let scroll = area.show(ui, |ui| {
+                area.show(ui, |ui| {
                     let clip = ui.clip_rect();
                     #[cfg(test)]
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
                     let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
                         || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
-                    #[cfg(test)]
-                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_diagnostic"),
-                        (dragging, ctx.input(|i| i.pointer.primary_down()), ctx.input(|i| i.pointer.hover_pos()))));
                     if dragging && ctx.input(|i| i.pointer.primary_down()) {
                         if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
                             if clip.contains(pos) {
