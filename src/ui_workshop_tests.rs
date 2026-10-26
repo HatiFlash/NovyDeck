@@ -115,6 +115,12 @@ fn drag_reorder_can_be_undone_and_redone() {
     assert_eq!(h.app.config.keys()[0].steps, after);
 }
 
+fn seek_number(h: &mut Harness, size: egui::Vec2, number: &str) {
+    let center = egui::pos2(size.x * 0.65, size.y * 0.52);
+    navigation_seek(h, size, number, center, -90.0);
+    assert!(text_position(&h.warm(size).shapes, number).is_some(), "number under the fold: {number}");
+}
+
 #[test]
 fn branch_numbers_are_stable_in_french_and_english() {
     for lang in ["fr", "en"] {
@@ -126,35 +132,54 @@ fn branch_numbers_are_stable_in_french_and_english() {
             Step::IfVariable { name: "x".into(), value: "1".into(), then_steps: vec![Step::Delay { ms: 31 }], else_steps: vec![Step::Delay { ms: 32 }] },
             Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 41 }] },
         ];
-        let output = h.warm(size);
-        for number in ["3.A1", "3.B1", "4.1"] {
-            assert!(text_position(&output.shapes, number).is_some(), "{lang}: {number}");
-        }
+        for number in ["3.A1", "3.B1", "4.1"] { seek_number(&mut h, size, number); }
     }
     crate::i18n::set_language("fr");
 }
 
-#[test]
-fn palette_drag_inserts_at_specific_sibling_slot() {
-    let (mut h, size) = workshop();
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_search"), "Attendre".to_owned()));
-    let output = h.warm(size);
-    let source = output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
-        (t.galley.job.text == crate::i18n::tr("Attendre")).then_some(t.pos + t.galley.size() * 0.5)
-    } else { None }).max_by(|a, b| a.x.total_cmp(&b.x)).expect("palette delay");
-    let destination = handles(&output.shapes)[1];
+fn palette_delay(shapes: &[egui::epaint::ClippedShape]) -> egui::Pos2 {
+    shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
+        let pos = t.pos + t.galley.size() * 0.5;
+        (t.galley.job.text == crate::i18n::tr("Attendre") && s.clip_rect.contains(pos)).then_some(pos)
+    } else { None }).min_by(|a, b| a.x.total_cmp(&b.x)).expect("visible palette delay")
+}
+
+fn drag_palette(h: &mut Harness, size: egui::Vec2, source: egui::Pos2, destination: egui::Pos2) {
     let press = |pos, pressed| Input::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
     h.frame(size, vec![Input::PointerMoved(source)]);
     h.frame(size, vec![press(source, true)]);
-    assert_eq!(h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))), Some(5), "palette press not registered at {source:?}");
     h.frame(size, vec![Input::PointerMoved(destination)]);
-    assert_eq!(h.ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))), Some(5), "palette drag not started from {source:?}");
     h.frame(size, vec![Input::PointerMoved(destination)]);
     h.frame(size, vec![press(destination, false)]);
-    let steps = &h.app.config.keys()[0].steps;
-    assert_eq!(steps.len(), 4, "{steps:?}");
-    assert!(matches!(steps[1], Step::Delay { ms: 1000 } | Step::Delay { ms: 500 } | Step::Delay { ms: 0 }), "slot: {steps:?}");
-    assert!(matches!(steps[2], Step::Delay { ms: 222 }));
+}
+
+#[test]
+fn palette_drag_inserts_at_specific_sibling_slot_and_inside_container() {
+    for nested in [false, true] {
+        let (mut h, size) = workshop();
+        h.ctx.data_mut(|d| {
+            d.insert_temp(egui::Id::new("workshop_palette_open"), true);
+            d.insert_temp(egui::Id::new("workshop_search"), "Attendre".to_owned());
+        });
+        if nested {
+            h.app.config.keys_mut()[0].steps = vec![Step::Repeat { count: 2, steps: vec![Step::Delay { ms: 222 }] }];
+        }
+        let output = h.warm(size);
+        let source = palette_delay(&output.shapes);
+        let destination = if nested {
+            let child = text_position(&output.shapes, "1.1").expect("visible repeat child");
+            egui::pos2(child.x, child.y)
+        } else { handles(&output.shapes)[1] };
+        drag_palette(&mut h, size, source, destination);
+        let steps = &h.app.config.keys()[0].steps;
+        if nested {
+            assert!(matches!(&steps[0], Step::Repeat { steps, .. } if steps.len() == 2 && matches!(steps[0], Step::Delay { ms: 1000 }) && matches!(steps[1], Step::Delay { ms: 222 })), "nested: {steps:?}");
+        } else {
+            assert_eq!(steps.len(), 4, "sibling: {steps:?}");
+            assert!(matches!(steps[1], Step::Delay { ms: 1000 }), "slot: {steps:?}");
+            assert!(matches!(steps[2], Step::Delay { ms: 222 }));
+        }
+    }
 }
 
 #[test]
