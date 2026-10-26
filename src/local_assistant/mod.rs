@@ -524,6 +524,40 @@ pub fn propose_with(text: &str, config: &Config, knowledge: &crate::local_llm::K
     }
 }
 
+/// Choix complets, jamais une action implicite : partagés entre règles et IA locale.
+fn plugin_choices(items: &[(&crate::plugins::Plugin, &crate::plugins::Action)], unsafe_target: bool) -> Vec<String> {
+    items.iter().filter(|(p, a)| !unsafe_target && p.inspector.is_none() && a.inspector.is_none()).take(6).map(|(p, a)| {
+        if crate::i18n::current() == "en" {
+            format!("Launch {} from {}", a.name, p.display_name())
+        } else {
+            format!("Lance {} de {}", a.name, p.display_name())
+        }
+    }).collect()
+}
+
+/// Un refus par le garde-fou annule toute la macro, y compris les blocs acceptés.
+pub fn from_model_guarded(steps: Vec<Step>, rejected: Vec<(String, String)>, config: &Config, knowledge: &crate::local_llm::Knowledge) -> Proposal {
+    if rejected.is_empty() { return from_model(steps, config); }
+    let available = |p: &crate::plugins::Plugin| p.prerequisite.is_none()
+        && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_));
+    let unknown = rejected.iter().any(|(id, _)| !knowledge.plugins.iter().any(|p| p.uuid == *id && available(p)));
+    let (question, choix) = if unknown {
+        (if crate::i18n::current() == "en" { "The proposed plugin is not installed or available; no blocks were added." } else { "Le plugin proposé n'est pas installé ou disponible ; aucun bloc n'a été ajouté." }.to_owned(), vec![])
+    } else {
+        let (id, action) = &rejected[0];
+        let plugin = knowledge.plugins.iter().find(|p| p.uuid == *id).expect("plugin vérifié");
+        let mut actions: Vec<_> = plugin.actions.iter().collect();
+        actions.sort_by_key(|a| if a.uuid == *action { 0 } else { 1 });
+        let items: Vec<_> = actions.iter().map(|a| (plugin, *a)).collect();
+        (if crate::i18n::current() == "en" {
+            format!("Which action from '{}' did you mean? The model's plugin action was rejected (name or settings); no blocks were added.", plugin.display_name())
+        } else {
+            format!("Quelle action de « {} » voulais-tu ? L'action proposée par le modèle a été refusée (nom ou réglages) ; aucun bloc n'a été ajouté.", plugin.display_name())
+        }, plugin_choices(&items, false))
+    };
+    Proposal { steps: vec![], notes: vec![], missing: vec![], status: Status::Ambigue { question, choix, choix_autonomes: true } }
+}
+
 fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Result<Step, Status>> {
     let n = parser::normalize(clause);
     let named = |name: &str| !name.trim().is_empty() && contains_phrase(&n, &parser::normalize(name));
@@ -544,18 +578,9 @@ fn plugin_intent(clause: &str, plugins: &[crate::plugins::Plugin]) -> Option<Res
     }).collect();
     let candidates = if !exact.is_empty() { &exact } else { &partial };
     let unsafe_target = has(&n, &["sur mon", "sur ma", "sur le", "sur la", "sur l app", "sur un", "sur une", "for my", "on my"]);
-    let choices = |items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| -> Vec<String> {
-        items.iter().filter(|(p, a)| !unsafe_target && p.inspector.is_none() && a.inspector.is_none()).take(6).map(|(p, a)| {
-            if crate::i18n::current() == "en" {
-                format!("Launch {} from {}", a.name, p.display_name())
-            } else {
-                format!("Lance {} de {}", a.name, p.display_name())
-            }
-        }).collect()
-    };
     let question = |fr: String, en: String, items: &[(&crate::plugins::Plugin, &crate::plugins::Action)]| Status::Ambigue {
         question: if crate::i18n::current() == "en" { en } else { fr },
-        choix: choices(items),
+        choix: plugin_choices(items, unsafe_target),
         choix_autonomes: true,
     };
     // « de X » après une action désigne un plugin précis : ne pas choisir un plugin

@@ -375,6 +375,17 @@ pub fn parse_steps(content: &str) -> Result<Vec<Step>, String> {
 /// - les blocs identiques consécutifs sont fusionnés.
 ///   Appliqués aussi à l'intérieur des conditions et des répétitions.
 pub fn guard(request: &str, steps: Vec<Step>, knowledge: &Knowledge) -> Vec<Step> {
+    guard_report(request, steps, knowledge).0
+}
+
+/// Même filtrage que guard, avec les UUID des actions de plugin refusées (branches comprises).
+pub fn guard_report(request: &str, steps: Vec<Step>, knowledge: &Knowledge) -> (Vec<Step>, Vec<(String, String)>) {
+    let mut rejected = Vec::new();
+    let filtered = guard_collect(request, steps, knowledge, &mut rejected);
+    (filtered, rejected)
+}
+
+fn guard_collect(request: &str, steps: Vec<Step>, knowledge: &Knowledge, rejected: &mut Vec<(String, String)>) -> Vec<Step> {
     let low = request.to_lowercase();
     let simple = format!(" {} ", simplify(request));
     // Une application ou une fenêtre ciblée doit être nommée dans la demande (sinon : inventée).
@@ -388,14 +399,18 @@ pub fn guard(request: &str, steps: Vec<Step>, knowledge: &Knowledge) -> Vec<Step
     let mut out: Vec<Step> = Vec::new();
     for mut step in steps {
         let keep = match &mut step {
-            Step::PluginAction { plugin, action, settings, .. } => settings.as_object().is_some_and(|s| s.is_empty()) && knowledge.plugins.iter().any(|p| {
-                p.uuid == *plugin && p.prerequisite.is_none()
-                    && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_))
-                    && (simple.contains(&format!(" {} ", simplify(p.display_name()))) || simple.contains(&format!(" {} ", simplify(&p.uuid))))
-                    && p.actions.iter().any(|a| a.uuid == *action &&
-                        (!a.name.trim().is_empty() && simple.contains(&format!(" {} ", simplify(&a.name)))
-                            || simple.contains(&format!(" {} ", simplify(&a.uuid)))))
-            }),
+            Step::PluginAction { plugin, action, settings, .. } => {
+                let allowed = settings.as_object().is_some_and(|s| s.is_empty()) && knowledge.plugins.iter().any(|p| {
+                    p.uuid == *plugin && p.prerequisite.is_none()
+                        && matches!(p.runtime, crate::plugins::Runtime::Exe(_) | crate::plugins::Runtime::Node(_) | crate::plugins::Runtime::Html(_))
+                        && (simple.contains(&format!(" {} ", simplify(p.display_name()))) || simple.contains(&format!(" {} ", simplify(&p.uuid))))
+                        && p.actions.iter().any(|a| a.uuid == *action &&
+                            (!a.name.trim().is_empty() && simple.contains(&format!(" {} ", simplify(&a.name)))
+                                || simple.contains(&format!(" {} ", simplify(&a.uuid)))))
+                });
+                if !allowed { rejected.push((plugin.clone(), action.clone())); }
+                allowed
+            },
             Step::CloseWindow => closing && !others,
             Step::WindowOp { op, .. } if op == "close_others" => closing,
             Step::WindowOp { target, value, .. } if target == "exe" => named_app(value),
@@ -410,18 +425,18 @@ pub fn guard(request: &str, steps: Vec<Step>, knowledge: &Knowledge) -> Vec<Step
                     crate::conditions::Condition::AppRunning { exe } => named_app(exe),
                     _ => true,
                 };
-                *then_steps = guard(request, std::mem::take(then_steps), knowledge);
-                *else_steps = guard(request, std::mem::take(else_steps), knowledge);
+                *then_steps = guard_collect(request, std::mem::take(then_steps), knowledge, rejected);
+                *else_steps = guard_collect(request, std::mem::take(else_steps), knowledge, rejected);
                 named && !(then_steps.is_empty() && else_steps.is_empty())
             }
             Step::IfWindow { title, then_steps, else_steps } => {
                 let named = simple.contains(&simplify(title));
-                *then_steps = guard(request, std::mem::take(then_steps), knowledge);
-                *else_steps = guard(request, std::mem::take(else_steps), knowledge);
+                *then_steps = guard_collect(request, std::mem::take(then_steps), knowledge, rejected);
+                *else_steps = guard_collect(request, std::mem::take(else_steps), knowledge, rejected);
                 named && !(then_steps.is_empty() && else_steps.is_empty())
             }
             Step::Repeat { steps, .. } => {
-                *steps = guard(request, std::mem::take(steps), knowledge);
+                *steps = guard_collect(request, std::mem::take(steps), knowledge, rejected);
                 !steps.is_empty()
             }
             _ => true,
@@ -510,7 +525,12 @@ pub fn models(endpoint: &str) -> Result<Vec<String>, String> {
     Ok(value["data"].as_array().map(|list| list.iter().filter_map(|m| m["id"].as_str().map(str::to_owned)).collect()).unwrap_or_default())
 }
 
-fn complete(endpoint: &str, model: &str, request: &str, knowledge: &Knowledge) -> Result<Vec<Step>, String> {
+pub struct ModelOutput {
+    pub steps: Vec<Step>,
+    pub rejected: Vec<(String, String)>,
+}
+
+fn complete(endpoint: &str, model: &str, request: &str, knowledge: &Knowledge) -> Result<ModelOutput, String> {
     let body = json!({
         "model": model,
         "messages": messages(request, knowledge),
@@ -521,7 +541,10 @@ fn complete(endpoint: &str, model: &str, request: &str, knowledge: &Knowledge) -
     });
     let value = http(endpoint, "POST", "/v1/chat/completions", Some(&body), Duration::from_secs(120))?;
     let content = value["choices"][0]["message"]["content"].as_str().ok_or("réponse sans contenu")?;
-    parse_steps(content).map(|steps| guard(request, steps, knowledge))
+    parse_steps(content).map(|steps| {
+        let (steps, rejected) = guard_report(request, steps, knowledge);
+        ModelOutput { steps, rejected }
+    })
 }
 
 // ---------------------------------------------------------------- moteur intégré (option B)
@@ -947,7 +970,7 @@ impl Runtime {
     }
 
     /// Traduit une demande ; l'inactivité est comptée à partir de la fin de la réponse.
-    fn translate(&self, endpoint: &str, model: &str, request: &str, knowledge: &Knowledge) -> Result<Vec<Step>, String> {
+    fn translate(&self, endpoint: &str, model: &str, request: &str, knowledge: &Knowledge) -> Result<ModelOutput, String> {
         struct Busy<'a>(&'a Runtime);
         impl Drop for Busy<'_> {
             fn drop(&mut self) {
@@ -1004,12 +1027,12 @@ impl Runtime {
 }
 
 pub struct Job {
-    rx: Receiver<Result<Vec<Step>, String>>,
+    rx: Receiver<Result<ModelOutput, String>>,
     pub started: Instant,
 }
 
 impl Job {
-    pub fn poll(&self) -> Option<Result<Vec<Step>, String>> {
+    pub fn poll(&self) -> Option<Result<ModelOutput, String>> {
         match self.rx.try_recv() {
             Ok(result) => Some(result),
             Err(TryRecvError::Empty) => None,
@@ -1332,7 +1355,7 @@ mod tests {
             let result = complete(endpoint, model, request, &knowledge);
             let ms = started.elapsed().as_millis();
             total_ms += ms;
-            let model_steps = result.clone().unwrap_or_default();
+            let model_steps = result.as_ref().map(|output| output.steps.clone()).unwrap_or_default();
             alone += usize::from(matches(&model_steps, expected));
             let rules = crate::local_assistant::propose_with(request, &config, &knowledge);
             let (source, steps) = if matches!(rules.status, crate::local_assistant::Status::Inconnue) {
@@ -1426,7 +1449,7 @@ mod tests {
         let log = std::fs::read_to_string(builtin_dir().join("llama-server.log")).unwrap_or_default();
         eprintln!("LAB journal du moteur : {} octets, mentionne l'option refusée : {}", log.len(), log.contains("option-inexistante"));
         // Demande plus longue que le délai d'inactivité : le moteur ne doit pas être coupé en route.
-        let steps = runtime.translate(&endpoint, "deckforge-local", "ferme cette fenetre", &Knowledge::builtin()).unwrap();
+        let steps = runtime.translate(&endpoint, "deckforge-local", "ferme cette fenetre", &Knowledge::builtin()).unwrap().steps;
         eprintln!("LAB repli processeur -> {steps:?}");
         assert!(runtime.loaded());
         std::thread::sleep(Duration::from_secs(6));

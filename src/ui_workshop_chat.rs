@@ -660,7 +660,10 @@ impl App {
             return;
         }
         let proposal = match result {
-            Ok(steps) => local_assistant::from_model(steps, &self.config),
+            Ok(output) => {
+                let knowledge = self.local_knowledge();
+                local_assistant::from_model_guarded(output.steps, output.rejected, &self.config, &knowledge)
+            },
             Err(error) => {
                 self.workshop_chat.say(crate::i18n::trf("IA locale indisponible : {error}", &[("error", &(error))] ));
                 local_assistant::from_model(vec![], &self.config)
@@ -671,7 +674,8 @@ impl App {
                 "Aperçu de {count} bloc(s) proposé par l'IA locale, sans exécution.",
                 &[("count", &proposal.steps.len())]
             )),
-            _ => {
+            Status::Ambigue { question, .. } => self.workshop_chat.say(question.clone()),
+            Status::Inconnue => {
                 self.workshop_chat.say(crate::i18n::tr("L'IA locale n'a pas trouvé de blocs pour cette demande. Reformule ou ajoute les blocs à la main."));
                 if offer_ai {
                     self.workshop_chat.consent = Some(ConsentRequest::new(request.clone(), &self.config, self.selected));
