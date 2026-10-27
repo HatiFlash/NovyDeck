@@ -668,11 +668,9 @@ impl App {
             }
         };
         for p in &mut deployed.profiles {
-            for (page, keys) in std::iter::once(("", &mut p.keys)).chain(p.pages.iter_mut().map(|page| (page.id.as_str(), &mut page.keys)))
-            {
-                for (index, key) in keys.iter_mut().enumerate() {
+            for keys in std::iter::once(&mut p.keys).chain(p.pages.iter_mut().map(|page| &mut page.keys)) {
+                for key in keys.iter_mut() {
                     *key = crate::obs_monitor::present_key(&crate::audio::present_key(key, &self.audio), &self.obs_state);
-                    if let Some(badge) = crate::engine::toggle_badge(&crate::engine::identity(&p.name, page, index), key) { key.runtime_badge = Some(badge); }
                 }
             }
         }
@@ -827,7 +825,8 @@ impl App {
                         self.send_state_face(index);
                     }
                 }
-                Event::ToggleVisual => { if self.wanted && self.gate.connected && self.config.keys().iter().any(crate::engine::shows_toggle_badge) { self.upload(false); } },
+                // La face d'état est envoyée seule par toggle_key_face : aucun ré-envoi complet du deck.
+                Event::ToggleVisual => {}
                 Event::D6Sleep => {
                     self.sleep.sleeping = true;
                     if self.wanted && self.gate.connected { let _ = self.device.send(Command::Brightness(self.config.sleep_brightness)); }
