@@ -231,22 +231,21 @@ fn capture_drag_with_placeholder_and_ghost() {
 
 #[test]
 fn zz_probe_layers() {
-    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-    let out = h.warm(size);
-    let body = at(&out.shapes, "Attendre 222 ms");
     let mut lines = String::new();
-    for y in [340.0_f32, 360.0, 372.0, 378.0, 382.0, 386.0, 392.0, 396.0] {
+    for y in [340.0_f32, 372.0, 378.0, 382.0, 386.0, 396.0] {
+        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+        let out = h.warm(size);
+        let body = at(&out.shapes, "Attendre 222 ms");
         let pos = egui::pos2(body.x, y);
         h.frame(size, vec![Input::PointerMoved(pos)]);
-        h.frame(size, vec![press(pos, true)]);
+        let f = h.frame(size, vec![press(pos, true)]);
         let layer = h.ctx.layer_id_at(pos);
         let layers: Vec<String> = h.ctx.memory(|m| m.areas().visible_layer_ids().into_iter()
             .map(|l| format!("{:?}:{:?}", l, m.area_rect(l.id))).collect());
+        let cur = f.platform_output.cursor_icon;
         h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(30.0, 30.0))]);
         h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(60.0, 60.0))]);
-        lines += &format!("[y={y} at={:?} drag={} tips={:?}] ", layer.map(|l| format!("{:?}", l.order)), dragging(&h), layers.iter().filter(|l| l.contains("Tooltip")).collect::<Vec<_>>());
-        h.frame(size, vec![press(pos, false)]);
-        h.frame(size, vec![Input::PointerMoved(egui::pos2(5.0, 5.0))]);
+        lines += &format!("[y={y} body={body:?} at={:?} cur={cur:?} drag={} egui_drag={:?} layers={layers:?}] ", layer, dragging(&h), h.ctx.dragged_id());
     }
     panic!("PROBEX {lines} ENDPROBE");
 }
