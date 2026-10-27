@@ -1430,6 +1430,12 @@
     "Installation…": "Installing…",
     "Relance": "Relaunch",
     "Déposer ici": "Drop here",
-    "Vide — glisser un bloc ici": "Empty — drag a block here"
+    "Vide — glisser un bloc ici": "Empty — drag a block here",
+    "Favoris": "Favorites",
+    "Épingler en favori": "Pin as favorite",
+    "Retirer des favoris": "Remove from favorites",
+    "Effacer la recherche": "Clear search",
+    "Plugin manquant": "Missing plugin",
+    "Ce plugin n'est plus installé : le bloc est conservé, réinstalle-le pour le réutiliser.": "This plugin is no longer installed: the block is kept, reinstall it to use it again."
   }
 }

@@ -3,6 +3,7 @@
 #[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
 #[path = "ui_workshop_dnd_tests.rs"] mod workshop_dnd_tests;
 #[path = "ui_workshop_cards_tests.rs"] mod workshop_cards_tests;
+#[path = "ui_workshop_library_tests.rs"] mod workshop_library_tests;
 #[path = "ui_update_tests.rs"] mod update_tests;
 #[path = "ui_audit_tests.rs"] mod audit_tests;
 #[path = "ui_main015_tests.rs"] mod main015_tests;
@@ -3119,7 +3120,7 @@ fn readme_captures_plugin_store_workshop_and_startup() {
         h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2usize]));
         let workshop = h.warm(size);
         assert_eq!(h.app.config.keys()[h.app.selected].steps.len(), 3, "aucun bloc ajouté par la capture");
-        assert!(text_position(&workshop.shapes, &format!("{} › {}", clock.display_name(), "Stopwatch")).is_some(), "carte nommée du plugin Horloge");
+        assert!(text_position(&workshop.shapes, "Stopwatch").is_some() && text_position(&workshop.shapes, clock.display_name()).is_some(), "carte nommée du plugin Horloge (titre = action, résumé = plugin)");
         h.png(size, workshop, &out.join(format!("readme-workshop-plugins-{lang}.png")));
         drop(h);
         // 3. Réglages : démarrage avec Windows en mode réduit.

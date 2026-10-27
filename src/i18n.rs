@@ -101,6 +101,20 @@ fn lookup(index: usize, key: &'static str) -> &'static str {
 /// Traduit un texte fixe de l'interface.
 pub fn tr(fr: &'static str) -> &'static str { lookup(current_index(), fr) }
 
+/// Toutes les formes connues d'un libellé affiché (affiché, clé française, traductions) : la recherche
+/// de l'Atelier trouve un bloc par son nom français comme anglais, quelle que soit la langue active.
+pub fn forms(shown: &str) -> Vec<String> {
+    let all = languages_all();
+    let current = current_index();
+    let key: String = if current == 0 { shown.to_owned() } else {
+        all.get(current).and_then(|l| l.strings.iter().find(|entry| *entry.1 == shown).map(|entry| (*entry.0).to_owned()))
+            .unwrap_or_else(|| shown.to_owned())
+    };
+    let mut out = vec![shown.to_owned(), key.clone()];
+    for language in all { if let Some(value) = language.strings.get(key.as_str()) { out.push((*value).to_owned()); } }
+    out
+}
+
 /// Traduit un texte contenant des variables `{nom}`.
 pub fn trf(fr: &'static str, args: &[(&str, &dyn Display)]) -> String {
     let mut text = tr(fr).to_string();

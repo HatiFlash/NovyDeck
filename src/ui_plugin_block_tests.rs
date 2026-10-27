@@ -23,7 +23,7 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
     let size = vec2(1366.0,768.0);
     for (i,value) in [(0,11),(1,22)] {
         let output = h.warm(size);
-        let label = "Atelier Témoin › Compteur";
+        let label = "Atelier Témoin · Bloc"; // résumé de carte : plugin + libellé personnalisé
         let property_left = egui::containers::panel::PanelState::load(&h.ctx,egui::Id::new("workshop_properties_panel"))
             .map_or(size.x,|panel|panel.rect.left());
         let mut positions: Vec<_> = output.shapes.iter().filter_map(|shape| {
