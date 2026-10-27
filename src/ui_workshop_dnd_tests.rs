@@ -244,9 +244,9 @@ fn zz_probe_layers() {
             .map(|l| format!("{:?}:{:?}", l, m.area_rect(l.id))).collect());
         h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(30.0, 30.0))]);
         h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(60.0, 60.0))]);
-        lines += &format!("y={y} layer_at={layer:?} dragged={:?} dnd={} layers={layers:?}\n", h.ctx.dragged_id(), dragging(&h));
+        lines += &format!("[y={y} at={:?} drag={} tips={:?}] ", layer.map(|l| format!("{:?}", l.order)), dragging(&h), layers.iter().filter(|l| l.contains("Tooltip")).collect::<Vec<_>>());
         h.frame(size, vec![press(pos, false)]);
         h.frame(size, vec![Input::PointerMoved(egui::pos2(5.0, 5.0))]);
     }
-    panic!("PROBE\n{lines}");
+    panic!("PROBEX {lines} ENDPROBE");
 }
