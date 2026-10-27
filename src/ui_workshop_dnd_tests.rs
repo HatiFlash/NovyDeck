@@ -232,20 +232,19 @@ fn capture_drag_with_placeholder_and_ghost() {
 #[test]
 fn zz_debug_positions() {
     let mut report = String::new();
-    fn walk(shape: &egui::Shape, out: &mut String) {
-        match shape {
-            egui::Shape::Text(t) => *out += &format!("  text {:?} {:?}\n", t.galley.job.text, t.pos),
-            egui::Shape::Rect(r) if r.rect.min.y > 300.0 && r.rect.max.y < 470.0 => *out += &format!("  rect {:?}\n", r.rect),
-            egui::Shape::Vec(v) => for s in v { walk(s, out); },
-            _ => {}
+    for n in [3usize, 4, 5] {
+        for k in 0..n {
+            let steps: Vec<Step> = (0..n).map(|j| delay(100 + j as u64)).collect();
+            let (mut h, size) = scene(steps);
+            let out = h.warm(size);
+            let from = at(&out.shapes, &format!("Attendre {} ms", 100 + k));
+            let to = egui::pos2(81.5, 157.0);
+            h.frame(size, vec![Input::PointerMoved(from)]);
+            h.frame(size, vec![press(from, true)]);
+            h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
+            h.frame(size, vec![Input::PointerMoved(to)]);
+            report += &format!("n={n} card {k} from {from:?} started={}\n", dragging(&h));
         }
     }
-    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-    h.warm(size);
-    let from = egui::pos2(59.4, 382.0);
-    h.frame(size, vec![Input::PointerMoved(from)]);
-    let o = h.frame(size, vec![press(from, true)]);
-    for s in &o.shapes { walk(&s.shape, &mut report); }
-    report += &format!("hovered_over_area={} is_using_pointer={} wants_pointer={}\n", h.ctx.is_pointer_over_area(), h.ctx.is_using_pointer(), h.ctx.wants_pointer_input());
     panic!("DBG\n{report}");
 }
