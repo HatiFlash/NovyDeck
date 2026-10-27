@@ -231,17 +231,23 @@ fn capture_drag_with_placeholder_and_ghost() {
 
 #[test]
 fn zz_probe_layers() {
-    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-    let out = h.warm(size);
     let mut lines = String::new();
-    fn walk(shape: &egui::Shape, o: &mut String) {
-        match shape {
-            egui::Shape::Text(t) => { if t.pos.x < 700.0 && t.pos.y > 150.0 && t.pos.y < 520.0 { *o += &format!("T{:?}@({:.0},{:.0}) ", t.galley.job.text, t.pos.x, t.pos.y); } }
-            egui::Shape::Rect(r) => { if r.rect.min.x < 700.0 && r.rect.min.y > 150.0 && r.rect.max.y < 520.0 && r.rect.width() > 200.0 { *o += &format!("R[{:.0},{:.0}-{:.0},{:.0}] ", r.rect.min.x, r.rect.min.y, r.rect.max.x, r.rect.max.y); } }
-            egui::Shape::Vec(v) => for s in v { walk(s, o); },
-            _ => {}
+    for y in [372.0_f32, 382.0] {
+        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+        h.warm(size);
+        h.ctx.style_mut(|s| s.debug.show_widget_hits = true);
+        let pos = egui::pos2(59.0, y);
+        h.frame(size, vec![Input::PointerMoved(pos)]);
+        let f = h.frame(size, vec![press(pos, true)]);
+        lines += &format!("\n== y={y}: ");
+        fn walk(shape: &egui::Shape, pos: egui::Pos2, o: &mut String) {
+            match shape {
+                egui::Shape::Rect(r) => { if r.rect.contains(pos) && r.rect.height() < 400.0 { *o += &format!("R[{:.0},{:.0}-{:.0},{:.0}] fill={:?} stroke={:?}; ", r.rect.min.x, r.rect.min.y, r.rect.max.x, r.rect.max.y, r.fill, r.stroke.color); } }
+                egui::Shape::Vec(v) => for s in v { walk(s, pos, o); },
+                _ => {}
+            }
         }
+        for s in &f.shapes { walk(&s.shape, pos, &mut lines); }
     }
-    for s in &out.shapes { walk(&s.shape, &mut lines); }
     panic!("PROBEX {lines} ENDPROBE");
 }
