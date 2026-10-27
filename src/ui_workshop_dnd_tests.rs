@@ -211,15 +211,16 @@ fn capture_drag_with_placeholder_and_ghost() {
     std::fs::create_dir_all(&dir).unwrap();
     for lang in ["fr", "en"] {
         let (mut h, _) = scene(vec![
-            delay(250), Step::Toggle { a: vec![delay(10), delay(20)], b: vec![] },
-            Step::Repeat { count: 3, steps: vec![delay(40)] }, delay(500),
+            delay(500), delay(250), Step::Toggle { a: vec![delay(10), delay(20)], b: vec![] },
+            Step::Repeat { count: 3, steps: vec![delay(40)] },
         ]);
         crate::i18n::set_language(lang);
         h.app.preferences.language = lang.into();
         h.ctx.set_pixels_per_point(1.25);
         let size = egui::vec2(1280.0, 800.0);
         let out = h.warm(size);
-        let source = at(&out.shapes, "Attendre 500 ms");
+        // Carte 1 (« Attendre 500 ms » / « Wait 500 ms ») saisie par son en-tête, indépendant de la langue.
+        let source = at(&out.shapes, "1") + egui::vec2(40.0, 0.0);
         let target = at(&out.shapes, "1.A1") + egui::vec2(60.0, 0.0);
         let held = hold_drag(&mut h, size, source, target);
         assert_eq!(all_text(&held.shapes, crate::i18n::tr(SLOT)).len(), 1, "{lang}");
