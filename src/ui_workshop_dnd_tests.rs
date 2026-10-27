@@ -228,12 +228,3 @@ fn capture_drag_with_placeholder_and_ghost() {
     }
     crate::i18n::set_language("fr");
 }
-
-#[test]
-fn zz_debug_positions() {
-    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-    h.warm(size);
-    let mut report = String::new();
-    h.ctx.memory(|m| for l in m.layer_ids() { report += &format!("layer {:?} rect={:?}\n", l, m.area_rect(l.id)); });
-    panic!("DBG\n{report}");
-}
