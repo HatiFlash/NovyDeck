@@ -61,7 +61,7 @@ fn count_texture(shapes: &[egui::epaint::ClippedShape], id: egui::TextureId) -> 
 
 fn text_fade(shapes: &[egui::epaint::ClippedShape], text: &str) -> f32 {
     let mut found = None;
-    for s in shapes { walk(&s.shape, &mut |s| if let egui::Shape::Text(t) = s { if t.galley.job.text == text && found.is_none() { found = Some(t.opacity_factor); } }); }
+    for s in shapes { walk(&s.shape, &mut |s| if let egui::Shape::Text(t) = s { if t.galley.job.text == text && found.is_none() { found = Some(t.opacity_factor * t.fallback_color.a() as f32 / 255.0); } }); }
     found.unwrap_or_else(|| panic!("galley introuvable : {text}"))
 }
 
