@@ -232,19 +232,14 @@ fn capture_drag_with_placeholder_and_ghost() {
 #[test]
 fn zz_debug_positions() {
     let mut report = String::new();
-    for n in [3usize, 4, 5] {
-        for k in 0..n {
-            let steps: Vec<Step> = (0..n).map(|j| delay(100 + j as u64)).collect();
-            let (mut h, size) = scene(steps);
-            let out = h.warm(size);
-            let from = at(&out.shapes, &format!("Attendre {} ms", 100 + k));
-            let to = egui::pos2(81.5, 157.0);
-            h.frame(size, vec![Input::PointerMoved(from)]);
-            h.frame(size, vec![press(from, true)]);
-            h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
-            h.frame(size, vec![Input::PointerMoved(to)]);
-            report += &format!("n={n} card {k} from {from:?} started={}\n", dragging(&h));
-        }
+    for y in [372.0f32, 382.0, 392.0, 398.0] {
+        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+        h.warm(size);
+        let from = egui::pos2(59.4, y);
+        h.frame(size, vec![Input::PointerMoved(from)]);
+        let a = h.frame(size, vec![press(from, true)]);
+        let b = h.frame(size, vec![press(from, false)]);
+        report += &format!("y={y} press-events={:?} release-events={:?}\n", a.platform_output.events, b.platform_output.events);
     }
     panic!("DBG\n{report}");
 }
