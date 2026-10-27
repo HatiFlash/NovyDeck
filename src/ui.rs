@@ -827,7 +827,7 @@ impl App {
                         self.send_state_face(index);
                     }
                 }
-                Event::ToggleVisual => { if self.wanted && self.gate.connected { self.upload(false); } },
+                Event::ToggleVisual => { if self.wanted && self.gate.connected && self.config.keys().iter().any(crate::engine::shows_toggle_badge) { self.upload(false); } },
                 Event::D6Sleep => {
                     self.sleep.sleeping = true;
                     if self.wanted && self.gate.connected { let _ = self.device.send(Command::Brightness(self.config.sleep_brightness)); }

@@ -25,7 +25,13 @@ fn toggle_states() -> &'static std::sync::Mutex<std::collections::HashMap<String
     TOGGLE_STATES.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 pub fn identity(profile: &str, page: &str, index: usize) -> String { format!("{profile}\0{page}\0{index}") }
+/// Le badge « 1/2 » n'existe que pour un Toggle sans faces ON/OFF : avec elles, l'état est déjà visible
+/// sur la touche, et le badge (pastille rouge matérielle absente de l'aperçu) forcerait un ré-envoi complet.
+pub fn shows_toggle_badge(key: &Key) -> bool {
+    !key.state_display.as_ref().is_some_and(|s| s.toggle) && key.steps.iter().any(|s| matches!(s.active(), Step::Toggle { .. }))
+}
 pub fn toggle_badge(id: &str, key: &Key) -> Option<String> {
+    if !shows_toggle_badge(key) { return None; }
     let index = key.steps.iter().position(|s| matches!(s.active(), Step::Toggle { .. }))?;
     let path = format!("{id}\0{index}");
     let states = toggle_states().lock().unwrap_or_else(|e| e.into_inner());
