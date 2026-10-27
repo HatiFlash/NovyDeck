@@ -799,7 +799,9 @@ pub(super) fn block_style(ctx: &egui::Context, step: &Step) -> BlockStyle {
     let category = block_category(step);
     let family = category.family();
     let p = theme::palette(ctx);
-    let color = iconset::colors(family, ctx.style().visuals.dark_mode, p.accent, p.ink)[1];
+    // Navigation : teal dédié (Family::Accent = accent du thème = même bleu que « Applications »).
+    let color = if category == BlockCategory::Navigation { Color32::from_rgb(0x14, 0xB8, 0xA6) }
+        else { iconset::colors(family, ctx.style().visuals.dark_mode, p.accent, p.ink)[1] };
     BlockStyle { category, color, family, ico: iconset::for_step(step) }
 }
 /// Fond de la pastille d'icône, dérivé de la couleur de catégorie.
