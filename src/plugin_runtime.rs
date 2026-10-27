@@ -176,20 +176,23 @@ impl PluginControl {
     /// À appeler après set_catalog (ou rollback), pour reprendre uniquement ce plugin.
     pub fn resume_plugin(&self,id:&str)->Result<(),String>{self.command(id,false)}
 }
-pub struct Manager { tx:Sender<Request>,pub rx:Receiver<Reply>,visible:HashMap<String,Visible>,titles:HashMap<String,String>,pub catalog:Vec<Plugin> }
+pub struct Manager { tx:Sender<Request>,pub rx:Receiver<Reply>,visible:HashMap<String,Visible>,titles:HashMap<String,String>,pub catalog:Vec<Plugin>,inventory:std::sync::Arc<Vec<Plugin>> }
 impl Manager {
     pub fn new(plugins:Vec<Plugin>)->Self {
         let (tx,requests)=mpsc::channel();let (reply,rx)=mpsc::channel();
-        let catalog=plugins.clone();thread::spawn(move||run(plugins,requests,reply));
+        let catalog=plugins.clone();let inventory=std::sync::Arc::new(plugins.clone());thread::spawn(move||run(plugins,requests,reply));
         if let Ok(mut sender) = virtual_sender().lock() { *sender = Some(tx.clone()); }
-        Self{tx,rx,visible:HashMap::new(),titles:HashMap::new(),catalog}
+        Self{tx,rx,visible:HashMap::new(),titles:HashMap::new(),catalog,inventory}
     }
     pub fn control(&self)->PluginControl{PluginControl{tx:self.tx.clone()}}
     pub fn pause_plugin(&self,id:&str)->Result<(),String>{self.control().pause_plugin(id)}
     pub fn resume_plugin(&self,id:&str)->Result<(),String>{self.control().resume_plugin(id)}
     pub fn device(&self,device:Device){let _=self.tx.send(Request::Device(device));}
     /// Plugins importés pendant l'exécution : visibles sans redémarrer NovyDeck.
-    pub fn set_catalog(&mut self,plugins:Vec<Plugin>){self.catalog=plugins.clone();let _=self.tx.send(Request::Catalog(plugins));}
+    /// Inventaire partagé : même `Arc` d'une image à l'autre, remplacé uniquement par `set_catalog`
+    /// (installation, mise à jour, désinstallation). L'Atelier ne rescanne ni ne clone la liste.
+    pub fn inventory(&self)->std::sync::Arc<Vec<Plugin>>{self.inventory.clone()}
+    pub fn set_catalog(&mut self,plugins:Vec<Plugin>){self.catalog=plugins.clone();self.inventory=std::sync::Arc::new(plugins.clone());let _=self.tx.send(Request::Catalog(plugins));}
     pub fn sync(&mut self, config:&Config) {self.sync_with_origin(config,None);}
     pub fn sync_settings(&mut self,config:&Config,context:&str,from_pi:bool){self.sync_with_origin(config,Some((context.to_owned(),from_pi)));}
     fn sync_with_origin(&mut self, config:&Config, origin:Option<(String,bool)>) {

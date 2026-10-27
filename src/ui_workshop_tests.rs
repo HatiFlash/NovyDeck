@@ -72,15 +72,17 @@ fn drag(h: &mut Harness, size: egui::Vec2, from: egui::Pos2, to: egui::Pos2, ctr
 }
 
 fn handles(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::Pos2> {
-    let mut positions = Vec::new();
-    for s in shapes {
-        if let egui::Shape::Text(t) = &s.shape {
-            if t.galley.job.text == "⋮⋮" {
-                let pos = t.pos + t.galley.size() * 0.5;
-                if s.clip_rect.contains(pos) { positions.push(pos); }
-            }
+    fn walk(shape: &egui::Shape, clip: egui::Rect, positions: &mut Vec<egui::Pos2>) {
+        if let egui::Shape::Vec(v) = shape {
+            let dots: Vec<_> = v.iter().filter_map(|s| match s { egui::Shape::Circle(c) if (c.radius - 1.7).abs() < 0.01 => Some(c.center), _ => None }).collect();
+            if dots.len() == 6 {
+                let pos = egui::Rect::from_points(&dots).center();
+                if clip.contains(pos) { positions.push(pos); }
+            } else { for s in v { walk(s, clip, positions); } }
         }
     }
+    let mut positions = Vec::new();
+    for s in shapes { walk(&s.shape, s.clip_rect, &mut positions); }
     positions
 }
 
@@ -90,11 +92,12 @@ fn mouse_drag_places_block_before_first_and_duplicates_with_ctrl() {
     let output = h.warm(size);
     let points = handles(&output.shapes);
     assert_eq!(points.len(), 3, "a handle per card");
-    let released = drag(&mut h, size, points[2], points[0], false);
-    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "steps={:?} drop={:?} drag={:?} text={:?}", h.app.config.keys()[0].steps, h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_at"))), h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))), text_position(&released.shapes, "⋮⋮"));
+    // La poignée est centrée verticalement sur la carte : viser sa moitié haute = « avant ».
+    let released = drag(&mut h, size, points[2], points[0] - egui::vec2(0.0, 8.0), false);
+    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "steps={:?} drop={:?} drag={:?} text={:?}", h.app.config.keys()[0].steps, h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_at"))), h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))), handles(&released.shapes));
     let output = h.warm(size);
     let points = handles(&output.shapes);
-    drag(&mut h, size, points[0], points[2], true);
+    drag(&mut h, size, points[0], points[2] - egui::vec2(0.0, 8.0), true);
     assert_eq!(h.app.config.keys()[0].steps.len(), 4);
     assert!(matches!(h.app.config.keys()[0].steps[2], Step::Delay { ms: 333 }));
 }
@@ -220,7 +223,7 @@ fn palette_drag_inserts_at_specific_sibling_slot_and_inside_container() {
         let destination = if nested {
             let child = text_position(&output.shapes, "1.1").expect("visible repeat child");
             egui::pos2(child.x, child.y)
-        } else { handles(&output.shapes)[1] };
+        } else { handles(&output.shapes)[1] - egui::vec2(0.0, 8.0) };
         drag_palette(&mut h, size, source, destination);
         let steps = &h.app.config.keys()[0].steps;
         if nested {

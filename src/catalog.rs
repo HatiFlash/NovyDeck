@@ -623,6 +623,9 @@ pub struct Preferences {
     /// Dernière version dont la fenêtre « Quoi de neuf » a été vue.
     #[serde(default)]
     pub last_seen_version: String,
+    /// Blocs épinglés de la bibliothèque de l'Atelier (`bloc:<n°>` ou `plugin:<uuid>|<action>`), dans l'ordre d'épinglage.
+    #[serde(default)]
+    pub workshop_favorites: Vec<String>,
 }
 fn default_chat_mode() -> String { "auto".into() }
 fn default_true() -> bool { true }
@@ -665,6 +668,7 @@ impl Default for Preferences {
             language: String::new(),
             update_check: None,
             last_seen_version: String::new(),
+            workshop_favorites: vec![],
         }
     }
 }
