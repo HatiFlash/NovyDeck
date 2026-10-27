@@ -232,7 +232,7 @@ fn capture_drag_with_placeholder_and_ghost() {
 #[test]
 fn zz_debug_positions() {
     let mut report = String::new();
-    for (x, y) in [(59.4, 330.0), (59.4, 350.0), (59.4, 365.0), (59.4, 372.0), (59.4, 376.0), (59.4, 380.0), (59.4, 390.0), (59.4, 396.0), (59.4, 402.0), (200.0, 382.5), (400.0, 382.5), (59.4, 285.5 + 97.0 - 10.0)] {
+    for (x, y) in [(59.4, 372.0), (59.4, 382.0), (59.4, 285.5)] {
         let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
         h.warm(size);
         let from = egui::pos2(x, y);
@@ -241,7 +241,7 @@ fn zz_debug_positions() {
         h.frame(size, vec![press(from, true)]);
         h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
         h.frame(size, vec![Input::PointerMoved(to)]);
-        report += &format!("from {from:?} started={}\n", dragging(&h));
+        report += &format!("from {from:?} started={} dragged_id={:?} layer={:?} decided={} down={}\n", dragging(&h), h.ctx.dragged_id(), h.ctx.layer_id_at(from), h.ctx.input(|i| i.pointer.is_decidedly_dragging()), h.ctx.input(|i| i.pointer.primary_down()));
     }
     panic!("DBG\n{report}");
 }
