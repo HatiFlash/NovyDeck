@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.1"><img src="https://img.shields.io/badge/Release-v0.15.1-3478F6.svg" alt="Version 0.15.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.0"><img src="https://img.shields.io/badge/Release-v0.16.0-3478F6.svg" alt="Version 0.16.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,31 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.16.0
+
+### Corrections matérielles des touches ON/OFF (Stream Deck)
+
+L'appui sur une touche ON/OFF ou bascule physique n'affiche plus de rond rouge persistant (le badge d'état interne « 1/2 » est supprimé de l'affichage matériel). De plus, l'appui met directement à jour la seule touche ciblée sans réémission globale de tout le deck, éliminant le flash transitoire du logo NovyDeck.
+
+### Refonte complète de l'Atelier de blocs et glisser-déposer fluide
+
+L'Atelier de blocs bénéficie d'une ergonomie moderne :
+- Une nouvelle poignée de saisie avec grille de points discrets (2×3), sans carré vide.
+- Suppression de la sélection de texte parasite en bleu lors du maintien d'un bloc.
+- Carte fantôme qui suit fidèlement la souris et repère « Déposer ici » en pointillés écartant les cartes.
+- Cartes compactes avec liseré et pastille colorée par catégorie, titre en demi-gras et résumé lisible sur une ligne.
+- Branches ON/OFF (**ÉTAT 1 · ON**, **ÉTAT 2 · OFF**), Si/Sinon et Répéter clairement étiquetées, reliées par une ligne verticale de liaison, et repliables avec compteur de blocs.
+
+![Cartes compactes et branches de l'Atelier dans le thème sombre français 0.16.0, capture du harnais Windows hors écran](docs/images/v016-workshop-cards-fr.png)
+
+### Recherche instantanée, favoris et plugins dans l'Atelier
+
+La bibliothèque de blocs intègre une barre de recherche instantanée (avec loupe et bouton d'effacement ×), une section **Favoris** pour épingler les blocs fréquents avec une étoile, et une intégration complète des plugins classés avec leurs icônes et un bouton « Réglages » directement accessible sur la carte.
+
+![Bibliothèque de l'Atelier avec recherche et favoris en français 0.16.0, capture du harnais Windows hors écran](docs/images/v016-workshop-library-fr.png)
+
+Ces captures proviennent du harnais d'interface Windows hors écran, pas d'un essai sur un deck connecté. Voir les [notes de version 0.16.0](docs/RELEASE-0.16.0.md).
 
 ## Nouveautés 0.15.1
 

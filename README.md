@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.15.1"><img src="https://img.shields.io/badge/Release-v0.15.1-3478F6.svg" alt="Release v0.15.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.0"><img src="https://img.shields.io/badge/Release-v0.16.0-3478F6.svg" alt="Release v0.16.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,31 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.16.0
+
+### Hardware ON/OFF key fixes (Stream Deck)
+
+Pressing an ON/OFF or toggle key on a physical deck no longer renders a persistent red dot (the internal state badge overlay "1/2" has been eliminated from hardware rendering). In addition, key presses immediately and atomically update only the targeted key face without a full-deck re-upload, removing the brief transient flash of the default NovyDeck logo.
+
+### Block Workshop redesign and fluid drag-and-drop
+
+The Block Workshop features improved ergonomics and modern visuals:
+- Clean grab handle with a 2×3 round-dot grid, avoiding missing-character glyph boxes.
+- Neutralized accidental text selection blue highlighting during drag operations.
+- Dedicated ghost card tracking the cursor and a dashed "Drop here" placeholder parting cards dynamically.
+- Compact cards with category color pills and left borders, semibold titles, and single-line summaries.
+- Clearly labeled Toggle (**STATE 1 · ON**, **STATE 2 · OFF**), If/Else, and Repeat branches with vertical connector lines and collapsible chevrons displaying block counts.
+
+![0.16.0 Block Workshop compact cards and branches in English dark theme, off-screen Windows UI capture](docs/images/v016-workshop-cards-en.png)
+
+### Instant search, favorites, and plugin integration
+
+The block library includes an instant accent-insensitive search bar (with magnifying glass and clear button ×), a **Favorites** section to star frequently used blocks (saved to user preferences), and grouped plugins with manifest icons and a direct in-card "Settings" button.
+
+![0.16.0 Block Workshop library with search and favorites in English, off-screen Windows UI capture](docs/images/v016-workshop-library-en.png)
+
+These are off-screen UI captures from the Windows test harness, not tests on a connected deck. See the [0.16.0 release notes](docs/RELEASE-0.16.0.md).
 
 ## What's new in 0.15.1
 
