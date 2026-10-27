@@ -22,6 +22,24 @@ fn at(shapes: &[egui::epaint::ClippedShape], text: &str) -> egui::Pos2 {
 
 fn visible(shapes: &[egui::epaint::ClippedShape], text: &str) -> bool { text_position(shapes, text).is_some() }
 
+/// Occurrence de `text` dans la zone de séquence de l'Atelier (exclut le bouton « Réglages » de l'en-tête).
+fn in_workshop(h: &Harness, shapes: &[egui::epaint::ClippedShape], text: &str) -> Option<egui::Pos2> {
+    fn walk(shape: &egui::Shape, clip: egui::Rect, text: &str, out: &mut Vec<egui::Pos2>) {
+        match shape {
+            egui::Shape::Text(t) if t.galley.job.text == text => {
+                let pos = t.pos + t.galley.size() * 0.5;
+                if clip.contains(pos) { out.push(pos); }
+            }
+            egui::Shape::Vec(v) => for s in v { walk(s, clip, text, out); },
+            _ => {}
+        }
+    }
+    let zone = h.ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("workshop_scroll_clip"))).expect("zone de l'Atelier");
+    let mut out = Vec::new();
+    for s in shapes { walk(&s.shape, s.clip_rect, text, &mut out); }
+    out.into_iter().find(|p| zone.contains(*p))
+}
+
 /// Plugin dérivé de la fixture `counter.sdPlugin` avec `actions` actions nommées « <name> action <n> ».
 fn plugin(name: &str, uuid: &str, actions: usize) -> crate::plugins::Plugin {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
@@ -247,7 +265,7 @@ fn plugin_card_shows_action_and_plugin_names_and_settings_button_opens_the_actio
     assert!(visible(&out.shapes, "Atelier Témoin · Mon compteur"), "résumé = plugin + libellé personnalisé");
     assert!(!visible(&out.shapes, "Plugin manquant"));
     assert!(h.app.block_inspector.is_none());
-    h.click(size(), at(&out.shapes, "Réglages"));
+    h.click(size(), in_workshop(&h, &out.shapes, "Réglages").expect("bouton « Réglages » de la carte"));
     h.warm(size());
     let session = h.app.block_inspector.as_ref().expect("« Réglages » ouvre la fenêtre de réglages de l'action");
     assert_eq!(session.path, vec![0]);
@@ -267,7 +285,7 @@ fn uninstalled_plugin_keeps_its_block_and_shows_a_missing_badge() {
         h.app.plugins.as_mut().unwrap().set_catalog(vec![]);
         let out = h.warm(size());
         assert!(visible(&out.shapes, badge), "badge « {badge} »");
-        assert!(!visible(&out.shapes, crate::i18n::tr("Réglages")), "pas de bouton de réglages sans plugin");
+        assert!(in_workshop(&h, &out.shapes, crate::i18n::tr("Réglages")).is_none(), "pas de bouton de réglages sans plugin");
         assert_eq!(steps_of(&h), before, "étapes intactes");
         assert!(matches!(&steps_of(&h)[0], Step::PluginAction { plugin, action: a, .. } if *plugin == id && *a == action));
         // Réinstallé : le badge disparaît.
