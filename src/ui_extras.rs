@@ -342,7 +342,8 @@ fn palette(ui: &mut egui::Ui, search: &str, depth: usize, advanced: bool, keyboa
                         let label = if keyboard == Some(index) { format!("> {}", block_name(kind)) }
                             else { block_name(kind).to_owned() };
                         let entry = ui.add(egui::Button::new(label).frame(false).sense(egui::Sense::click_and_drag()))
-                            .on_hover_text(block_help(kind));
+                            .on_hover_text(block_help(kind))
+                            .on_hover_cursor(egui::CursorIcon::Grab);
                         if entry.clicked() { selected = Some(kind); }
                         if entry.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_drag"), kind)); }
                         index += 1;
@@ -799,21 +800,36 @@ fn block_glyph(ui: &mut egui::Ui, step: &Step, color: Color32) {
         }
     }
 }
+// Hauteur de l'emplacement de dépôt : celle d'une carte compacte.
+const DROP_SLOT_HEIGHT: f32 = 40.0;
+fn workshop_dragging(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
+        || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some())
+}
 // A compact card tree; structural edits are applied only after the immutable render pass.
+// Toute la carte est saisissable (Sense::click_and_drag enregistré avant son contenu, donc sous
+// les boutons) ; les libellés ne sont pas sélectionnables pour qu'un appui-glissé ne surligne rien.
 fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering: &str, selection: &mut Option<Vec<usize>>,
     action: &mut Option<WorkshopAction>, insert_at: &mut Option<Vec<usize>>, config: &crate::model::Config,
     plugins: &[crate::plugins::Plugin],
     ) {
     let p = theme::palette(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let dragging = workshop_dragging(&ctx);
+    let dragged = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")));
+    // Cible calculée à l'image précédente : l'emplacement est dessiné là où le dépôt aurait lieu.
+    let shown = if dragging { ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_shown"))) } else { None };
     for (i, step) in steps.iter().enumerate() {
         let mut path = parent.to_vec(); path.push(i);
+        let slot_here = shown.as_deref() == Some(path.as_slice());
+        if slot_here { workshop_slot_zone(ui, &path, true); }
         ui.push_id(&path, |ui| {
             let chosen = selection.as_ref() == Some(&path);
-            if i > 0 {
+            if i > 0 && !slot_here {
                 let line = ui.allocate_response(egui::vec2(ui.available_width().min(520.0).max(120.0), 6.0), egui::Sense::hover());
                 ui.painter().line_segment([egui::pos2(line.rect.center().x, line.rect.top()),
                     egui::pos2(line.rect.center().x, line.rect.bottom())], egui::Stroke::new(1.0_f32, p.line));
-                if line.hovered() {
+                if line.hovered() && !dragging {
                     let plus = egui::Rect::from_center_size(line.rect.center(), egui::vec2(22.0, 16.0));
                     if ui.put(plus, egui::Button::new("+").small()).clicked() { *insert_at = Some(path.clone()); }
                 }
@@ -821,111 +837,201 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             let error = if step.is_disabled() { None } else {
                 crate::model::validate_key(&Key { steps: vec![step.clone()], ..Key::default() }, config).err()
             };
-            let mut card_body_bottom = 0.0;
-            let mut title_clicked = false;
-            let mut handle_rect = egui::Rect::NOTHING;
+            let is_dragged = dragged.as_ref() == Some(&path);
+            let has_branches = matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }
+                | Step::Repeat { .. } | Step::Toggle { .. });
             let mut menu_rect = egui::Rect::NOTHING;
-            let frame = egui::Frame::new().fill(p.surface)
-                .stroke(egui::Stroke::new(if chosen { 1.5_f32 } else { 1.0_f32 }, if chosen { accent() } else { p.line }))
-                .corner_radius(10).inner_margin(9).show(ui, |ui| {
-                    ui.set_width((ui.available_width() - 20.0).max(120.0));
-                    let color = if matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }) {
-                        Color32::from_rgb(164, 123, 239)
-                    } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
-                    ui.horizontal(|ui| {
-                        let handle = ui.add(egui::Label::new("⋮⋮").sense(egui::Sense::drag())).on_hover_text(crate::i18n::tr("Glisser pour déplacer ; Ctrl pour dupliquer"));
-                        handle_rect = handle.rect;
-                        if handle.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_drag"), path.clone())); }
-                        block_glyph(ui, step, color);
-                        ui.colored_label(color, format!("{numbering}{}", i + 1));
-                        let summary = named_summary(step, plugins);
-                        let title = step_label(step);
-                        title_clicked = ui.add(egui::Label::new(RichText::new(title).strong()).truncate().sense(egui::Sense::click())).clicked();
-                        if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
-                        let menu = ui.menu_button("...", |ui| {
-                            if ui.button(crate::i18n::tr("Dupliquer")).clicked() { *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path.clone()))); ui.close_menu(); }
-                            if ui.button(crate::i18n::tr("Supprimer")).clicked() { *action = Some(WorkshopAction::Remove(path.clone())); ui.close_menu(); }
-                            if ui.add_enabled(i > 0, egui::Button::new(crate::i18n::tr("Monter"))).clicked() {
-                                *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path.clone(), i - 1))); ui.close_menu();
-                            }
-                            if ui.add_enabled(i + 1 < steps.len(), egui::Button::new(crate::i18n::tr("Descendre"))).clicked() {
-                                *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path.clone(), i + 1))); ui.close_menu();
-                            }
-                            if ui.button(if step.is_disabled() { crate::i18n::tr("Réactiver") } else { crate::i18n::tr("Désactiver") }).clicked() {
-                                *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Toggle(path.clone()))); ui.close_menu();
-                            }
-                            if ui.button(crate::i18n::tr("Insérer un bloc après")).clicked() {
-                                let mut dest = path.clone(); *dest.last_mut().unwrap() += 1;
-                                *insert_at = Some(dest); ui.close_menu();
-                            }
+            let color = if matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }) {
+                Color32::from_rgb(164, 123, 239)
+            } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
+            let scope = ui.scope_builder(egui::UiBuilder::new().sense(egui::Sense::click_and_drag()), |ui| {
+                if is_dragged { ui.set_opacity(0.35); }
+                egui::Frame::new().fill(p.surface)
+                    .stroke(egui::Stroke::new(if chosen { 1.5_f32 } else { 1.0_f32 }, if chosen { accent() } else { p.line }))
+                    .corner_radius(10).inner_margin(9).show(ui, |ui| {
+                        ui.set_width((ui.available_width() - 20.0).max(120.0));
+                        ui.horizontal(|ui| {
+                            ui.add(egui::Label::new(RichText::new("⋮⋮").color(p.muted)).selectable(false));
+                            block_glyph(ui, step, color);
+                            ui.add(egui::Label::new(RichText::new(format!("{numbering}{}", i + 1)).color(color)).selectable(false));
+                            ui.add(egui::Label::new(RichText::new(step_label(step)).strong()).truncate().selectable(false));
+                            if let Some(e) = &error { ui.colored_label(Color32::LIGHT_RED, crate::i18n::tr("Erreur")).on_hover_text(e.to_string()); }
+                            let menu = ui.menu_button("...", |ui| {
+                                if ui.button(crate::i18n::tr("Dupliquer")).clicked() { *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path.clone()))); ui.close_menu(); }
+                                if ui.button(crate::i18n::tr("Supprimer")).clicked() { *action = Some(WorkshopAction::Remove(path.clone())); ui.close_menu(); }
+                                if ui.add_enabled(i > 0, egui::Button::new(crate::i18n::tr("Monter"))).clicked() {
+                                    *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path.clone(), i - 1))); ui.close_menu();
+                                }
+                                if ui.add_enabled(i + 1 < steps.len(), egui::Button::new(crate::i18n::tr("Descendre"))).clicked() {
+                                    *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path.clone(), i + 1))); ui.close_menu();
+                                }
+                                if ui.button(if step.is_disabled() { crate::i18n::tr("Réactiver") } else { crate::i18n::tr("Désactiver") }).clicked() {
+                                    *action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Toggle(path.clone()))); ui.close_menu();
+                                }
+                                if ui.button(crate::i18n::tr("Insérer un bloc après")).clicked() {
+                                    let mut dest = path.clone(); *dest.last_mut().unwrap() += 1;
+                                    *insert_at = Some(dest); ui.close_menu();
+                                }
+                            });
+                            menu_rect = menu.response.rect;
                         });
-                        menu_rect = menu.response.rect;
-                    });
-                    card_body_bottom = ui.label(RichText::new(named_summary(step, plugins)).small().color(p.muted)).rect.bottom();
-                    let branches: Vec<(&str, &[Step])> = match step.active() {
-                        Step::IfCondition { then_steps, else_steps, .. }
-                        | Step::IfWindow { then_steps, else_steps, .. }
-                        | Step::IfVariable { then_steps, else_steps, .. } => vec![("ALORS", then_steps), ("SINON", else_steps)],
-                        Step::Repeat { steps, .. } => vec![("RÉPÉTER", steps)],
-                        Step::Toggle { a, b } => vec![("ÉTAT 1", a), ("ÉTAT 2", b)],
-                        _ => vec![],
-                    };
-                    for (branch, (label, children)) in branches.into_iter().enumerate() {
-                        ui.indent(branch, |ui| {
-                            ui.label(RichText::new(match label { "RÉPÉTER" => crate::i18n::tr("RÉPÉTER"), "ÉTAT 1" => crate::i18n::tr("ÉTAT 1"), "ÉTAT 2" => crate::i18n::tr("ÉTAT 2"), "ALORS" => crate::i18n::tr("ALORS"), "SINON" => crate::i18n::tr("SINON"), _ => label }).small().color(p.muted));
+                        ui.add(egui::Label::new(RichText::new(named_summary(step, plugins)).small().color(p.muted)).selectable(false));
+                        let branches: Vec<(&str, &[Step])> = match step.active() {
+                            Step::IfCondition { then_steps, else_steps, .. }
+                            | Step::IfWindow { then_steps, else_steps, .. }
+                            | Step::IfVariable { then_steps, else_steps, .. } => vec![("ALORS", then_steps), ("SINON", else_steps)],
+                            Step::Repeat { steps, .. } => vec![("RÉPÉTER", steps)],
+                            Step::Toggle { a, b } => vec![("ÉTAT 1", a), ("ÉTAT 2", b)],
+                            _ => vec![],
+                        };
+                        for (branch, (label, children)) in branches.into_iter().enumerate() {
                             let mut nested = path.clone(); nested.push(branch);
-                            let child_number = if matches!(step.active(), Step::Repeat { .. }) {
-                                format!("{numbering}{}.", i + 1)
-                            } else {
-                                format!("{numbering}{}.{}", i + 1, if branch == 0 { "A" } else { "B" })
-                            };
-                            sequence_cards(ui, children, &nested, &child_number, selection, action, insert_at, config, plugins);
-                            let mut end = nested;
-                            end.push(children.len());
-                            let slot = ui.allocate_response(egui::vec2(ui.available_width(), 14.0), egui::Sense::hover());
-                            workshop_drop_indicator(ui, slot.rect, &end);
-                        });
-                    }
+                            // Branche ciblée : sa zone entière est surlignée derrière son contenu.
+                            let targeted = shown.as_ref().is_some_and(|s| s.len() == nested.len() + 1 && s.starts_with(&nested));
+                            let backdrop = ui.painter().add(egui::Shape::Noop);
+                            let inner = ui.indent(branch, |ui| {
+                                ui.add(egui::Label::new(RichText::new(match label { "RÉPÉTER" => crate::i18n::tr("RÉPÉTER"), "ÉTAT 1" => crate::i18n::tr("ÉTAT 1"), "ÉTAT 2" => crate::i18n::tr("ÉTAT 2"), "ALORS" => crate::i18n::tr("ALORS"), "SINON" => crate::i18n::tr("SINON"), _ => label }).small().color(p.muted)).selectable(false));
+                                let child_number = if matches!(step.active(), Step::Repeat { .. }) {
+                                    format!("{numbering}{}.", i + 1)
+                                } else {
+                                    format!("{numbering}{}.{}", i + 1, if branch == 0 { "A" } else { "B" })
+                                };
+                                sequence_cards(ui, children, &nested, &child_number, selection, action, insert_at, config, plugins);
+                            });
+                            let area = inner.response.rect.expand2(egui::vec2(8.0, 3.0));
+                            if targeted {
+                                ui.painter().set(backdrop, egui::Shape::Vec(vec![
+                                    egui::Shape::rect_filled(area, 8.0, accent().gamma_multiply(0.10)),
+                                    egui::Shape::rect_stroke(area, 8.0, egui::Stroke::new(1.5_f32, accent().gamma_multiply(0.7)), egui::StrokeKind::Inside),
+                                ]));
+                            }
+                            // Zone entière de la branche : « à la fin » quand aucune carte plus précise n'est visée.
+                            let mut end = nested; end.push(children.len());
+                            workshop_drop_hit(ui, area.with_min_x(area.min.x - 6.0), &end, true);
+                        }
+                    });
+            });
+            let card = scope.response;
+            let r = card.rect;
+            let pressed_on_menu = ui.input(|i| i.pointer.press_origin()).is_some_and(|origin| menu_rect.contains(origin));
+            if card.drag_started() && !pressed_on_menu {
+                let grab = ui.input(|i| i.pointer.press_origin()).map_or(egui::vec2(24.0, 16.0), |origin| origin - r.min);
+                ctx.data_mut(|d| {
+                    d.insert_temp(egui::Id::new("workshop_drag"), path.clone());
+                    d.insert_temp(egui::Id::new("workshop_grab"), grab);
                 });
-            let r = frame.response.rect;
-            // Register card selection only on its summary, below the header controls.
-            // A later full-width click target would sit on top of the menu button and
-            // drag handle in egui's hit test, so the "..." could never open.
-            let summary_bottom = (card_body_bottom + 9.0).min(r.max.y);
-            let body = egui::Rect::from_min_max(
-                egui::pos2(r.min.x, menu_rect.bottom().min(summary_bottom)),
-                egui::pos2(r.max.x, summary_bottom),
-            );
-            let card = ui.interact(body, ui.id().with("workshop_card"), egui::Sense::click())
-                .on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.",
-                    &[("name", &step_label(step)), ("summary", &named_summary(step, plugins))]));
-            if (title_clicked || card.clicked()) && card.interact_pointer_pos().or_else(|| ui.ctx().input(|i| i.pointer.interact_pos())).is_some_and(|pos| !handle_rect.contains(pos) && !menu_rect.contains(pos)) {
+            }
+            let card = card.on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.",
+                &[("name", &step_label(step)), ("summary", &named_summary(step, plugins))]));
+            let pointer_on_menu = ui.input(|i| i.pointer.hover_pos()).is_some_and(|pos| menu_rect.contains(pos));
+            if card.hovered() && !dragging && !pointer_on_menu { ctx.set_cursor_icon(egui::CursorIcon::Grab); }
+            if card.clicked() && !pressed_on_menu {
                 *selection = if chosen { None } else { Some(path.clone()) };
                 if matches!(step.active(), Step::PluginAction { .. }) {
-                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("plugin_block_open"), path.clone()));
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("plugin_block_open"), path.clone()));
                 }
             }
-            let top = egui::Rect::from_min_max(r.min, egui::pos2(r.max.x, r.min.y + 38.0));
-            workshop_drop_indicator(ui, top, &path);
+            if is_dragged { workshop_ghost(&ctx, step, &format!("{numbering}{}", i + 1), color, r.width(), plugins); }
+            // Zones de dépôt : moitié haute = avant, moitié basse = après (en-tête / pied pour un conteneur).
+            // Elles débordent de 11 px dans l'interstice entre cartes pour qu'aucun pixel ne soit « sans cible ».
+            let split = if has_branches { r.min.y + 38.0 } else { r.center().y };
+            let top = egui::Rect::from_min_max(egui::pos2(r.min.x, r.min.y - 11.0), egui::pos2(r.max.x, split));
+            workshop_drop_hit(ui, top, &path, false);
             let mut after = path.clone(); *after.last_mut().unwrap() += 1;
-            let bottom = egui::Rect::from_min_max(egui::pos2(r.min.x, r.max.y - 18.0), r.max);
-            workshop_drop_indicator(ui, bottom, &after);
+            let bottom = egui::Rect::from_min_max(egui::pos2(r.min.x, if has_branches { r.max.y - 18.0 } else { split }), egui::pos2(r.max.x, r.max.y + 11.0));
+            workshop_drop_hit(ui, bottom, &after, false);
         });
     }
+    let mut end = parent.to_vec(); end.push(steps.len());
+    if shown.as_deref() == Some(end.as_slice()) {
+        workshop_slot_zone(ui, &end, true);
+    } else if !parent.is_empty() {
+        if steps.is_empty() {
+            workshop_slot_zone(ui, &end, false);
+        } else {
+            let strip = ui.allocate_response(egui::vec2(ui.available_width(), 12.0), egui::Sense::hover());
+            workshop_drop_hit(ui, strip.rect, &end, false);
+        }
+    }
 }
-fn workshop_drop_indicator(ui: &egui::Ui, rect: egui::Rect, at: &[usize]) {
+/// Emplacement de dépôt : cadre en pointillés de la hauteur d'une carte. `target` = c'est ici que le
+/// bloc tombera (« Déposer ici », fond d'accent) ; sinon c'est la zone discrète d'une branche vide.
+fn workshop_slot_zone(ui: &mut egui::Ui, at: &[usize], target: bool) {
+    let p = theme::palette(ui.ctx());
+    let dragging = workshop_dragging(ui.ctx());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2((ui.available_width() - 2.0).max(80.0), DROP_SLOT_HEIGHT), egui::Sense::hover());
+    let inner = rect.shrink(1.0);
+    let painter = ui.painter();
+    let (stroke_color, label, font, ink) = if target {
+        painter.rect_filled(inner, 10.0, accent().gamma_multiply(0.16));
+        (accent(), crate::i18n::tr("Déposer ici"), egui::TextStyle::Button.resolve(ui.style()), accent())
+    } else {
+        (if dragging { accent().gamma_multiply(0.55) } else { p.muted.gamma_multiply(0.55) },
+            crate::i18n::tr("Vide — glisser un bloc ici"), egui::TextStyle::Small.resolve(ui.style()), p.muted)
+    };
+    let corners = [inner.left_top(), inner.right_top(), inner.right_bottom(), inner.left_bottom(), inner.left_top()];
+    painter.extend(egui::Shape::dashed_line(&corners, egui::Stroke::new(1.5_f32, stroke_color), 6.0, 4.0));
+    painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, font, ink);
+    workshop_drop_hit(ui, rect.expand2(egui::vec2(0.0, 8.0)), at, false);
+}
+/// Carte « fantôme » qui suit la souris : même icône, numéro et titre que le bloc saisi, ombre douce.
+/// Calque Tooltip non interactif : elle ne perturbe jamais la détection du survol dessous.
+fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, color: Color32, width: f32, plugins: &[crate::plugins::Plugin]) {
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    let grab = ctx.data(|d| d.get_temp::<egui::Vec2>(egui::Id::new("workshop_grab"))).unwrap_or(egui::vec2(24.0, 16.0));
+    let p = theme::palette(ctx);
+    egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(pos - grab).show(ctx, |ui| {
+        egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(9)
+            .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
+            .show(ui, |ui| {
+                ui.set_width(width.clamp(200.0, 380.0) - 18.0);
+                ui.horizontal(|ui| {
+                    ui.add(egui::Label::new(RichText::new("⋮⋮").color(p.muted)).selectable(false));
+                    block_glyph(ui, step, color);
+                    ui.add(egui::Label::new(RichText::new(number).color(color)).selectable(false));
+                    ui.add(egui::Label::new(RichText::new(step_label(step)).strong()).truncate().selectable(false));
+                });
+                ui.add(egui::Label::new(RichText::new(named_summary(step, plugins)).small().color(p.muted)).truncate().selectable(false));
+            });
+    });
+}
+/// Fantôme d'un bloc de la bibliothèque glissé vers la séquence.
+fn workshop_palette_ghost(ctx: &egui::Context, kind: usize) {
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+    let p = theme::palette(ctx);
+    egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(pos + egui::vec2(14.0, -14.0)).show(ctx, |ui| {
+        egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(9)
+            .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let step = crate::automation::step(kind);
+                    let color = iconset::family_color(ctx, iconset::for_step(&step));
+                    block_glyph(ui, &step, color);
+                    ui.add(egui::Label::new(RichText::new(block_name(kind)).strong()).selectable(false));
+                });
+            });
+    });
+}
+/// Enregistre la cible de dépôt sous le pointeur. Le chemin le plus profond gagne ; `weak` ne vaut que
+/// si aucune cible plus précise n'a été trouvée. Déposer un bloc dans sa propre descendance est refusé.
+fn workshop_drop_hit(ui: &egui::Ui, rect: egui::Rect, at: &[usize], weak: bool) {
     let ctx = ui.ctx();
-    let drag = egui::Id::new("workshop_drag");
-    let palette = egui::Id::new("workshop_palette_drag");
-    if ctx.data(|d| d.get_temp::<Vec<usize>>(drag).is_none() && d.get_temp::<usize>(palette).is_none()) { return; }
+    if !workshop_dragging(ctx) { return; }
     let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return; };
     if !rect.intersects(ui.clip_rect()) || !rect.contains(pos) || !ui.clip_rect().contains(pos) { return; }
     let id = egui::Id::new("workshop_drop_at");
+    let invalid = egui::Id::new("workshop_drop_invalid");
+    if ctx.data(|d| d.get_temp::<bool>(invalid)).unwrap_or(false) { return; }
+    if let Some(from) = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))) {
+        let copy = ctx.input(|i| i.modifiers.ctrl);
+        if !copy && at.len() > 1 && at[..at.len() - 1].starts_with(&from) {
+            ctx.data_mut(|d| d.insert_temp(invalid, true));
+            return;
+        }
+    }
     let previous = ctx.data(|d| d.get_temp::<Vec<usize>>(id));
-    if previous.as_ref().is_some_and(|p| p.len() > at.len()) { return; }
+    if previous.as_ref().is_some_and(|p| p.len() > at.len() || weak) { return; }
     ctx.data_mut(|d| d.insert_temp(id, at.to_vec()));
-    let y = rect.center().y;
-    ui.painter().line_segment([egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)], egui::Stroke::new(2.0, accent()));
 }
 
 enum WorkshopAction { Edit(crate::workshop_ops::Edit), Remove(Vec<usize>) }
@@ -1049,7 +1155,15 @@ impl App {
         let selection_before = selection.clone();
         let mut action: Option<WorkshopAction> = None;
         let drop_id = egui::Id::new("workshop_drop_at");
-        ctx.data_mut(|d| d.remove::<Vec<usize>>(drop_id));
+        // La cible de l'image précédente sert à dessiner l'emplacement ; une nouvelle est recalculée.
+        ctx.data_mut(|d| {
+            match d.get_temp::<Vec<usize>>(drop_id) {
+                Some(previous) => d.insert_temp(egui::Id::new("workshop_drop_shown"), previous),
+                None => { d.remove::<Vec<usize>>(egui::Id::new("workshop_drop_shown")); }
+            }
+            d.remove::<Vec<usize>>(drop_id);
+            d.remove::<bool>(egui::Id::new("workshop_drop_invalid"));
+        });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             ctx.data_mut(|d| {
                 d.remove::<Vec<usize>>(egui::Id::new("workshop_drag"));
@@ -1244,6 +1358,8 @@ impl App {
         self.workshop_chat(ctx, selection.as_deref());
         let highlight = if selected_trace.is_empty() { &self.running_block } else { &selected_trace };
         egui::CentralPanel::default().show(ctx, |ui| {
+            // Un appui-glissé sur une carte déplace le bloc : jamais de sélection de texte dans l'Atelier.
+            ui.style_mut().interaction.selectable_labels = false;
             ui.label(RichText::new(crate::i18n::tr("Construis ton automatisation")).size(21.0).strong());
             if self.preferences.workshop_advanced {
                 egui::ScrollArea::vertical().id_salt("workflow_advanced_scroll").show(ui, |ui| {
@@ -1342,6 +1458,11 @@ impl App {
                     }
                 }
             }
+        }
+        if workshop_dragging(ctx) {
+            if let Some(kind) = ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))) { workshop_palette_ghost(ctx, kind); }
+            let refused = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("workshop_drop_invalid"))).unwrap_or(false);
+            ctx.set_cursor_icon(if refused { egui::CursorIcon::NotAllowed } else { egui::CursorIcon::Grabbing });
         }
         if ctx.input(|i| i.pointer.any_released()) {
             let destination = ctx.data(|d| d.get_temp::<Vec<usize>>(drop_id));
