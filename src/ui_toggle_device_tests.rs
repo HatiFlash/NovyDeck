@@ -72,3 +72,19 @@ fn onoff_press_sends_only_the_new_face_and_no_full_reapply() {
         assert!(images.len() == 1 && *images[0] == new_face, "round {round}: exactly the new state face must be sent, got {} images", images.len());
     }
 }
+
+#[test]
+fn plain_toggle_without_state_faces_has_no_device_badge_and_no_full_reapply() {
+    let (mut h, rx) = setup();
+    h.app.config.keys_mut()[0].state_display = None;
+    h.app.applied = h.app.config.clone();
+    h.app.upload(false);
+    let Some(Command::Update(deployed, _)) = rx.try_iter().find(|c| matches!(c, Command::Update(..))) else { panic!("upload must send an Update") };
+    assert!(deployed.keys()[0].runtime_badge.is_none(), "badge sent to device: {:?}", deployed.keys()[0].runtime_badge);
+    h.app.applied = deployed;
+    h.app.pending = None;
+    let _ = rx.try_iter().count();
+    h.app.execute_physical(0, false);
+    for _ in 0..15 { std::thread::sleep(Duration::from_millis(20)); h.app.events(); }
+    assert!(!rx.try_iter().any(|c| matches!(c, Command::Update(..) | Command::Connect(..))), "a toggle press must not re-apply the whole deck");
+}
