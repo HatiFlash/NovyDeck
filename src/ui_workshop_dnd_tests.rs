@@ -232,16 +232,20 @@ fn capture_drag_with_placeholder_and_ghost() {
 #[test]
 fn zz_debug_positions() {
     let mut report = String::new();
-    for (x, y) in [(59.4, 372.0), (59.4, 382.0), (59.4, 285.5)] {
-        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-        h.warm(size);
-        let from = egui::pos2(x, y);
-        let to = egui::pos2(81.5, 157.0);
-        h.frame(size, vec![Input::PointerMoved(from)]);
-        h.frame(size, vec![press(from, true)]);
-        h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
-        h.frame(size, vec![Input::PointerMoved(to)]);
-        report += &format!("from {from:?} started={} dragged_id={:?} layer={:?} decided={} down={}\n", dragging(&h), h.ctx.dragged_id(), h.ctx.layer_id_at(from), h.ctx.input(|i| i.pointer.is_decidedly_dragging()), h.ctx.input(|i| i.pointer.primary_down()));
+    fn walk(shape: &egui::Shape, out: &mut String) {
+        match shape {
+            egui::Shape::Text(t) => *out += &format!("  text {:?} {:?}\n", t.galley.job.text, t.pos),
+            egui::Shape::Rect(r) if r.rect.min.y > 300.0 && r.rect.max.y < 470.0 => *out += &format!("  rect {:?}\n", r.rect),
+            egui::Shape::Vec(v) => for s in v { walk(s, out); },
+            _ => {}
+        }
     }
+    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+    h.warm(size);
+    let from = egui::pos2(59.4, 382.0);
+    h.frame(size, vec![Input::PointerMoved(from)]);
+    let o = h.frame(size, vec![press(from, true)]);
+    for s in &o.shapes { walk(&s.shape, &mut report); }
+    report += &format!("hovered_over_area={} is_using_pointer={} wants_pointer={}\n", h.ctx.is_pointer_over_area(), h.ctx.is_using_pointer(), h.ctx.wants_pointer_input());
     panic!("DBG\n{report}");
 }
