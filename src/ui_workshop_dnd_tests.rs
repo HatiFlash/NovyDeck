@@ -235,10 +235,12 @@ fn zz_debug_positions() {
     let out = h.warm(size);
     fn walk(shape: &egui::Shape, clip: egui::Rect) {
         match shape {
-            egui::Shape::Text(t) => eprintln!("DBG text {:?} at {:?} clip {:?}", t.galley.job.text, t.pos, clip),
+            egui::Shape::Text(t) => OUT.with(|o| o.borrow_mut().push_str(&format!("DBG text {:?} at {:?} clip {:?}\n", t.galley.job.text, t.pos, clip))),
             egui::Shape::Vec(v) => for s in v { walk(s, clip); },
             _ => {}
         }
     }
     for s in &out.shapes { walk(&s.shape, s.clip_rect); }
+    OUT.with(|o| panic!("{}", o.borrow()));
 }
+thread_local! { static OUT: std::cell::RefCell<String> = Default::default(); }
