@@ -97,7 +97,7 @@ fn mouse_drag_places_block_before_first_and_duplicates_with_ctrl() {
     assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "steps={:?} drop={:?} drag={:?} text={:?}", h.app.config.keys()[0].steps, h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_at"))), h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))), handles(&released.shapes));
     let output = h.warm(size);
     let points = handles(&output.shapes);
-    drag(&mut h, size, points[0], points[2], true);
+    drag(&mut h, size, points[0], points[2] - egui::vec2(0.0, 8.0), true);
     assert_eq!(h.app.config.keys()[0].steps.len(), 4);
     assert!(matches!(h.app.config.keys()[0].steps[2], Step::Delay { ms: 333 }));
 }
