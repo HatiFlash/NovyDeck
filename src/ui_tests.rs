@@ -1,6 +1,7 @@
 //! Tests of the actual egui widgets, without opening or controlling Windows.
 #[path = "ui_assistant015_tests.rs"] mod assistant015_tests;
 #[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
+#[path = "ui_workshop_dnd_tests.rs"] mod workshop_dnd_tests;
 #[path = "ui_update_tests.rs"] mod update_tests;
 #[path = "ui_audit_tests.rs"] mod audit_tests;
 #[path = "ui_main015_tests.rs"] mod main015_tests;
