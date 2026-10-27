@@ -231,16 +231,19 @@ fn capture_drag_with_placeholder_and_ghost() {
 
 #[test]
 fn zz_debug_positions() {
-    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-    let out = h.warm(size);
-    fn walk(shape: &egui::Shape, clip: egui::Rect) {
-        match shape {
-            egui::Shape::Text(t) => OUT.with(|o| o.borrow_mut().push_str(&format!("DBG text {:?} at {:?} clip {:?}\n", t.galley.job.text, t.pos, clip))),
-            egui::Shape::Vec(v) => for s in v { walk(s, clip); },
-            _ => {}
+    let mut report = String::new();
+    for (k, name) in ["Attendre 111 ms", "Attendre 222 ms", "Attendre 333 ms"].iter().enumerate() {
+        for (dx, dy, tgt) in [(0.0, 0.0, "1"), (0.0, 0.0, "2"), (60.0, -20.0, "1"), (0.0, 0.0, "3")] {
+            let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+            let out = h.warm(size);
+            let from = at(&out.shapes, name) + egui::vec2(dx, dy);
+            let to = at(&out.shapes, tgt);
+            h.frame(size, vec![Input::PointerMoved(from)]);
+            h.frame(size, vec![press(from, true)]);
+            h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
+            h.frame(size, vec![Input::PointerMoved(to)]);
+            report += &format!("card {k} from {from:?} to {to:?} (target {tgt}) started={}\n", dragging(&h));
         }
     }
-    for s in &out.shapes { walk(&s.shape, s.clip_rect); }
-    OUT.with(|o| panic!("{}", o.borrow()));
+    panic!("DBG\n{report}");
 }
-thread_local! { static OUT: std::cell::RefCell<String> = Default::default(); }
