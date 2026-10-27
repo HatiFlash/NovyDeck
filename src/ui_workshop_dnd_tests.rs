@@ -232,18 +232,16 @@ fn capture_drag_with_placeholder_and_ghost() {
 #[test]
 fn zz_debug_positions() {
     let mut report = String::new();
-    for (k, name) in ["Attendre 111 ms", "Attendre 222 ms", "Attendre 333 ms"].iter().enumerate() {
-        for (dx, dy, tgt) in [(0.0, 0.0, "1"), (0.0, 0.0, "2"), (60.0, -20.0, "1"), (0.0, 0.0, "3")] {
-            let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-            let out = h.warm(size);
-            let from = at(&out.shapes, name) + egui::vec2(dx, dy);
-            let to = at(&out.shapes, tgt);
-            h.frame(size, vec![Input::PointerMoved(from)]);
-            h.frame(size, vec![press(from, true)]);
-            h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
-            h.frame(size, vec![Input::PointerMoved(to)]);
-            report += &format!("card {k} from {from:?} to {to:?} (target {tgt}) started={}\n", dragging(&h));
-        }
+    for (x, y) in [(59.4, 330.0), (59.4, 350.0), (59.4, 365.0), (59.4, 372.0), (59.4, 376.0), (59.4, 380.0), (59.4, 390.0), (59.4, 396.0), (59.4, 402.0), (200.0, 382.5), (400.0, 382.5), (59.4, 285.5 + 97.0 - 10.0)] {
+        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+        h.warm(size);
+        let from = egui::pos2(x, y);
+        let to = egui::pos2(81.5, 157.0);
+        h.frame(size, vec![Input::PointerMoved(from)]);
+        h.frame(size, vec![press(from, true)]);
+        h.frame(size, vec![Input::PointerMoved(from + (to - from) * 0.5)]);
+        h.frame(size, vec![Input::PointerMoved(to)]);
+        report += &format!("from {from:?} started={}\n", dragging(&h));
     }
     panic!("DBG\n{report}");
 }
