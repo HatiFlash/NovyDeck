@@ -839,6 +839,7 @@ fn branch_chip(ui: &mut egui::Ui, label: &str, tag: &str, color: Color32) {
     egui::Frame::new().fill(color.gamma_multiply(0.18)).corner_radius(8).inner_margin(egui::Margin::symmetric(8, 2)).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().interact_size.y = 16.0;
             ui.add(egui::Label::new(RichText::new(label).font(theme::strong(11.0)).color(ink)).selectable(false));
             if !tag.is_empty() { ui.add(egui::Label::new(RichText::new(tag).size(11.0).color(ink)).selectable(false)); }
         });
@@ -936,6 +937,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                         let header = ui.horizontal(|ui| {
                             ui.set_min_height(34.0);
                             ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.spacing_mut().interact_size.y = 20.0;
                             let (grip_rect, grip_response) = ui.allocate_exact_size(egui::vec2(14.0, 20.0), egui::Sense::hover());
                             if grip_response.hovered() && !dragging { ui.ctx().set_cursor_icon(egui::CursorIcon::Grab); }
                             let painter = ui.painter().clone();
@@ -954,6 +956,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                             let text_rect = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(text_width, 34.0));
                             ui.scope_builder(egui::UiBuilder::new().max_rect(text_rect).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                                 ui.spacing_mut().item_spacing.y = 1.0;
+                                ui.spacing_mut().interact_size.y = 16.0;
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 6.0;
                                     ui.add(egui::Label::new(RichText::new(format!("{numbering}{}", i + 1)).small().color(p.muted)).selectable(false));
@@ -1013,6 +1016,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                                 let backdrop = ui.painter().add(egui::Shape::Noop);
                                 let chip_row = ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 8.0;
+                                    ui.spacing_mut().interact_size.y = 18.0;
                                     branch_chip(ui, branch_label(label), tag, *bcolor);
                                     if !children.is_empty() {
                                         ui.add(egui::Label::new(RichText::new(block_count(children.len())).small().color(p.muted)).selectable(false));

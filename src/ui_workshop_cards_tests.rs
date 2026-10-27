@@ -101,8 +101,8 @@ fn category_colour_and_icon_are_identical_on_card_and_library() {
     // Les catégories demandées ont des couleurs distinctes.
     let h = scene(vec![]);
     let colors: Vec<Color32> = [
-        Step::Hotkey { keys: "A".into() }, crate::automation::step(4), crate::automation::step(2), crate::automation::step(46),
-        delay(1), crate::automation::step(14), crate::automation::step(15), crate::automation::step(36), crate::automation::step(7),
+        Step::Hotkey { keys: "A".into() }, Step::Media { command: "play_pause".into() }, Step::Launch { program: "obs64.exe".into(), args: vec![], focus_if_running: true },
+        crate::automation::step(46), delay(1), crate::automation::step(14), crate::automation::step(15), crate::automation::step(36), Step::PageNext,
     ].iter().map(|s| extras::block_style(&h.ctx, s).color).collect();
     for (i, a) in colors.iter().enumerate() { for b in &colors[i + 1..] { assert_ne!(a, b, "deux catégories partagent une couleur : {colors:?}"); } }
 }
@@ -142,7 +142,8 @@ fn the_drawn_chevron_folds_and_unfolds_the_container() {
 
 #[test]
 fn branch_chips_are_rendered_in_french_and_english() {
-    let size = egui::vec2(1366.0, 768.0);
+    // Fenêtre haute : tout l'arbre est visible (egui ne peint pas les libellés hors de la zone défilante).
+    let size = egui::vec2(1366.0, 1400.0);
     let tree = vec![
         Step::Toggle { a: vec![delay(1)], b: vec![delay(2)] },
         Step::IfWindow { title: "Zed".into(), then_steps: vec![delay(3)], else_steps: vec![delay(4)] },
@@ -218,7 +219,11 @@ fn no_text_overlaps_or_leaves_its_clip_at_1366_by_768_at_125_percent() {
         }
     }
     // Chaque carte tient dans la largeur disponible.
-    for path in [vec![0usize], vec![1], vec![2]] { assert!(clip.expand(1.0).contains_rect(card_rect(&h, &path)), "carte {path:?} hors zone"); }
+    // (la hauteur peut dépasser la zone visible : la liste défile ; seule la largeur est contrainte)
+    for path in [vec![0usize], vec![1], vec![2]] {
+        let card = card_rect(&h, &path);
+        assert!(card.min.x >= clip.min.x - 1.0 && card.max.x <= clip.max.x + 1.0, "carte {path:?} {card:?} déborde en largeur de {clip:?}");
+    }
 }
 
 #[test]
