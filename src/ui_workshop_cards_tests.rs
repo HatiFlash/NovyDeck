@@ -293,13 +293,14 @@ fn capture_workshop_cards_in_both_languages_and_themes() {
             h.app.preferences.dark = dark;
             theme::apply(&h.ctx, dark);
             h.ctx.set_pixels_per_point(1.25);
-            let size = egui::vec2(1280.0, 1240.0);
+            let size = egui::vec2(1280.0, 800.0);
             h.warm(size);
             h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2_usize]));
             let out = h.warm(size);
             let clip = h.ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("workshop_scroll_clip"))).expect("zone de l'Atelier");
-            assert!(clip.contains_rect(card_rect(&h, &[5])), "{lang}/{dark} : dernière carte visible");
+            let last = card_rect(&h, &[5]);
             h.png(size, out, &dir.join(format!("workshop-cards-{lang}-{}.png", if dark { "dark" } else { "light" })));
+            assert!(clip.contains_rect(last), "{lang}/{dark} : dernière carte visible clip={clip:?} last={last:?}");
         }
     }
     crate::i18n::set_language("fr");
