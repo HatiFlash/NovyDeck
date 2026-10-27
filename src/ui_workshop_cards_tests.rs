@@ -293,7 +293,7 @@ fn capture_workshop_cards_in_both_languages_and_themes() {
             h.app.preferences.dark = dark;
             theme::apply(&h.ctx, dark);
             h.ctx.set_pixels_per_point(1.25);
-            let size = egui::vec2(1280.0, 800.0);
+            let size = egui::vec2(1280.0, 1000.0);
             h.warm(size);
             h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2_usize]));
             let out = h.warm(size);
