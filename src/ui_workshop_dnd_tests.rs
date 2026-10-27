@@ -231,21 +231,17 @@ fn capture_drag_with_placeholder_and_ghost() {
 
 #[test]
 fn zz_probe_layers() {
+    let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
+    let out = h.warm(size);
     let mut lines = String::new();
-    for y in [340.0_f32, 372.0, 378.0, 382.0, 386.0, 396.0] {
-        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-        let out = h.warm(size);
-        let body = at(&out.shapes, "Attendre 222 ms");
-        let pos = egui::pos2(body.x, y);
-        h.frame(size, vec![Input::PointerMoved(pos)]);
-        let f = h.frame(size, vec![press(pos, true)]);
-        let layer = h.ctx.layer_id_at(pos);
-        let layers: Vec<String> = h.ctx.memory(|m| m.areas().visible_layer_ids().into_iter()
-            .map(|l| format!("{:?}:{:?}", l, m.area_rect(l.id))).collect());
-        let cur = f.platform_output.cursor_icon;
-        h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(30.0, 30.0))]);
-        h.frame(size, vec![Input::PointerMoved(pos + egui::vec2(60.0, 60.0))]);
-        lines += &format!("[y={y} body={body:?} at={:?} cur={cur:?} drag={} egui_drag={:?} layers={layers:?}] ", layer, dragging(&h), h.ctx.dragged_id());
+    fn walk(shape: &egui::Shape, o: &mut String) {
+        match shape {
+            egui::Shape::Text(t) => { if t.pos.x < 700.0 && t.pos.y > 150.0 && t.pos.y < 520.0 { *o += &format!("T{:?}@({:.0},{:.0}) ", t.galley.job.text, t.pos.x, t.pos.y); } }
+            egui::Shape::Rect(r) => { if r.rect.min.x < 700.0 && r.rect.min.y > 150.0 && r.rect.max.y < 520.0 && r.rect.width() > 200.0 { *o += &format!("R[{:.0},{:.0}-{:.0},{:.0}] ", r.rect.min.x, r.rect.min.y, r.rect.max.x, r.rect.max.y); } }
+            egui::Shape::Vec(v) => for s in v { walk(s, o); },
+            _ => {}
+        }
     }
+    for s in &out.shapes { walk(&s.shape, &mut lines); }
     panic!("PROBEX {lines} ENDPROBE");
 }
