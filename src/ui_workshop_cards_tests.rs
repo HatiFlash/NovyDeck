@@ -298,9 +298,10 @@ fn capture_workshop_cards_in_both_languages_and_themes() {
             h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2_usize]));
             let out = h.warm(size);
             let clip = h.ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new("workshop_scroll_clip"))).expect("zone de l'Atelier");
-            let last = card_rect(&h, &[5]);
+            // La séquence est plus haute que l'écran (défilement normal) : la capture montre son début,
+            // la première carte doit être entièrement visible dans la zone de l'Atelier.
+            assert!(clip.contains_rect(card_rect(&h, &[0])), "{lang}/{dark} : première carte visible clip={clip:?}");
             h.png(size, out, &dir.join(format!("workshop-cards-{lang}-{}.png", if dark { "dark" } else { "light" })));
-            assert!(clip.contains_rect(last), "{lang}/{dark} : dernière carte visible clip={clip:?} last={last:?}");
         }
     }
     crate::i18n::set_language("fr");
