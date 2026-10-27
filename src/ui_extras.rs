@@ -841,7 +841,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             let has_branches = matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }
                 | Step::Repeat { .. } | Step::Toggle { .. });
             let mut menu_rect = egui::Rect::NOTHING;
-            let mut grip: Option<(egui::Painter, usize, egui::Rect)> = None;
+            let mut grip: Option<(egui::Painter, egui::layers::ShapeIdx, egui::Rect)> = None;
             let color = if matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }) {
                 Color32::from_rgb(164, 123, 239)
             } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
