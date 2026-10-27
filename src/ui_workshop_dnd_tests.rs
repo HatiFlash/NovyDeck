@@ -219,7 +219,7 @@ fn capture_drag_with_placeholder_and_ghost() {
         h.ctx.set_pixels_per_point(1.25);
         let size = egui::vec2(1280.0, 800.0);
         let out = h.warm(size);
-        let source = at(&out.shapes, "4");
+        let source = at(&out.shapes, "Attendre 500 ms");
         let target = at(&out.shapes, "1.A1") + egui::vec2(60.0, 0.0);
         let held = hold_drag(&mut h, size, source, target);
         assert_eq!(all_text(&held.shapes, crate::i18n::tr(SLOT)).len(), 1, "{lang}");
@@ -229,25 +229,41 @@ fn capture_drag_with_placeholder_and_ghost() {
     crate::i18n::set_language("fr");
 }
 
-#[test]
-fn zz_probe_layers() {
-    let mut lines = String::new();
-    for y in [372.0_f32, 382.0] {
-        let (mut h, size) = scene(vec![delay(111), delay(222), delay(333)]);
-        h.warm(size);
-        h.ctx.style_mut(|s| s.debug.show_widget_hits = true);
-        let pos = egui::pos2(59.0, y);
-        h.frame(size, vec![Input::PointerMoved(pos)]);
-        let f = h.frame(size, vec![press(pos, true)]);
-        lines += &format!("\n== y={y}: ");
-        fn walk(shape: &egui::Shape, pos: egui::Pos2, o: &mut String) {
-            match shape {
-                egui::Shape::Rect(r) => { if r.rect.contains(pos) && r.rect.height() < 400.0 { *o += &format!("R[{:.0},{:.0}-{:.0},{:.0}] fill={:?} stroke={:?}; ", r.rect.min.x, r.rect.min.y, r.rect.max.x, r.rect.max.y, r.fill, r.stroke.color); } }
-                egui::Shape::Vec(v) => for s in v { walk(s, pos, o); },
-                _ => {}
-            }
+/// Centres des poignées dessinées (groupes de 6 disques de rayon 1,7).
+fn grips(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::Pos2> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<egui::Pos2>) {
+        if let egui::Shape::Vec(v) = shape {
+            let dots: Vec<_> = v.iter().filter_map(|s| match s { egui::Shape::Circle(c) if (c.radius - 1.7).abs() < 0.01 => Some(c.center), _ => None }).collect();
+            if dots.len() == 6 { out.push(egui::Rect::from_points(&dots).center()); } else { for s in v { walk(s, out); } }
         }
-        for s in &f.shapes { walk(&s.shape, pos, &mut lines); }
     }
-    panic!("PROBEX {lines} ENDPROBE");
+    let mut out = Vec::new();
+    for s in shapes { walk(&s.shape, &mut out); }
+    out
+}
+
+fn contains_glyph(shape: &egui::Shape, glyph: char) -> bool {
+    match shape {
+        egui::Shape::Text(t) => t.galley.job.text.contains(glyph),
+        egui::Shape::Vec(v) => v.iter().any(|s| contains_glyph(s, glyph)),
+        _ => false,
+    }
+}
+
+#[test]
+fn handle_is_a_drawn_dot_grid_with_grab_cursor_and_no_missing_glyph() {
+    let (mut h, _) = scene(vec![delay(111), Step::Repeat { count: 2, steps: vec![delay(5)] }, delay(333)]);
+    let size = egui::vec2(1600.0, 900.0);
+    let out = h.warm(size);
+    assert!(!out.shapes.iter().any(|s| contains_glyph(&s.shape, '⋮')), "aucun galley « ⋮ » dans l'atelier");
+    let points = grips(&out.shapes);
+    assert_eq!(points.len(), 4, "une poignée par carte (imbriquées comprises) : {points:?}");
+    h.frame(size, vec![Input::PointerMoved(points[0])]);
+    let hover = h.frame(size, vec![Input::PointerMoved(points[0])]);
+    assert_eq!(hover.platform_output.cursor_icon, egui::CursorIcon::Grab);
+    assert!(!hover.shapes.iter().any(|s| contains_glyph(&s.shape, '⋮')));
+    let target = at(&hover.shapes, "1");
+    let held = hold_drag(&mut h, size, points[2], target);
+    assert!(!held.shapes.iter().any(|s| contains_glyph(&s.shape, '⋮')), "fantôme sans « ⋮ »");
+    release(&mut h, size, target);
 }

@@ -342,7 +342,7 @@ fn palette(ui: &mut egui::Ui, search: &str, depth: usize, advanced: bool, keyboa
                         let label = if keyboard == Some(index) { format!("> {}", block_name(kind)) }
                             else { block_name(kind).to_owned() };
                         let entry = ui.add(egui::Button::new(label).frame(false).sense(egui::Sense::click_and_drag()))
-                            .on_hover_text(block_help(kind))
+                            .on_hover_ui(|ui| { ui.style_mut().interaction.selectable_labels = false; ui.label(block_help(kind)); })
                             .on_hover_cursor(egui::CursorIcon::Grab);
                         if entry.clicked() { selected = Some(kind); }
                         if entry.drag_started() { ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_drag"), kind)); }
@@ -841,6 +841,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             let has_branches = matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }
                 | Step::Repeat { .. } | Step::Toggle { .. });
             let mut menu_rect = egui::Rect::NOTHING;
+            let mut grip: Option<(egui::Painter, usize, egui::Rect)> = None;
             let color = if matches!(step.active(), Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. }) {
                 Color32::from_rgb(164, 123, 239)
             } else if matches!(step.active(), Step::Repeat { .. }) { Color32::from_rgb(239, 169, 83) } else { accent() };
@@ -851,7 +852,10 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     .corner_radius(10).inner_margin(9).show(ui, |ui| {
                         ui.set_width((ui.available_width() - 20.0).max(120.0));
                         ui.horizontal(|ui| {
-                            ui.add(egui::Label::new(RichText::new("⋮⋮").color(p.muted)).selectable(false));
+                            let (grip_rect, grip_response) = ui.allocate_exact_size(egui::vec2(14.0, 20.0), egui::Sense::hover());
+                            if grip_response.hovered() && !dragging { ui.ctx().set_cursor_icon(egui::CursorIcon::Grab); }
+                            let painter = ui.painter().clone();
+                            grip = Some((painter.clone(), painter.add(egui::Shape::Noop), grip_rect));
                             block_glyph(ui, step, color);
                             ui.add(egui::Label::new(RichText::new(format!("{numbering}{}", i + 1)).color(color)).selectable(false));
                             ui.add(egui::Label::new(RichText::new(step_label(step)).strong()).truncate().selectable(false));
@@ -913,6 +917,9 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             });
             let card = scope.response;
             let r = card.rect;
+            if let Some((painter, index, rect)) = grip {
+                painter.set(index, grip_shape(rect, if card.hovered() || is_dragged { accent() } else { p.muted }));
+            }
             let pressed_on_menu = ui.input(|i| i.pointer.press_origin()).is_some_and(|origin| menu_rect.contains(origin));
             if card.drag_started() && !pressed_on_menu {
                 let grab = ui.input(|i| i.pointer.press_origin()).map_or(egui::vec2(24.0, 16.0), |origin| origin - r.min);
@@ -921,8 +928,6 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                     d.insert_temp(egui::Id::new("workshop_grab"), grab);
                 });
             }
-            let card = card.on_hover_text(crate::i18n::trf("{name} : {summary}. Cliquer pour afficher les propriétés ; glisser pour déplacer.",
-                &[("name", &step_label(step)), ("summary", &named_summary(step, plugins))]));
             let pointer_on_menu = ui.input(|i| i.pointer.hover_pos()).is_some_and(|pos| menu_rect.contains(pos));
             if card.hovered() && !dragging && !pointer_on_menu { ctx.set_cursor_icon(egui::CursorIcon::Grab); }
             if card.clicked() && !pressed_on_menu {
@@ -974,6 +979,17 @@ fn workshop_slot_zone(ui: &mut egui::Ui, at: &[usize], target: bool) {
     painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, font, ink);
     workshop_drop_hit(ui, rect.expand2(egui::vec2(0.0, 8.0)), at, false);
 }
+/// Poignée dessinée : grille de 2 colonnes × 3 rangées de disques pleins (aucune police requise).
+fn grip_shape(rect: egui::Rect, color: Color32) -> egui::Shape {
+    let mut dots = Vec::with_capacity(6);
+    for column in 0..2 {
+        for row in 0..3 {
+            let offset = egui::vec2((column as f32 - 0.5) * 5.0, (row as f32 - 1.0) * 5.0);
+            dots.push(egui::Shape::circle_filled(rect.center() + offset, 1.7, color));
+        }
+    }
+    egui::Shape::Vec(dots)
+}
 /// Carte « fantôme » qui suit la souris : même icône, numéro et titre que le bloc saisi, ombre douce.
 /// Calque Tooltip non interactif : elle ne perturbe jamais la détection du survol dessous.
 fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, color: Color32, width: f32, plugins: &[crate::plugins::Plugin]) {
@@ -986,7 +1002,8 @@ fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, color: Color32
             .show(ui, |ui| {
                 ui.set_width(width.clamp(200.0, 380.0) - 18.0);
                 ui.horizontal(|ui| {
-                    ui.add(egui::Label::new(RichText::new("⋮⋮").color(p.muted)).selectable(false));
+                    let (grip_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 20.0), egui::Sense::hover());
+                    ui.painter().add(grip_shape(grip_rect, accent()));
                     block_glyph(ui, step, color);
                     ui.add(egui::Label::new(RichText::new(number).color(color)).selectable(false));
                     ui.add(egui::Label::new(RichText::new(step_label(step)).strong()).truncate().selectable(false));
