@@ -1,6 +1,18 @@
 use super::*;
 use egui::{vec2, Event as Input};
 
+fn second_add(shapes: &[egui::epaint::ClippedShape]) -> egui::Pos2 {
+    let title = text_position(shapes, "2e appui").expect("carte du deuxième appui");
+    fn find(shape: &egui::Shape, title: egui::Pos2) -> Option<egui::Pos2> {
+        match shape {
+            egui::Shape::Text(t) if t.galley.job.text == "Ajouter" && (t.pos.x - title.x).abs() < 180.0 => Some(t.pos + t.galley.size() * 0.5),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| find(s, title)),
+            _ => None,
+        }
+    }
+    shapes.iter().find_map(|s| find(&s.shape, title).filter(|p| s.clip_rect.contains(*p))).expect("bouton Ajouter du deuxième appui")
+}
+
 #[test]
 fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     let mut h = Harness::new();
@@ -13,17 +25,19 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     h.click(size, pos);
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }] if a == &vec![Step::Hotkey { keys: "F9".into() }] && b.is_empty()));
-    assert!(text_position(&output.shapes, "Action 1").is_some());
-    let action2 = text_position(&output.shapes, "Action 2").expect("onglet Action 2");
+    assert!(text_position(&output.shapes, "1er appui").is_some());
+    let action2 = text_position(&output.shapes, "2e appui").expect("carte 2e appui");
     h.click(size, action2);
     let output = h.warm(size);
     assert_eq!(h.app.config.keys()[0].label, "F9");
     assert!(h.app.config.keys()[0].state_display.is_none());
-    let pos = text_position(&output.shapes, "Raccourci clavier").expect("raccourci clavier direct");
+    h.click(size, second_add(&output.shapes));
+    let output = h.warm(size);
+    let pos = text_position(&output.shapes, "Raccourci clavier").expect("raccourci clavier au menu Ajouter");
     h.click(size, pos);
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { b, .. }] if matches!(&b[..], [Step::Hotkey { .. }])), "steps after catalog click: {:?}, menu at {:?}", h.app.config.keys()[0].steps, pos);
-    let branch = text_position(&output.shapes, "Action 2").expect("onglet Action 2 toujours visible");
+    let branch = text_position(&output.shapes, "2e appui").expect("onglet Action 2 toujours visible");
     let mut output = output;
     for _ in 0..12 {
         if text_position(&output.shapes, "Enregistrer…").is_some() { break; }
@@ -106,9 +120,9 @@ fn onoff_second_action_can_be_chosen_from_main_catalog_menu() {
         a: vec![Step::Hotkey { keys: "F9".into() }], b: vec![],
     }];
     let output = h.warm(size);
-    h.click(size, text_position(&output.shapes, "Action 2").expect("second action tab"));
+    h.click(size, text_position(&output.shapes, "2e appui").expect("second action tab"));
     let output = h.warm(size);
-    h.click(size, text_position(&output.shapes, "Ajouter à Action 2").expect("main action picker"));
+    h.click(size, second_add(&output.shapes));
     let output = h.warm(size);
     h.click(size, text_position(&output.shapes, "Attendre").expect("delay action in picker"));
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }]
@@ -125,8 +139,8 @@ fn onoff_existing_branches_and_extra_steps_are_not_silently_lost() {
     let b = vec![Step::Hotkey { keys: "F10".into() }, Step::Delay { ms: 250 }];
     h.app.config.keys_mut()[0].steps = vec![Step::Toggle { a: a.clone(), b: b.clone() }];
     let output = h.warm(size);
-    assert!(text_position(&output.shapes, "Action 1").is_some());
-    assert!(text_position(&output.shapes, "Action 2").is_some());
+    assert!(text_position(&output.shapes, "1er appui").is_some());
+    assert!(text_position(&output.shapes, "2e appui").is_some());
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a: x, b: y }] if x == &a && y == &b));
     h.app.config.keys_mut()[0].steps.push(Step::Delay { ms: 400 });
     let output = h.warm(size);

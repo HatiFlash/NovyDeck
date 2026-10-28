@@ -27,25 +27,12 @@ impl App {
   egui::ScrollArea::vertical().id_salt("plugin_store").auto_shrink([false,false]).max_height(height).show(ui,|ui|{
    // A ScrollArea may expose an unbounded child width; constrain paragraphs and cards to its viewport.
    ui.set_max_width(content_width);
-   // Premier élément de l'onglet, sur une seule ligne pour garder l'inventaire local visible.
-   let store=ui.add_sized([ui.available_width(),34.0],iconset::button(ui.ctx(),Ico::Store,crate::i18n::tr("Magasin de plugins")))
+   let palette=crate::theme::palette(ui.ctx());
+   let store=ui.add_sized([ui.available_width(),42.0],egui::Button::new(RichText::new(crate::i18n::tr("Magasin de plugins")).strong().color(palette.on_accent)).fill(palette.accent))
     .on_hover_text(crate::i18n::tr("Explorez les plugins communautaires avant de les installer."));
    if store.clicked(){super::plugin_market_ui::open();}
-   ui.add_space(4.0);
-  iconset::heading(ui,Ico::Plugin,RichText::new(crate::i18n::tr("Plugins · importer")).strong());
-  ui.add(egui::Label::new(RichText::new(crate::i18n::tr("Catalogue local, hors ligne. Importer ne lance rien.")).small()).wrap());
-  let catalog=crate::plugin_catalog::Catalog::offline();
-  ui.label(crate::i18n::trf("Découvrir · {count} entrée(s) locales publiables", &[("count", &(catalog.entries.len()))] ));
-  ui.separator();iconset::heading(ui,Ico::Install,RichText::new(crate::i18n::tr("Importer")).strong());
-  ui.horizontal_wrapped(|ui|{
-   if ui.button(crate::i18n::tr("Importer depuis FIFINE / StreamDock / Elgato")).clicked(){self.plugin_import_request(None);}
-   if ui.button(crate::i18n::tr("Importer un fichier .streamDeckPlugin")).clicked(){self.plugin_import_dialog(true);}
-   if ui.button(crate::i18n::tr("Importer un dossier .sdPlugin")).clicked(){self.plugin_import_dialog(false);}
-   if ui.button(crate::i18n::tr("Actualiser la liste")).on_hover_text(crate::i18n::tr("Relire les dossiers de plugins")).clicked(){self.plugin_inventory=None;}
-  });
-  ui.label(RichText::new(&self.notice).small());
-  if !self.plugin_management.message.is_empty(){ui.add(egui::Label::new(&self.plugin_management.message).wrap());}
-  let inventory=self.plugin_inventory();
+   ui.add(egui::Label::new(RichText::new(crate::i18n::tr("Installer et mettre à jour des plugins")).small()).wrap());
+   let inventory=self.plugin_inventory();
    ui.separator();iconset::heading(ui,Ico::Plug,RichText::new(crate::i18n::tr("Installés dans NovyDeck")).strong());
    {for plugin in inventory.installed.iter(){
     if !format!("{} {}",plugin.display_name(),plugin.uuid).to_lowercase().contains(search) && !plugin.actions.iter().any(|a|a.name.to_lowercase().contains(search)){continue;}
@@ -97,6 +84,14 @@ impl App {
      }
     });
    }}
+   ui.separator();
+   ui.menu_button(crate::i18n::tr("Importer…"), |ui| {
+    if ui.button(crate::i18n::tr("Depuis FIFINE / StreamDock / Elgato")).clicked(){self.plugin_import_request(None);ui.close_menu();}
+    if ui.button(crate::i18n::tr("Fichier .streamDeckPlugin")).clicked(){self.plugin_import_dialog(true);ui.close_menu();}
+    if ui.button(crate::i18n::tr("Dossier .sdPlugin")).clicked(){self.plugin_import_dialog(false);ui.close_menu();}
+    if ui.button(crate::i18n::tr("Actualiser")).on_hover_text(crate::i18n::tr("Relire les dossiers de plugins")).clicked(){self.plugin_inventory=None;ui.close_menu();}
+   }).response.on_hover_text(crate::i18n::tr("Catalogue local, hors ligne. Importer ne lance rien."));
+   if !self.plugin_management.message.is_empty(){ui.add(egui::Label::new(&self.plugin_management.message).wrap());}
    ui.separator();
    iconset::heading(ui,Ico::Store,RichText::new(crate::i18n::tr("Plugins disponibles sur ce PC")).strong());
   if search.is_empty() || "volumecontroller audio volume muet peripherique".contains(&search.to_lowercase()) {
