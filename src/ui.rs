@@ -4915,8 +4915,9 @@ impl App {
                 match name {
                     "setTitle"=>{if let Some(title)=message["payload"]["title"].as_str(){face.title=title.chars().take(100).collect();}},
                     "setState"=>{if let Some(state)=message["payload"]["state"].as_u64(){face.state=state.min(255) as u8;}},
-                    "showOk"=>face.flash=Some((true,Instant::now())),
+                    "showOk"=>{},
                     "showAlert"=>face.flash=Some((false,Instant::now())),
+
                     "setImage"=>{if let Some(value)=message["payload"]["image"].as_str(){
                         if let Ok(image)=decode_plugin_image(value){face.image_bytes=image;}
                     }else if message["payload"]["image"].is_null(){face.image_bytes=None;}},

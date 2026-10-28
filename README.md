@@ -22,9 +22,11 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
-## What's new in 0.16.0
+### Plugin action feedback
 
-### Hardware ON/OFF key fixes (Stream Deck)
+Successful plugin actions no longer display a green OK badge on keys.
+
+## What's new in 0.16.0
 
 Pressing an ON/OFF or toggle key on a physical deck no longer renders a persistent red dot (the internal state badge overlay "1/2" has been eliminated from hardware rendering). In addition, key presses immediately and atomically update only the targeted key face without a full-deck re-upload, removing the brief transient flash of the default NovyDeck logo.
 

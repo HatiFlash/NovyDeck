@@ -44,7 +44,7 @@ fn wait(app: &mut App, index: usize, title: &str, count: i64) -> Result<(), Stri
                 && f.image_bytes
                     .as_deref()
                     .is_some_and(|b| b.starts_with(b"<svg"))
-                && f.flash.is_some_and(|(ok, _)| ok == (count != 4))
+                && f.flash.is_some() == (count == 4)
         }) && value == Some(count)
         {
             let saved = store::load(&app.path).map_err(|e| format!("Relecture : {e}"))?;

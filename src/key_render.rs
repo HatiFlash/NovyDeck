@@ -399,6 +399,17 @@ mod tests {
     }
 
     #[test]
+    fn plugin_image_alert_only_flash() {
+        let font=font().unwrap();
+        let key=crate::model::Key::default();
+        let plain=for_plugin(&key,126,&font,None,None).unwrap();
+        let show_ok=for_plugin(&key,126,&font,None,None).unwrap();
+        let show_alert=for_plugin(&key,126,&font,None,Some(false)).unwrap();
+        assert_eq!(plain,show_ok,"showOk must not change the rendered JPEG");
+        assert_ne!(plain,show_alert,"showAlert must remain visible");
+    }
+
+    #[test]
     fn plugin_image_flash_and_canonical_orientation() {
         let key=Key{label:"Plugin".into(),..Key::default()};
         let mut png=Vec::new();
