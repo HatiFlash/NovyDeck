@@ -3311,28 +3311,34 @@ impl App {
                                 let selected_id = ui.id().with("onoff_selected_step");
                                 let mut branch = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id)).min(1);
                                 let mut selected_step = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<usize>(selected_id));
-                                let mut show_card = |ui: &mut egui::Ui, choice: u8, steps: &mut Vec<Step>| {
-                                    changed |= onoff_branch_card(ui, steps, choice, &mut branch, &mut selected_step,
-                                        &names[active], &mut removed_step, &mut branch_edit);
-                                };
-                                if ui.available_width() >= 360.0 {
-                                    ui.columns(2, |columns| {
-                                        show_card(&mut columns[0], 0, a);
-                                        show_card(&mut columns[1], 1, b);
-                                    });
-                                } else {
-                                    show_card(ui, 0, a);
-                                    show_card(ui, 1, b);
-                                }
-                                ui.ctx().data_mut(|d| { d.insert_persisted(tab_id, branch); d.insert_persisted(selected_id, selected_step); });
-                                edited_branch = branch as usize;
-                                let steps = if branch == 0 { a } else { b };
-                                egui::ScrollArea::vertical().id_salt(("onoff_branch_scroll", branch))
-                                    .auto_shrink([false, false]).max_height((body_height - 64.0).max(80.0)).show(ui, |ui| {
+                                // Cards and the selected block editor share one scroll area so compact inspectors reach every field.
+                                egui::ScrollArea::vertical().id_salt("onoff_branch_scroll")
+                                    .auto_shrink([false, false]).max_height((body_height - 32.0).max(120.0)).show(ui, |ui| {
+                                        let mut card_changed = false;
+                                        {
+                                            let mut show_card = |ui: &mut egui::Ui, choice: u8, steps: &mut Vec<Step>| {
+                                                card_changed |= onoff_branch_card(ui, steps, choice, &mut branch, &mut selected_step,
+                                                    &names[active], &mut removed_step, &mut branch_edit);
+                                            };
+                                        if ui.available_width() >= 360.0 {
+                                            ui.columns(2, |columns| {
+                                                show_card(&mut columns[0], 0, a);
+                                                show_card(&mut columns[1], 1, b);
+                                            });
+                                        } else {
+                                            show_card(ui, 0, a);
+                                            show_card(ui, 1, b);
+                                        }
+                                        }
+                                        changed |= card_changed;
+                                        ui.add_space(8.0);
+                                        edited_branch = branch as usize;
+                                        let steps = if branch == 0 { &mut *a } else { &mut *b };
                                         changed |= onoff_branch_ui(ui, steps, edited_branch, selected_step, index, &names, &pages,
                                             &self.audio, &dialog_tx, &(active, page_id.clone(), selected, vec![index]),
                                             &mut record_step, &mut pick_audio);
                                     });
+                                ui.ctx().data_mut(|d| { d.insert_persisted(tab_id, branch); d.insert_persisted(selected_id, selected_step); });
                             }
                             if let (Some(edit), Some(crate::model::PluginStateTarget::Block { path })) = (branch_edit, &mut key.plugin_state) {
                                 if path.len() >= 3 && path[0] == index && path[1] == edited_branch {
