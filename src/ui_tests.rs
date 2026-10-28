@@ -2117,6 +2117,7 @@ fn plugin_store_is_rendered_without_a_window() {
     assert!(text_position(&output.shapes,"Importer…").is_some());
     h.click(size,text_position(&output.shapes,"Importer…").unwrap());
     let menu=h.warm(size);
+    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") { h.png(size,menu.clone(),&PathBuf::from(dir).join("plugins-import-menu.png")); }
     for label in ["Depuis FIFINE / StreamDock / Elgato","Fichier .streamDeckPlugin","Dossier .sdPlugin","Actualiser"] {
         assert!(text_position(&menu.shapes,label).is_some(),"entrée de menu absente : {label}");
     }

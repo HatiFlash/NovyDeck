@@ -5186,7 +5186,8 @@ fn onoff_branch_card(
     let palette = theme::palette(ui.ctx());
     let stroke = if *branch == choice { egui::Stroke::new(2.0, palette.accent) } else { egui::Stroke::new(1.0, palette.border) };
     egui::Frame::new().fill(palette.raised).stroke(stroke).corner_radius(8).inner_margin(10).show(ui, |ui| {
-        ui.set_min_width((ui.available_width() - 20.0).max(100.0));
+        ui.set_width(ui.available_width());
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
         if ui.selectable_label(*branch == choice, RichText::new(title).strong()).clicked() { *branch = choice; *selected = 0; }
         for (i, step) in steps.iter().enumerate() {
             let summary = match step {
@@ -5195,8 +5196,9 @@ fn onoff_branch_card(
             };
             if ui.selectable_label(*branch == choice && *selected == i, summary).clicked() { *branch = choice; *selected = i; }
         }
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             ui.menu_button(tr("Ajouter"), |ui| {
                 egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
                     for (kind, label) in crate::automation::NAMES.iter().enumerate() {
@@ -5208,6 +5210,9 @@ fn onoff_branch_card(
                 });
             });
             if ui.add_enabled(!steps.is_empty(), egui::Button::new(tr("Modifier"))).clicked() { *branch = choice; *selected = (*selected).min(steps.len() - 1); }
+        });
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             if ui.add_enabled(!steps.is_empty(), egui::Button::new(tr("Retirer"))).clicked() { removal = Some((*selected).min(steps.len() - 1)); *branch = choice; }
             ui.add_enabled_ui(!steps.is_empty(), |ui| {
                 ui.menu_button(tr("Remplacer"), |ui| {

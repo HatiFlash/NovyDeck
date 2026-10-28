@@ -26,6 +26,7 @@ fn onoff_f9_conversion_and_second_action_edit_in_main_inspector() {
     let output = h.warm(size);
     assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::Toggle { a, b }] if a == &vec![Step::Hotkey { keys: "F9".into() }] && b.is_empty()));
     assert!(text_position(&output.shapes, "1er appui").is_some());
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") { h.png(size, output.clone(), &std::path::PathBuf::from(dir).join("onoff-compact-cards.png")); }
     let action2 = text_position(&output.shapes, "2e appui").expect("carte 2e appui");
     h.click(size, action2);
     let output = h.warm(size);
