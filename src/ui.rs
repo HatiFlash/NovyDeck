@@ -5189,14 +5189,6 @@ fn onoff_branch_card(
         ui.set_width(ui.available_width());
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
         if ui.selectable_label(*branch == choice, RichText::new(title).strong()).clicked() { *branch = choice; *selected = 0; }
-        for (i, step) in steps.iter().enumerate() {
-            let summary = match step {
-                Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
-                _ => tr(step.name()).to_owned(),
-            };
-            if ui.selectable_label(*branch == choice && *selected == i, summary).clicked() { *branch = choice; *selected = i; }
-        }
-        ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             ui.menu_button(tr("Ajouter"), |ui| {
@@ -5223,6 +5215,14 @@ fn onoff_branch_card(
                 });
             });
         });
+        ui.add_space(4.0);
+        for (i, step) in steps.iter().enumerate() {
+            let summary = match step {
+                Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
+                _ => tr(step.name()).to_owned(),
+            };
+            if ui.selectable_label(*branch == choice && *selected == i, summary).clicked() { *branch = choice; *selected = i; }
+        }
     });
     if let Some(i) = removal { steps.remove(i); *selected = (*selected).min(steps.len().saturating_sub(1)); *branch_edit = Some(OnOffBranchEdit::Remove(i)); *removed = true; changed = true; }
     if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, profile).steps); *branch = choice; *branch_edit = Some(OnOffBranchEdit::Replace(i)); changed = true; }
