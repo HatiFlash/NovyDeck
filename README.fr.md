@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.0"><img src="https://img.shields.io/badge/Release-v0.16.0-3478F6.svg" alt="Version 0.16.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.1"><img src="https://img.shields.io/badge/Release-v0.16.1-3478F6.svg" alt="Version 0.16.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,18 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.16.1
+
+- **Plus de pastille verte après une action de plugin :** quand un plugin signale une réussite (par exemple RivaTuner OSD), la touche n'affiche plus de pastille verte avec une coche pendant une seconde. Les alertes d'erreur restent affichées.
+- **Onglet Plugins rangé :** le bouton **Magasin de plugins** est en haut, suivi des plugins installés. Les trois imports et « Actualiser » sont regroupés dans un seul menu **Importer…**, et les textes d'état techniques ont disparu.
+- **Touche ON/OFF (Basculer) plus claire :** deux cartes côte à côte, **1er appui** et **2e appui**, chacune avec ses boutons Ajouter / Modifier / Retirer / Remplacer au-dessus de sa liste de blocs. Les touches existantes ne changent pas.
+
+![Éditeur de touche ON/OFF 0.16.1 avec les cartes 1er appui et 2e appui, capture du harnais Windows hors écran](docs/images/v0161-onoff-cards-fr.png)
+
+![Onglet Plugins 0.16.1 avec le bouton Magasin et le menu Importer, capture du harnais Windows hors écran](docs/images/v0161-plugins-tab-fr.png)
+
+Ces captures proviennent du harnais d'interface Windows hors écran, pas d'un essai sur un deck connecté. Voir les [notes de version 0.16.1](docs/RELEASE-0.16.1.md).
 
 ## Nouveautés 0.16.0
 

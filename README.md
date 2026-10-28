@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.0"><img src="https://img.shields.io/badge/Release-v0.16.0-3478F6.svg" alt="Release v0.16.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.1"><img src="https://img.shields.io/badge/Release-v0.16.1-3478F6.svg" alt="Release v0.16.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -22,11 +22,21 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
-### Plugin action feedback
+## What's new in 0.16.1
 
-Successful plugin actions no longer display a green OK badge on keys.
+- **No more green badge after a plugin action:** when a plugin reports success (for example RivaTuner OSD), the key no longer shows a green check badge for one second. Error alerts are still shown.
+- **Tidier Plugins tab:** the **Plugin store** button sits at the top, followed by installed plugins. The three import options and *Refresh* are grouped in a single **Import…** menu, and technical status text is gone.
+- **Clearer ON/OFF (toggle) key editor:** two side-by-side cards, **First press** and **Second press**, each with its own Add / Edit / Remove / Replace buttons above its block list. Existing keys are unchanged.
+
+![0.16.1 ON/OFF key editor with First press and Second press cards, French UI, off-screen Windows UI capture](docs/images/v0161-onoff-cards-fr.png)
+
+![0.16.1 Plugins tab with the store button and the Import menu, French UI, off-screen Windows UI capture](docs/images/v0161-plugins-tab-fr.png)
+
+These are off-screen UI captures from the Windows test harness (French interface), not tests on a connected deck. See the [0.16.1 release notes](docs/RELEASE-0.16.1.md).
 
 ## What's new in 0.16.0
+
+### Hardware ON/OFF key fixes (Stream Deck)
 
 Pressing an ON/OFF or toggle key on a physical deck no longer renders a persistent red dot (the internal state badge overlay "1/2" has been eliminated from hardware rendering). In addition, key presses immediately and atomically update only the targeted key face without a full-deck re-upload, removing the brief transient flash of the default NovyDeck logo.
 
