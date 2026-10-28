@@ -3315,7 +3315,7 @@ impl App {
                                     changed |= onoff_branch_card(ui, steps, choice, &mut branch, &mut selected_step,
                                         &names[active], &mut removed_step, &mut branch_edit);
                                 };
-                                if ui.available_width() >= 560.0 {
+                                if ui.available_width() >= 360.0 {
                                     ui.columns(2, |columns| {
                                         show_card(&mut columns[0], 0, a);
                                         show_card(&mut columns[1], 1, b);
@@ -5177,8 +5177,9 @@ fn onoff_branch_card(
     let mut addition = None;
     let mut replacement = None;
     let mut removal = None;
-    let color = if *branch == choice { theme::palette(ui.ctx()).accent } else { theme::palette(ui.ctx()).raised };
-    egui::Frame::new().fill(color).corner_radius(8).inner_margin(10).show(ui, |ui| {
+    let palette = theme::palette(ui.ctx());
+    let stroke = if *branch == choice { egui::Stroke::new(2.0, palette.accent) } else { egui::Stroke::new(1.0, palette.border) };
+    egui::Frame::new().fill(palette.raised).stroke(stroke).corner_radius(8).inner_margin(10).show(ui, |ui| {
         ui.set_min_width((ui.available_width() - 20.0).max(100.0));
         if ui.selectable_label(*branch == choice, RichText::new(title).strong()).clicked() { *branch = choice; *selected = 0; }
         for (i, step) in steps.iter().enumerate() {
