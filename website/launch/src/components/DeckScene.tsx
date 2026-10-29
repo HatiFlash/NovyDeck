@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 import { Group, LinearFilter, SRGBColorSpace, TextureLoader } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -14,6 +14,7 @@ const keys = Array.from({ length: 15 }, (_, i) => `assets/key-${String(i).padSta
 
 function Hardware() {
   const group = useRef<Group>(null);
+  const [lit, setLit] = useState(7);
   const textures = useLoader(TextureLoader, keys);
   const { invalidate } = useThree();
   useMemo(() => {
@@ -25,15 +26,27 @@ function Hardware() {
   }, [textures]);
 
   useEffect(() => {
-    const update = (event: Event) => {
-      const value = Math.max(0, Math.min(1, (event as CustomEvent<number>).detail));
+    let pointer = { x: 0, y: 0 };
+    let scroll = 0;
+    const render = () => {
       if (!group.current) return;
-      group.current.rotation.set(-0.11 + value * 0.27, -0.35 + value * 0.83, -0.055 + value * 0.12);
-      group.current.position.set(0, 0.2 - value * 0.18, -value * 0.55);
+      group.current.rotation.set(-0.11 + scroll * 0.18 + pointer.y * 0.1, -0.35 + scroll * 0.4 + pointer.x * 0.3, -0.055 + pointer.x * 0.07);
+      group.current.position.set(0, 0.2 - scroll * 0.13, 0);
       invalidate();
     };
-    window.addEventListener("novydeck:product-progress", update);
-    return () => window.removeEventListener("novydeck:product-progress", update);
+    const onPointer = (event: Event) => {
+      pointer = (event as CustomEvent<{ x: number; y: number }>).detail;
+      setLit(Math.max(0, Math.min(14, Math.floor((pointer.x + .5) * 5) + Math.floor((pointer.y + .5) * 3) * 5)));
+      render();
+    };
+    const onScroll = () => {
+      scroll = Math.max(0, Math.min(1, window.scrollY / Math.max(window.innerHeight, 1)));
+      render();
+    };
+    window.addEventListener("novydeck:hero-pointer", onPointer);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => { window.removeEventListener("novydeck:hero-pointer", onPointer); window.removeEventListener("scroll", onScroll); };
   }, [invalidate]);
 
   return (
@@ -50,7 +63,7 @@ function Hardware() {
       {textures.map((texture, i) => (
         <group key={i} position={[(i % 5 - 2) * 1.13, 0.27, (Math.floor(i / 5) - 1) * 1.13]}>
           <mesh geometry={cap} castShadow>
-            <meshStandardMaterial color="#151d30" metalness={0.40} roughness={0.47} />
+            <meshStandardMaterial color={i === lit ? "#b88f77" : "#151d30"} emissive={i === lit ? "#dc9164" : "#000000"} emissiveIntensity={i === lit ? 0.75 : 0} metalness={0.40} roughness={0.47} />
           </mesh>
           <mesh position={[0, 0.162, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[0.87, 0.86]} />

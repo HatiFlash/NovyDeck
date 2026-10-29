@@ -1,119 +1,69 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-const output = (name: string) => `test-results/novy-launch-${name}.png`;
-
-test("desktop: sections, media, interactions, download", async ({ page }) => {
-  const errors: string[] = [];
-  const failed: string[] = [];
-  page.on("pageerror", error => errors.push(error.message));
-  page.on("response", response => { if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`); });
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Votre deck.");
-  await expect(page.locator("main section")).toHaveCount(10);
-  await page.screenshot({ path: output("hero-desktop") });
-  await page.locator("#product-story").scrollIntoViewIfNeeded();
-  await expect(page.locator(".scene-canvas canvas")).toBeVisible();
-  await page.screenshot({ path: output("story-desktop") });
-  await page.locator("#showcase").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: output("showcase-desktop") });
-  await expect(page.getByRole("tab")).toHaveCount(10);
-  for (const [index, label, file] of [["01", "Actions ON/OFF", "v0151-onoff"], ["02", "Supprimer dans l’Atelier", "v0151-workshop"], ["03", "Assistant 0.15", "v015-assistant"], ["04", "Précision plugin 0.15", "v015-question"]]) {
-    await page.getByRole("tab", { name: new RegExp(`${index}.*${label}`) }).click();
-    const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
-    await expect(panel.locator(".micro")).toHaveText(`${index} / 10`);
-    await expect(panel.locator(`a[href*='${file}-fr.webp']`)).toHaveAttribute("aria-label", /Agrandir la capture/);
-    await expect(panel.locator("img")).toBeVisible();
-    await panel.locator("img").scrollIntoViewIfNeeded();
-    await expect.poll(() => panel.locator("img").evaluate(img => (img as HTMLImageElement).naturalWidth), { timeout: 10_000 }).toBeGreaterThan(0);
-  }
-  await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /fixture plugin SoundPad inerte/);
-  await page.getByRole("tab", { name: /07.*États ON/ }).click();
-  await expect(page.getByRole("heading", { name: "Le bon état, au bon moment." })).toBeVisible();
-  await page.getByRole("tab", { name: /09.*Atelier 0\.14/ }).click();
-  await expect(page.getByRole("img", { name: /Capture française de l’Atelier 0\.14/ })).toBeVisible();
-  await page.screenshot({ path: output("workshop-014-desktop") });
-  await page.getByRole("tab", { name: /10.*Quoi de neuf/ }).click();
-  await expect(page.getByRole("link", { name: /offre de mise à jour 0\.13/ })).toHaveAttribute("href", /v014-update-fr\.webp/);
-  await page.screenshot({ path: output("whats-new-014-desktop") });
-  await page.getByRole("button", { name: "Clair" }).click();
-  await expect(page.getByRole("img", { name: "Interface NovyDeck en thème clair" })).toBeVisible();
-  await page.locator("#workflow").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: output("workflow-desktop") });
-  await expect(page.locator(".flow-step")).toHaveCount(5);
-  const href = await page.getByRole("link", { name: "Installateur Windows v0.15.1" }).getAttribute("href");
-  expect(href).toContain("v0.15.1/NovyDeck-0.15.1-Setup.exe");
-  for (const section of ["assistant", "plugins", "integrations", "film", "download"]) {
-    await page.locator(`#${section}`).scrollIntoViewIfNeeded();
-    await page.waitForTimeout(200);
-  }
-  const broken = await page.locator("img").evaluateAll(images => images.filter(i => !(i as HTMLImageElement).complete || !(i as HTMLImageElement).naturalWidth).map(i => (i as HTMLImageElement).src));
-  expect(broken).toEqual([]);
-  expect(errors).toEqual([]);
-  expect(failed).toEqual([]);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-});
-
-test("mobile: responsive, navigation and lightweight scene", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", error => errors.push(error.message));
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/", { waitUntil: "networkidle" });
-  await page.screenshot({ path: output("hero-mobile") });
-  await expect(page.locator(".scene-canvas canvas")).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole("button", { name: "Ouvrir le menu" }).click();
-  await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: "Atelier" }).click();
-  await expect(page.locator("#workflow")).toBeInViewport();
-  await page.screenshot({ path: output("workflow-mobile") });
-  await page.getByRole("tab", { name: /08.*Médias/ }).click();
-  await expect(page.getByRole("heading", { name: "Cadrez sans abîmer." })).toBeVisible();
-  await page.getByRole("button", { name: "Switch to English" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your deck.");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByRole("tab")).toHaveCount(10);
-  await page.getByRole("tab", { name: /03.*Assistant 0\.15/ }).click();
-  await expect(page.locator("#showcase [role=tabpanel][data-state=active] img")).toHaveAttribute("alt", /French example request/);
-  await page.getByRole("tab", { name: /07.*ON \/ OFF/ }).click();
-  await expect(page.getByRole("heading", { name: "The right state at the right time." })).toBeVisible();
-  await page.getByRole("tab", { name: /08.*Media/ }).click();
-  await expect(page.getByRole("heading", { name: "Crop without damage." })).toBeVisible();
-  await page.getByRole("tab", { name: /10.*What’s new/ }).click();
-  await expect(page.getByRole("link", { name: /update offer/ })).toHaveAttribute("href", /v014-update-en\.webp/);
-  expect(errors).toEqual([]);
-});
-
-test("reduced motion: no 3D, no smooth scrolling, static poster", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.locator(".scene-canvas canvas")).toHaveCount(0);
-  await expect(page.locator(".device-fallback")).toBeVisible();
-  expect(await page.locator("#film video").evaluate(v => (v as HTMLVideoElement).paused)).toBe(true);
-  await page.screenshot({ path: output("reduced-motion") });
-});
-
-test("intermediate widths and accessible landmarks", async ({ page }) => {
-  for (const width of [768, 1024]) {
-    await page.setViewportSize({ width, height: 800 });
+const installer = "v0.16.1/NovyDeck-0.16.1-Setup.exe";
+for (const width of [320, 390, 768, 1024, 1440]) {
+  test(`responsive ${width}px: sections, images, no errors`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("response", response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
     await page.goto("/", { waitUntil: "networkidle" });
-    for (const selector of ["#top", "#product-story", "#showcase", "#workflow", "#plugins"]) {
-      await page.locator(selector).scrollIntoViewIfNeeded();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}px ${selector}`).toBe(true);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Chaque touche");
+    await expect(page.locator("main section")).toHaveCount(6);
+    await expect(page.locator(".story-row")).toHaveCount(5);
+    await expect(page.locator(".bento-card")).toHaveCount(3);
+    for (const card of await page.locator(".bento-card").all()) await card.scrollIntoViewIfNeeded();
+    await expect.poll(() => page.locator(".bento-card img").evaluateAll(nodes => nodes.every(node => (node as HTMLImageElement).naturalWidth > 0))).toBe(true);
+    const cards = await page.locator(".bento-card").evaluateAll(nodes => nodes.map(card => {
+      const copy = card.querySelector(".bento-copy")!.getBoundingClientRect();
+      const capture = card.querySelector("a")!.getBoundingClientRect();
+      const image = card.querySelector("img")!;
+      const box = card.getBoundingClientRect();
+      return { gap: capture.top - copy.bottom, top: box.top, fit: getComputedStyle(image).objectFit, loaded: image.naturalWidth > 0 };
+    }));
+    expect(cards.every(card => card.gap >= 0 && card.gap <= 45 && card.fit === "contain" && card.loaded)).toBe(true);
+    if (width >= 1024) expect(cards.every(card => Math.abs(card.top - cards[0].top) < 2)).toBe(true);
+    await expect(page.locator(`a[href*='${installer}']`)).toHaveCount(2);
+    for (const section of ["#top", "#story", "#features", "#compatibility", "#faq", "#download"]) {
+      await page.locator(section).scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px overflow at ${section}`).toBe(true);
     }
-  }
-  await page.goto("/", { waitUntil: "networkidle" });
+    for (const image of ["v0161-onoff-cards-fr", "v0161-plugins-tab-fr"]) {
+      const img = page.locator(`.story-visual img[src*='${image}']`);
+      await img.scrollIntoViewIfNeeded();
+      await expect.poll(() => img.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      await expect(page.locator(`.story-visual a[href*='${image}']`)).toHaveCount(1);
+    }
+    if (width < 900) await expect(page.locator(".stage-deck canvas")).toHaveCount(0);
+    else { await page.locator("#top").scrollIntoViewIfNeeded(); await expect(page.locator(".stage-deck canvas")).toBeVisible({ timeout: 15_000 }); }
+    expect(errors).toEqual([]);
+  });
+}
+
+test("language, keyboard navigation, FAQ and axe", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Aller au contenu" })).toBeFocused();
+  await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+  await page.getByRole("navigation", { name: "Navigation principale" }).getByRole("link", { name: "Questions" }).click();
+  await page.locator("#faq summary").first().click();
+  await expect(page.locator("#faq details").first()).toHaveAttribute("open", "");
+  await page.getByRole("button", { name: "Passer en anglais" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Every key");
+  await expect(page.locator(".story-row")).toHaveCount(5);
+  await expect(page.locator("img[alt*='French off-screen Windows harness']")).toHaveCount(2);
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
 
-test("small phone: no overflow across chapters", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 690 });
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  for (const selector of ["#top", "#product-story", "#showcase", "#workflow", "#assistant", "#download"]) {
-    await page.locator(selector).scrollIntoViewIfNeeded();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${selector}`).toBe(true);
-  }
-  await page.screenshot({ path: output("phone-320") });
+test("reduced motion disables WebGL", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/", { waitUntil: "networkidle" });
+  await expect(page.locator(".stage-deck canvas")).toHaveCount(0);
+  await expect(page.locator(".static-deck")).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("auto");
 });
