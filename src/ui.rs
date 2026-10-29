@@ -2577,6 +2577,7 @@ impl App {
                 theme::search_field(ui, &mut self.catalog_search, tr("Rechercher une action…"));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
+                    let mut active_pill = None;
                     for (i, label) in [tr("Actions"), tr("Modèles"), tr("Enregistrés"), tr("Plugins")]
                         .iter()
                         .enumerate()
@@ -2584,16 +2585,11 @@ impl App {
                         let (r, response) =
                             ui.allocate_exact_size(Vec2::new(62.0, 48.0), egui::Sense::click());
                         let selected = i == self.catalog_tab;
+                        if selected { active_pill = Some(r); }
                         ui.painter().rect_filled(
                             r,
                             8.0,
-                            if selected {
-                                p.raised
-                            } else if response.hovered() {
-                                p.hover
-                            } else {
-                                p.sunken
-                            },
+                            if response.hovered() { p.hover } else { p.sunken },
                         );
                         iconset::paint(
                             ui.painter(),
@@ -2620,8 +2616,13 @@ impl App {
                             self.catalog_search.clear();
                         }
                     }
+                    if let Some(target) = active_pill {
+                        let rect = motion::indicator(ui.ctx(), egui::Id::new("library_pill"), target, self.animations());
+                        ui.painter().set(pill_shape, egui::Shape::rect_filled(rect, 8.0, p.accent_soft.gamma_multiply(0.45)));
+                    }
                 });
                 ui.add_space(6.0);
+                let library_slide = motion::begin_slide(ui, "library", self.catalog_tab as i32, self.animations());
                 motion::fade(ui, "library_tab", self.catalog_tab, 0.15, self.animations());
                 let search = self.catalog_search.to_lowercase();
                 if self.catalog_tab == 3 {
@@ -2928,6 +2929,7 @@ impl App {
                         );
                     }
                 }
+                motion::end_slide(ui, library_slide);
             });
     }
     fn footer(&mut self, ctx: &egui::Context) {
@@ -2988,13 +2990,15 @@ impl App {
                 });
             });
         if self.show_logs {
+            let collapsed = self.preferences.activity_collapsed;
+            let activity_t = ctx.animate_bool_with_time(egui::Id::new("activity_height"), !collapsed, if self.animations() { 0.26 } else { 0.0 });
+            let activity_height = 36.0 + 129.0 * motion::ease_out(activity_t);
             egui::TopBottomPanel::bottom("logs")
-                .default_height(if self.preferences.activity_collapsed { 36.0 } else { 165.0 })
-                .height_range(if self.preferences.activity_collapsed { 36.0..=36.0 } else { 100.0..=320.0 })
-                .resizable(!self.preferences.activity_collapsed)
-                .frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, if self.preferences.activity_collapsed { 4 } else { 12 })))
+                .default_height(activity_height)
+                .height_range(if activity_t < 1.0 || collapsed { activity_height..=activity_height } else { 100.0..=320.0 })
+                .resizable(!collapsed && activity_t >= 1.0)
+                .frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, if collapsed { 4 } else { 12 })))
                 .show(ctx, |ui| {
-                    motion::fade(ui, "activity", self.preferences.activity_collapsed, 0.55, self.animations());
                     ui.horizontal(|ui| {
                         let chevron = if self.preferences.activity_collapsed { "▸" } else { "▾" };
                         if ui.button(format!("{chevron} {}", tr("Activité récente"))).clicked() {
@@ -3059,14 +3063,19 @@ impl App {
             if two_rows { ui.horizontal(|ui| actions(self, ui, &mut buttons)); }
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
+                let mut active_tab_rect = None;
                 for (i, ico, label) in [(0u8, Ico::Actions, tr("Action")), (1u8, Ico::Palette, tr("Apparence")), (2u8, Ico::Advanced, tr("Avancé"))] {
                     let button = match iconset::image(ui.ctx(), ico, 14.0) {
                         Some(image) => egui::Button::image_and_text(image, label),
                         None => egui::Button::new(label),
                     }.fill(Color32::TRANSPARENT).stroke(egui::Stroke::NONE);
                     let response = ui.add(button);
-                    if tab == i { ui.painter().line_segment([response.rect.left_bottom(), response.rect.right_bottom()], egui::Stroke::new(2.0, p.accent)); }
                     if response.on_hover_text(label).clicked() { tab = i; }
+                    if tab == i { active_tab_rect = Some(response.rect); }
+                }
+                if let Some(target) = active_tab_rect {
+                    let r = motion::indicator(ui.ctx(), egui::Id::new("inspector_tab_indicator"), target, self.animations());
+                    ui.painter().line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(2.0, p.accent));
                 }
                 if tab == 0 {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -3495,8 +3504,8 @@ impl App {
                                                 if clicked { *count += 1; }
                                                 *count
                                             });
-                                            let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.18, enabled);
-                                            let shrink = if clicks == 0 || !enabled { 1.0 } else { 1.0 - 0.04 * (1.0 - (2.0 * phase - 1.0).abs()) };
+                                            let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.26, enabled);
+                                            let shrink = if clicks == 0 || !enabled { 1.0 } else { motion::bounce(phase) };
                                             let painted = egui::Rect::from_center_size(r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)), r.size() * shrink);
                                             match chassis {
                                                 Some(s) => crate::deck_chassis::paint_face(ui.painter(), painted, s, selected, hover, flashing, motion::deck_color(ctx, self.preferences.deck_color, enabled)),
@@ -4454,11 +4463,11 @@ impl App {
                 });
             self.show_device_report = open;
         }
-        let _ = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.18, self.animations());
+        let _ = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
         if self.settings {
             let mut open = true;
             let d6 = self.is_d6();
-            theme::fixed_window(trf("Réglages — {device}", &[("device", &self.device_name())])).id(egui::Id::new("device_settings"))
+            let settings_window = theme::fixed_window(trf("Réglages — {device}", &[("device", &self.device_name())])).id(egui::Id::new("device_settings"))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -4466,8 +4475,8 @@ impl App {
                 .default_height(540.0)
                 .vscroll(true)
                 .show(ctx, |ui| {
-                    let appear = motion::progress(ui.ctx(), egui::Id::new("settings_visibility"), self.settings, 0.18, self.animations());
-                    if appear < 1.0 { ui.set_opacity(0.65 + 0.35 * appear); }
+                    let appear = motion::progress(ui.ctx(), egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
+                    if appear < 1.0 { ui.set_opacity(appear); }
                     // Onglets : la fenêtre reste courte et tient sur un écran de portable.
                     ui.horizontal(|ui| {
                         for (i, (ico, label)) in [(Ico::Palette, tr("Général")), (Ico::Device, tr("Périphérique")), (Ico::Diagnostic, "Diagnostic")].into_iter().enumerate() {
@@ -4667,6 +4676,17 @@ impl App {
                         }
                     }
                 });
+            if let Some(window) = settings_window {
+                let appear = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
+                if appear < 1.0 {
+                    let scale = 0.96 + 0.04 * appear;
+                    let center = window.response.rect.center();
+                    ctx.transform_layer_shapes(window.response.layer_id, egui::emath::TSTransform {
+                        scaling: scale,
+                        translation: center.to_vec2() * (1.0 - scale),
+                    });
+                }
+            }
             self.settings = open;
         }
         if self.rename {

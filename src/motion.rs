@@ -27,8 +27,8 @@ pub fn system_animations() -> bool {
     })
 }
 
-/// Durée d'un fondu de page ou d'onglet.
-pub const FADE: f64 = 0.24;
+/// Durée des transitions entre onglets et pages.
+pub const FADE: f64 = 0.26;
 /// Durée totale de l'intro (logo, puis fondu vers l'interface).
 pub const INTRO: f64 = 1.15;
 const INTRO_HOLD: f64 = 0.6;
@@ -65,14 +65,75 @@ pub fn progress(ctx: &egui::Context, id: egui::Id, key: impl Hash, seconds: f64,
     ease_out(t)
 }
 
-/// Fondu du reste du contenu de `ui` quand `key` change (page, onglet, profil…).
-/// L'opacité part de `from` pour rester discrète ; les positions ne bougent pas.
-pub fn fade(ui: &mut egui::Ui, id: &str, key: impl Hash, from: f32, enabled: bool) {
-    let seconds = if id == "settings_appear" || id == "activity" { 0.18 } else { FADE };
-    let t = progress(ui.ctx(), egui::Id::new(("motion_fade", id)), key, seconds, enabled);
-    if t < 1.0 {
-        ui.set_opacity(from + (1.0 - from) * t);
-    }
+/// Fondu du contenu quand `key` change, de transparent à opaque.
+pub fn fade(ui: &mut egui::Ui, id: &str, key: impl Hash, _from: f32, enabled: bool) {
+    let t = progress(ui.ctx(), egui::Id::new(("motion_fade", id)), key, FADE, enabled);
+    if t < 1.0 { ui.set_opacity(t); }
+}
+
+/// Position de l'indicateur : mémorise le rectangle précédent, sans déplacer les hit-tests.
+pub fn indicator(ctx: &egui::Context, id: egui::Id, target: egui::Rect, enabled: bool) -> egui::Rect {
+    let time = now(ctx);
+    let (from, to, start) = ctx.data_mut(|d| {
+        let state = d.get_temp_mut_or_insert_with(id, || (target, target, time - FADE));
+        if state.1 != target {
+            let t = ease_out(((time - state.2) / FADE) as f32);
+            state.0 = egui::Rect::from_min_max(state.0.min.lerp(state.1.min, t), state.0.max.lerp(state.1.max, t));
+            state.1 = target;
+            state.2 = time;
+        }
+        *state
+    });
+    if !enabled { return target; }
+    let t = ease_out(((time - start) / FADE) as f32);
+    if t < 1.0 { ctx.request_repaint(); }
+    egui::Rect::from_min_max(from.min.lerp(to.min, t), from.max.lerp(to.max, t))
+}
+
+/// Glissement du dessin seulement : l'UI réelle reste à sa place pour le layout et les clics.
+/// `begin_slide` précède le contenu et `end_slide` suit sa dernière forme peinte.
+pub struct Slide {
+    first: usize,
+    layer: egui::LayerId,
+    clip: egui::Rect,
+    offset: f32,
+}
+
+pub fn begin_slide(ui: &egui::Ui, id: &str, index: i32, enabled: bool) -> Slide {
+    let ctx = ui.ctx();
+    let previous = ctx.data_mut(|d| {
+        let slot = d.get_temp_mut_or_insert_with(egui::Id::new(("slide_index", id)), || index);
+        let previous = *slot;
+        *slot = index;
+        previous
+    });
+    let direction = if index >= previous { 1.0 } else { -1.0 };
+    let t = progress(ctx, egui::Id::new(("slide_progress", id)), index, FADE, enabled);
+    let layer = ui.layer_id();
+    let first = ctx.graphics_mut(|g| g.entry(layer).next_idx().0);
+    Slide { first, layer, clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()), offset: direction * 38.0 * (1.0 - t) }
+}
+
+pub fn end_slide(ui: &egui::Ui, slide: Slide) {
+    if slide.offset.abs() < 0.01 { return; }
+    let ctx = ui.ctx();
+    ctx.graphics_mut(|g| {
+        let paint = g.entry(slide.layer);
+        let end = paint.next_idx().0;
+        for index in slide.first..end {
+            paint.mutate_shape(egui::layers::ShapeIdx(index), |clipped| {
+                clipped.shape.translate(Vec2::new(slide.offset, 0.0));
+                clipped.clip_rect = clipped.clip_rect.intersect(slide.clip);
+            });
+        }
+    });
+}
+
+/// Impulsion amortie sur la face peinte seulement (les rectangles interactifs restent fixes).
+pub fn bounce(t: f32) -> f32 {
+    if t < 0.38 { 1.0 - 0.08 * ease_out(t / 0.38) }
+    else if t < 0.70 { 0.92 + 0.12 * ease_out((t - 0.38) / 0.32) }
+    else { 1.04 - 0.04 * ease_out((t - 0.70) / 0.30) }
 }
 
 /// Interpole une nouvelle couleur de boîtier sans toucher aux rectangles ni au choix sauvegardé.
@@ -242,6 +303,31 @@ mod tests {
         assert!(!delays[4].is_zero(), "pas de boucle de rendu après la fin");
         assert_eq!(values[5], 1.0);
         assert!(!delays[5].is_zero(), "préférence désactivée : pas de repaint");
+    }
+
+    #[test]
+    fn bounce_and_indicator_keep_final_layout_and_stop_repainting() {
+        assert_eq!(bounce(0.0), 1.0);
+        assert_eq!(bounce(0.38), 0.92);
+        assert_eq!(bounce(0.70), 1.04);
+        assert_eq!(bounce(1.0), 1.0);
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("indicator_test");
+        let a = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), Vec2::new(40.0, 2.0));
+        let b = egui::Rect::from_min_size(egui::pos2(110.0, 20.0), Vec2::new(60.0, 2.0));
+        let mut seen = Vec::new();
+        let mut delays = Vec::new();
+        for (time, rect) in [(0.0, a), (0.1, b), (0.16, b), (0.4, b), (0.5, b)] {
+            let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| seen.push(indicator(ctx, id, rect, true)));
+            delays.push(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay);
+        }
+        assert_eq!(seen[0], a);
+        assert_eq!(seen[1], a);
+        assert!(seen[2].min.x > a.min.x && seen[2].min.x < b.min.x);
+        assert_eq!(seen[3], b);
+        assert!(!delays[4].is_zero(), "aucun repaint après l'arrivée");
+        let output = ctx.run(egui::RawInput { time: Some(0.6), ..Default::default() }, |ctx| assert_eq!(indicator(ctx, id, a, false), a));
+        assert!(!output.viewport_output[&egui::ViewportId::ROOT].repaint_delay.is_zero());
     }
 
     #[test]

@@ -872,6 +872,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
     ) {
     let p = theme::palette(ui.ctx());
     let ctx = ui.ctx().clone();
+    let enabled = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("workshop_motion_enabled"))).unwrap_or(false);
     let dragging = workshop_dragging(&ctx);
     let dragged = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")));
     // Cible calculée à l'image précédente : l'emplacement est dessiné là où le dépôt aurait lieu.
@@ -1082,6 +1083,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
                 ctx.data_mut(|d| {
                     d.insert_temp(egui::Id::new("workshop_drag"), path.clone());
                     d.insert_temp(egui::Id::new("workshop_grab"), grab);
+                    d.remove::<(egui::Pos2, f64)>(egui::Id::new("workshop_float_pos"));
                 });
             }
             let pointer_on_control = ui.input(|i| i.pointer.hover_pos()).is_some_and(|pos| menu_rect.contains(pos) || chevron_rect.contains(pos) || settings_rect.contains(pos));
@@ -1110,7 +1112,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             } else if collapsed {
                 ctx.data_mut(|d| d.remove::<f64>(hover_id));
             }
-            if is_dragged { workshop_ghost(&ctx, step, &format!("{numbering}{}", i + 1), r.width(), plugins); }
+            if is_dragged { workshop_ghost(&ctx, step, &format!("{numbering}{}", i + 1), r.width(), plugins, enabled); }
             // Zones de dépôt : moitié haute = avant, moitié basse = après (en-tête / pied pour un conteneur).
             // Elles débordent de 11 px dans l'interstice entre cartes pour qu'aucun pixel ne soit « sans cible ».
             let split = if has_branches { header_bottom + 2.0 } else { r.center().y };
@@ -1165,14 +1167,31 @@ fn grip_shape(rect: egui::Rect, color: Color32) -> egui::Shape {
     }
     egui::Shape::Vec(dots)
 }
-/// Carte « fantôme » qui suit la souris : même pastille, numéro et titre que le bloc saisi, ombre douce.
-/// Calque Tooltip non interactif : elle ne perturbe jamais la détection du survol dessous.
-fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, plugins: &[crate::plugins::Plugin]) {
+/// Le dessin suit un ressort amorti ; l'état n'existe que pendant le geste et ne change aucun hit-test.
+fn workshop_float_pos(ctx: &egui::Context, target: egui::Pos2, enabled: bool) -> egui::Pos2 {
+    let id = egui::Id::new("workshop_float_pos");
+    let now = ctx.input(|i| i.time);
+    let previous = ctx.data(|d| d.get_temp::<(egui::Pos2, f64)>(id));
+    let result = if enabled {
+        previous.map_or(target, |(old, then)| {
+            let dt = (now - then).clamp(0.0, 0.05) as f32;
+            let factor = 1.0 - (-dt * 24.0).exp();
+            old.lerp(target, factor)
+        })
+    } else { target };
+    ctx.data_mut(|d| d.insert_temp(id, (result, now)));
+    if enabled && result.distance(target) > 0.4 { ctx.request_repaint(); }
+    result
+}
+/// Calque Tooltip non interactif : la carte ne perturbe jamais le survol des blocs dessous.
+fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, plugins: &[crate::plugins::Plugin], enabled: bool) {
     let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
     let grab = ctx.data(|d| d.get_temp::<egui::Vec2>(egui::Id::new("workshop_grab"))).unwrap_or(egui::vec2(24.0, 16.0));
     let p = theme::palette(ctx);
     let texts = card_texts(step, plugins);
-    egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(pos - grab).show(ctx, |ui| {
+    let target = pos - grab;
+    let position = workshop_float_pos(ctx, target, enabled);
+    let area = egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(position).show(ctx, |ui| {
         egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(egui::Margin::symmetric(10, 6))
             .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
             .show(ui, |ui| {
@@ -1195,12 +1214,20 @@ fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, pl
                 });
             });
     });
+    if enabled {
+        let scale = 1.05;
+        ctx.transform_layer_shapes(area.response.layer_id, egui::emath::TSTransform {
+            scaling: scale,
+            translation: area.response.rect.center().to_vec2() * (1.0 - scale),
+        });
+    }
 }
 /// Fantôme d'un bloc de la bibliothèque glissé vers la séquence.
-fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins: &[crate::plugins::Plugin]) {
+fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins: &[crate::plugins::Plugin], enabled: bool) {
     let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
     let p = theme::palette(ctx);
-    egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(pos + egui::vec2(14.0, -14.0)).show(ctx, |ui| {
+    let position = workshop_float_pos(ctx, pos + egui::vec2(14.0, -14.0), enabled);
+    let area = egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(position).show(ctx, |ui| {
         egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(egui::Margin::symmetric(10, 6))
             .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
             .show(ui, |ui| {
@@ -1211,6 +1238,13 @@ fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins
                 });
             });
     });
+    if enabled {
+        let scale = 1.05;
+        ctx.transform_layer_shapes(area.response.layer_id, egui::emath::TSTransform {
+            scaling: scale,
+            translation: area.response.rect.center().to_vec2() * (1.0 - scale),
+        });
+    }
 }
 /// Enregistre la cible de dépôt sous le pointeur. Le chemin le plus profond gagne ; `weak` ne vaut que
 /// si aucune cible plus précise n'a été trouvée. Déposer un bloc dans sa propre descendance est refusé.
@@ -1369,6 +1403,7 @@ impl App {
                 d.remove::<Vec<usize>>(egui::Id::new("workshop_drag"));
                 d.remove::<usize>(egui::Id::new("workshop_palette_drag"));
                 d.remove::<(String, String)>(egui::Id::new("workshop_palette_plugin"));
+                d.remove::<(egui::Pos2, f64)>(egui::Id::new("workshop_float_pos"));
             });
         }
         let mut insert_at = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_insert_at")));
@@ -1572,6 +1607,8 @@ impl App {
         }
         self.workshop_chat(ctx, selection.as_deref());
         let highlight = if selected_trace.is_empty() { &self.running_block } else { &selected_trace };
+        let motion_enabled = self.animations();
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_motion_enabled"), motion_enabled));
         egui::CentralPanel::default().show(ctx, |ui| {
             // Un appui-glissé sur une carte déplace le bloc : jamais de sélection de texte dans l'Atelier.
             ui.style_mut().interaction.selectable_labels = false;
@@ -1688,11 +1725,11 @@ impl App {
         }
         if workshop_dragging(ctx) {
             if let Some(kind) = ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))) {
-                workshop_palette_ghost(ctx, &crate::automation::step(kind), block_name(kind), &installed_plugins);
+                workshop_palette_ghost(ctx, &crate::automation::step(kind), block_name(kind), &installed_plugins, motion_enabled);
             }
             if let Some((uuid, action)) = ctx.data(|d| d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin"))) {
                 if let Some(step) = palette_plugin_step(&installed_plugins, &uuid, &action) {
-                    workshop_palette_ghost(ctx, &step, &card_texts(&step, &installed_plugins).0, &installed_plugins);
+                    workshop_palette_ghost(ctx, &step, &card_texts(&step, &installed_plugins).0, &installed_plugins, motion_enabled);
                 }
             }
             let refused = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("workshop_drop_invalid"))).unwrap_or(false);
@@ -1725,6 +1762,7 @@ impl App {
                 d.remove::<Vec<usize>>(egui::Id::new("workshop_drag"));
                 d.remove::<usize>(egui::Id::new("workshop_palette_drag"));
                 d.remove::<(String, String)>(egui::Id::new("workshop_palette_plugin"));
+                d.remove::<(egui::Pos2, f64)>(egui::Id::new("workshop_float_pos"));
             });
         }
         ctx.data_mut(|d| {
