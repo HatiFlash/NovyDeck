@@ -4909,7 +4909,7 @@ impl App {
             if let Some(v) = &mut self.drag_visual {
                 if v.phase == 0 {
                     if let Some((_, target)) = &dropped {
-                        v.target = self.drop_targets.iter().find(|(_, i)| i == target).copied();
+                        v.target = self.drop_targets.iter().find(|(_, i)| i == target).map(|(r, i)| (*i, *r));
                         v.goal = v.target.map_or(v.goal, |(_, r)| r.center());
                         v.phase = 1; v.started = now;
                     } else if !self.drag.moving() {
