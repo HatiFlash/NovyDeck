@@ -3117,6 +3117,7 @@ impl App {
             let pages=self.config.profiles[active].pages.clone();let selected=self.selected;let page_id=self.config.page.clone();let dialog_tx=self.dialog_tx.clone();let image_size=self.config.image_size;
             let source_observation = self.plugin_states.lookup(&self.config, selected, &self.config.keys()[selected]);
             let plugin_catalog = self.plugins.as_ref().map(|m| m.catalog.as_slice());
+            let inspector_enabled = self.animations();
             let key=&mut self.config.keys_mut()[selected];
             let mut removed_step=false; let mut changed=false; let mut add_kind=None; let mut record_step=None; let mut open_icons=false; let mut recrop=false; let mut state_icon=None; let mut state_file=None; let mut pick_audio=None; let mut open_workflow=false; let mut open_assistant=false; let mut open_model=false; let mut advanced: Option<u8>=None;
             if let Some(binding)=key.plugin.clone(){
@@ -3141,8 +3142,8 @@ impl App {
             // Une seule réservation : l'UI enfant dessine dedans sans allouer une deuxième hauteur.
             let (body, _) = ui.allocate_exact_size(Vec2::new(width, body_height), egui::Sense::hover());
             let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::left_to_right(egui::Align::Min)));
-            let inspector_slide = motion::begin_slide(&body_ui, "inspector_body", (tab as i32) * 2 + i32::from(tab == 0 && self.long_editor), self.animations());
-            motion::fade(&mut body_ui, "inspector_body", (tab, self.long_editor, self.selected, self.config.page.clone()), 0.0, self.animations());
+            let inspector_slide = motion::begin_slide(&body_ui, "inspector_body", (tab as i32) * 2 + i32::from(tab == 0 && long_editor), inspector_enabled);
+            motion::fade(&mut body_ui, "inspector_body", (tab, long_editor, selected, &page_id), 0.0, inspector_enabled);
             body_ui.horizontal_top(|ui| {
                 let lower = key.image.to_ascii_lowercase();
                 let can_recrop = !key.image.is_empty() && !lower.ends_with(".svg") && std::path::Path::new(&key.image).is_file();
