@@ -46,22 +46,25 @@ export default function LaunchExperience() {
   const [lang, setLang] = useState<Language>("fr");
   const [menuOpen, setMenuOpen] = useState(false);
   const [allow3D, setAllow3D] = useState(false);
-  const [near, setNear] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
   const t = content[lang];
   useEffect(() => {
     if (localStorage.getItem("novydeck-launch-language") === "en") setLang("en");
-    const media = matchMedia("(min-width: 900px) and (prefers-reduced-motion: no-preference)");
-    const update = () => setAllow3D(media.matches && !((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData));
+    const media = matchMedia("(min-width: 900px)");
+    const update = () => setAllow3D(media.matches);
     update(); media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
   useEffect(() => {
-    const node = heroRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting), { rootMargin: "180px" });
-    observer.observe(node);
-    return () => observer.disconnect();
+    const nodes = document.querySelectorAll<HTMLElement>(".section-intro, .story-text, .story-visual, .bento-card, .download-grid, .compatibility-grid, .faq-grid");
+    if (!("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add("in-view"); observer.unobserve(entry.target); } });
+    }, { threshold: .12, rootMargin: "0px 0px -30px 0px" });
+    nodes.forEach(node => { node.classList.add("reveal-ready"); observer.observe(node); });
+    const onScroll = () => document.querySelector(".site-header")?.classList.toggle("is-compact", scrollY > 70);
+    addEventListener("scroll", onScroll, { passive: true }); onScroll();
+    return () => { observer.disconnect(); removeEventListener("scroll", onScroll); nodes.forEach(node => node.classList.remove("reveal-ready")); };
   }, []);
   useEffect(() => { document.documentElement.lang = lang; localStorage.setItem("novydeck-launch-language", lang); }, [lang]);
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -72,7 +75,7 @@ export default function LaunchExperience() {
   return <>
     <a className="skip-link" href="#main">{t.skip}</a>
     <header className="site-header"><div className="frame header-content"><a className="brand" href="#top"><img src={shot("novydeck-logo")} width="30" height="30" alt="" />NovyDeck<span className="brand-dot">.</span></a><nav className={`nav-links ${menuOpen ? "open" : ""}`} aria-label={lang === "fr" ? "Navigation principale" : "Main navigation"}>{["#story", "#features", "#compatibility", "#faq"].map((id, i) => <a key={id} href={id} onClick={() => setMenuOpen(false)}>{t.nav[i]}</a>)}</nav><div className="header-actions"><button type="button" className="language" onClick={() => setLang(lang === "fr" ? "en" : "fr")} aria-label={`${lang === "fr" ? "EN" : "FR"} — ${t.language}`}>{lang === "fr" ? "EN" : "FR"}</button><a className="header-cta" href="#download">{t.download}<ArrowUpRight size={16} /></a><button type="button" className="menu-button" aria-label={menuOpen ? t.close : t.menu} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={22} /> : <Menu size={22} />}</button></div></div></header>
-    <main id="main"><section className="hero" id="top" aria-labelledby="hero-title" onPointerMove={move}><div className="hero-glow" aria-hidden="true"/><div className="frame hero-grid"><div className="hero-copy"><p className="eyebrow"><span className="eyebrow-line"/>{t.eyebrow} <span className="version">/ 0.16.1</span></p><h1 id="hero-title">{t.hero.split("\n").map((line, i) => <span key={line} className={i ? "hero-accent" : ""}>{line}</span>)}</h1><p className="hero-intro">{t.intro}</p><div className="hero-actions"><a className="button-primary" href={installer}><Download size={18}/>{t.download}<ArrowUpRight size={17}/></a><a className="text-link" href="#story">{t.explore}<ArrowRight size={17}/></a></div></div><div className="hero-stage" ref={heroRef}><div className="stage-rings" aria-hidden="true"/><div className="stage-deck">{allow3D && near ? <DeckScene /> : <StaticDeck />}</div><div className="stage-index" aria-hidden="true"><span>ND—D6</span><span>15 / LCD</span></div><p className="stage-caption">{t.hint}</p></div></div><div className="frame hero-bottom"><a href="#story">{t.scroll}<ArrowDown size={16}/></a><span>01 — 05 / NOVYDECK</span></div></section>
+    <main id="main"><section className="hero" id="top" aria-labelledby="hero-title" onPointerMove={move}><div className="hero-glow" aria-hidden="true"/><div className="frame hero-grid"><div className="hero-copy"><p className="eyebrow"><span className="eyebrow-line"/>{t.eyebrow} <span className="version">/ 0.16.1</span></p><h1 id="hero-title">{t.hero.split("\n").map((line, i) => <span key={line} className={i ? "hero-accent" : ""}>{line}</span>)}</h1><p className="hero-intro">{t.intro}</p><div className="hero-actions"><a className="button-primary" href={installer}><Download size={18}/>{t.download}<ArrowUpRight size={17}/></a><a className="text-link" href="#story">{t.explore}<ArrowRight size={17}/></a></div></div><div className="hero-stage" ref={heroRef}><div className="stage-rings" aria-hidden="true"/><div className="stage-deck">{allow3D ? <DeckScene /> : <StaticDeck />}</div><div className="stage-index" aria-hidden="true"><span>ND—D6</span><span>15 / LCD</span></div><p className="stage-caption">{t.hint}</p></div></div><div className="frame hero-bottom"><a href="#story">{t.scroll}<ArrowDown size={16}/></a><span>01 — 05 / NOVYDECK</span></div></section>
     <div className="spec-strip"><div className="frame">{t.strip.map((item, i) => <div key={item}><span>0{i + 1}</span>{item}</div>)}</div></div>
     <section id="story" className="story-section" aria-labelledby="story-title"><div className="frame"><div className="section-intro"><p className="eyebrow">{t.storyLabel}</p><h2 id="story-title">{t.storyTitle}</h2><p>{t.storyLead}</p></div><div className="story-list">{t.chapters.map((chapter) => <article className="story-row" key={chapter.num}><div className="story-text"><span className="chapter-number">{chapter.num} <span>/ 05</span></span><p className="eyebrow">{chapter.tag}</p><h3>{chapter.title}</h3><p>{chapter.body}</p><a href={shot(chapter.image)} target="_blank" rel="noopener noreferrer" className="capture-link">{t.capture}<ArrowUpRight size={16}/></a></div><figure className="story-visual"><a href={shot(chapter.image)} target="_blank" rel="noopener noreferrer" aria-label={`${t.capture} : ${chapter.title}`}><img src={shot(chapter.image)} alt={chapter.alt} loading="lazy" /></a><figcaption><span>FIG. {chapter.num}</span>{t.caption}</figcaption></figure></article>)}</div></div></section>
     <section id="features" className="features-section" aria-labelledby="features-title"><div className="frame"><div className="section-intro"><p className="eyebrow">{t.bentoLabel}</p><h2 id="features-title">{t.bentoTitle}</h2></div><div className="bento-grid">{t.bento.map((item, i) => <article className={`bento-card bento-${i}`} key={item.title}><div className="bento-copy"><span>0{i + 1} / 03</span><h3>{item.title}</h3><p>{item.body}</p></div><a href={shot(item.image)} target="_blank" rel="noopener noreferrer" aria-label={`${t.capture} : ${item.title}`}><img src={shot(item.image)} alt={item.alt} loading="lazy" /></a></article>)}</div><p className="capture-disclaimer">{t.caption}</p></div></section>

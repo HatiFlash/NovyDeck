@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
   basePath: basePath || undefined,
-  assetPrefix: basePath ? `${basePath}/` : "./",
+  assetPrefix: basePath ? `${basePath}/` : undefined,
   reactStrictMode: true,
 };
 export default nextConfig;

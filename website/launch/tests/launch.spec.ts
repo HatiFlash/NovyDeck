@@ -59,11 +59,23 @@ test("language, keyboard navigation, FAQ and axe", async ({ page }) => {
   expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
 
-test("reduced motion disables WebGL", async ({ page }) => {
+test("reduced motion keeps responsive WebGL without autonomous motion", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/", { waitUntil: "networkidle" });
-  await expect(page.locator(".stage-deck canvas")).toHaveCount(0);
-  await expect(page.locator(".static-deck")).toBeVisible();
+  await expect(page.locator(".stage-deck canvas")).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("auto");
+});
+
+test("WebGL fits the stage and blue controls have no warm accent", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/", { waitUntil: "networkidle" });
+  const canvas = page.locator(".stage-deck canvas");
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box?.width).toBeGreaterThan(200);
+  expect(box?.width).toBeLessThan(1000);
+  const button = await page.locator(".button-primary").first().evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(button).toBe("rgb(41, 151, 255)");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
 });
