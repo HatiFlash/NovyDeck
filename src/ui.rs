@@ -3070,8 +3070,10 @@ impl App {
                         None => egui::Button::new(label),
                     }.fill(Color32::TRANSPARENT).stroke(egui::Stroke::NONE);
                     let response = ui.add(button);
-                    if response.on_hover_text(label).clicked() { tab = i; }
+                    let clicked = response.clicked();
+                    if clicked { tab = i; }
                     if tab == i { active_tab_rect = Some(response.rect); }
+                    response.on_hover_text(label);
                 }
                 if let Some(target) = active_tab_rect {
                     let r = motion::indicator(ui.ctx(), egui::Id::new("inspector_tab_indicator"), target, self.animations());
