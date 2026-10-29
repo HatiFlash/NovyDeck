@@ -79,7 +79,7 @@ pub fn source(config: &Config, index: usize, target: &PluginStateTarget) -> Opti
 }
 
 #[derive(Default)]
-pub struct Cache { values: HashMap<String, (Source, Observation)> }
+pub struct Cache { values: HashMap<String, (Source, Observation)>, fallback: HashMap<String, (Source, bool)> }
 impl Cache {
     /// Observe only a source selected on the currently visible configuration.
     /// A stale/foreign context is never interpreted as a new instance.
@@ -101,7 +101,8 @@ impl Cache {
             Observation::Local(previous) => !previous,
             Observation::Confirmed(_) | Observation::SourceReported(_) => return None,
         };
-        self.values.insert(source.context.clone(), (source, Observation::Local(active)));
+        if matches!(self.values.get(&source.context), Some((_, Observation::Local(_)))) { self.values.remove(&source.context); }
+        self.fallback.insert(source.context.clone(), (source, active));
         Some(active)
     }
     /// Call with the current, trusted source (not fields copied from a plugin message).
@@ -112,12 +113,9 @@ impl Cache {
             return self.lookup_source(source);
         }
         let observation = match message["event"].as_str() {
-            // A plugin may repeatedly report unavailable state (e.g. RTSS without its DLL).
-            // Such a report must not erase the short-press local visual fallback.
-            Some("novydeckStateUnknown") => match self.lookup_source(source) {
-                Observation::Local(active) => Observation::Local(active),
-                _ => Observation::Unknown,
-            },
+            // A plugin may repeatedly report unavailable state (e.g. RTSS without its DLL):
+            // the short-press fallback is kept separately and survives such reports.
+            Some("novydeckStateUnknown") => Observation::Unknown,
             Some("setState") => {
                 let value = match message["payload"]["state"].as_u64() { Some(0) => false, Some(1) => true, _ => { self.values.remove(&source.context); return Observation::Unknown; } };
                 match message["payload"]["novydeckStateSource"].as_str() {
@@ -130,12 +128,14 @@ impl Cache {
             _ => return self.lookup_source(source),
         };
         if observation == Observation::Unknown { self.values.remove(&source.context); }
-        else { self.values.insert(source.context.clone(), (source.clone(), observation)); }
+        else { self.fallback.remove(&source.context); self.values.insert(source.context.clone(), (source.clone(), observation)); }
         observation
     }
     /// Only current configured instances are eligible; stale settings reset to Unknown.
     pub fn lookup_source(&self, source: &Source) -> Observation {
-        self.values.get(&source.context).filter(|(saved, _)| saved == source).map_or(Observation::Unknown, |(_, state)| *state)
+        self.values.get(&source.context).filter(|(saved, _)| saved == source).map(|(_, state)| *state)
+            .or_else(|| self.fallback.get(&source.context).filter(|(saved, _)| saved == source).map(|(_, active)| Observation::Local(*active)))
+            .unwrap_or(Observation::Unknown)
     }
     pub fn lookup(&self, config: &Config, index: usize, key: &Key) -> Observation {
         key.plugin_state.as_ref().and_then(|target| source(config, index, target)).map_or(Observation::Unknown, |source| self.lookup_source(&source))
@@ -146,9 +146,11 @@ impl Cache {
             None => key.clone(),
         }
     }
-    pub fn clear_plugin(&mut self, plugin: &str) { self.values.retain(|_, (source, _)| source.plugin != plugin); }
+    pub fn clear_plugin(&mut self, plugin: &str) { self.values.retain(|_, (source, _)| source.plugin != plugin); self.fallback.retain(|_, (source, _)| source.plugin != plugin); }
     pub fn retain(&mut self, config: &Config) {
         self.values.retain(|_, (saved, _)| config.keys().iter().enumerate().any(|(i, key)|
+            key.plugin_state.as_ref().and_then(|target| source(config, i, target)).is_some_and(|current| current == *saved)));
+        self.fallback.retain(|_, (saved, _)| config.keys().iter().enumerate().any(|(i, key)|
             key.plugin_state.as_ref().and_then(|target| source(config, i, target)).is_some_and(|current| current == *saved)));
     }
 }
@@ -201,7 +203,8 @@ mod tests {
         assert_eq!(cache.record(&s, "owner", &msg(json!(1), None)), Observation::SourceReported(true));
         assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Unknown);
         assert_eq!(cache.toggle_local(&config, 0, &key), Some(true));
-        assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Local(true));
+        assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Unknown);
+        assert_eq!(cache.lookup_source(&s), Observation::Local(true));
         assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("confirmed"))), Observation::Confirmed(false));
         assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Unknown);
         assert_eq!(cache.apply(&config, 0, &key).display_kind, crate::audio::builtin_kind("builtin:speakers"));
