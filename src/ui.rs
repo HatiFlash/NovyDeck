@@ -2748,7 +2748,7 @@ impl App {
                                         r.min + Vec2::new(47.0, 9.0),
                                         egui::Align2::LEFT_TOP,
                                         *label,
-                                        egui::FontId::new(13.0, egui::FontFamily::Name("strong".into())),
+                                        egui::FontId::proportional(13.0),
                                         p.text_primary,
                                     );
                                     ui.painter().text(

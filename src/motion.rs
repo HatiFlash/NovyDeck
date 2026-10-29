@@ -386,7 +386,7 @@ mod tests {
             }
             assert!(samples.iter().all(|sample| sample.0 == samples[0].0), "layout and hit-test unchanged: {name}");
             assert!(samples[1].1 > samples[2].1 && samples[2].1 > samples[3].1, "forward slide: {name}");
-            assert!(samples[4].1 < samples[5].1 && samples[5].1 < samples[6].1, "backward slide: {name}");
+            assert!(samples[4].1 < samples[5].1 && samples[5].1 < samples[6].1, "backward slide: {name}: {:?}", samples.iter().map(|s| s.1).collect::<Vec<_>>());
             assert_eq!(samples[3].1, samples[0].1);
             assert_eq!(samples[6].1, samples[0].1);
             assert_eq!(samples[7].1, samples[0].1, "disabled jumps straight to final paint");
