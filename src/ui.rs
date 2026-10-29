@@ -4495,7 +4495,8 @@ impl App {
                         }
                     });
                     ui.separator();
-                    motion::fade(ui, "settings_tab", self.settings_tab, 0.15, self.animations());
+                    let settings_slide = motion::begin_slide(ui, "settings_tabs", self.settings_tab as i32, self.animations());
+                    motion::fade(ui, "settings_tab", self.settings_tab, 0.0, self.animations());
                     let help = |text: &str| RichText::new(text).size(12.0).color(p.muted);
                     match self.settings_tab {
                         0 => {
@@ -4684,6 +4685,7 @@ impl App {
                             ui.label(help(tr("Le mode actif est indiqué dans la barre supérieure.")));
                         }
                     }
+                    motion::end_slide(ui, settings_slide);
                 });
             if let Some(window) = settings_window {
                 let appear = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
