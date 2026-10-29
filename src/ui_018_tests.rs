@@ -72,8 +72,8 @@ fn ui018_real_frames() {
     let initial = h.warm(size);
     let source = h.app.drag_sources.iter().find_map(|(rect, item)|
         matches!(item, DragItem::Action(_)).then_some(rect.center())).expect("real library action");
-    let target = h.app.drop_targets.iter().find(|(_, i)| *i == 7).expect("deck key 8").0.center();
-    let before = h.app.config.keys()[7].clone();
+    let target = h.app.drop_targets.iter().find(|(_, i)| *i == 0).expect("deck key 1").0.center();
+    let before = h.app.config.keys()[0].clone();
     for i in 0..14 {
         let events = match i {
             1 => vec![Input::PointerMoved(source), button(source, true)],
@@ -83,7 +83,7 @@ fn ui018_real_frames() {
         };
         shot(&mut h, "drag", i, events);
     }
-    assert_ne!(h.app.config.keys()[7].steps, before.steps, "library action dropped on key 8");
+    assert_ne!(h.app.config.keys()[0].steps, before.steps, "library action dropped on key 1");
 
     let mut h = new_scene();
     h.app.show_workflow = true;
