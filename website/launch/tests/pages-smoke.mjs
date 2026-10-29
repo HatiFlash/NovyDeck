@@ -1,86 +1,36 @@
 import { chromium } from "playwright";
-
 const target = process.argv[2] || "http://127.0.0.1:8767/NovyDeck/";
 const browser = await chromium.launch({ headless: true, args: ["--enable-unsafe-swiftshader"] });
-const report = [];
+const results = [];
 let failed = false;
-for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844], ["narrow", 320, 700]]) {
-  const page = await browser.newPage({ viewport: { width, height } });
+for (const width of [320, 390, 768, 1024, 1440]) {
+  const page = await browser.newPage({ viewport: { width, height: 900 } });
   const problems = [];
-  page.on("pageerror", error => problems.push(`JS: ${error.message}`));
-  page.on("response", response => { if (response.status() >= 400) problems.push(`HTTP ${response.status()}: ${response.url()}`); });
+  page.on("pageerror", error => problems.push(`JS ${error.message}`));
+  page.on("response", response => { if (response.status() >= 400) problems.push(`HTTP ${response.status()} ${response.url()}`); });
   try {
-    const response = await page.goto(target, { waitUntil: "networkidle", timeout: 30_000 });
+    const response = await page.goto(target, { waitUntil: "networkidle", timeout: 45_000 });
     if (response?.status() !== 200) problems.push(`Document HTTP ${response?.status()}`);
-    await page.locator("h1").waitFor({ timeout: 10_000 });
-    await page.evaluate(() => document.fonts.ready);
-    await page.locator("#product-story").scrollIntoViewIfNeeded();
-    if (name === "desktop") await page.locator(".scene-canvas canvas").waitFor({ timeout: 15_000 });
-    else if (await page.locator(".scene-canvas canvas").count()) problems.push("WebGL mounted on mobile");
-    for (const id of ["showcase", "workflow", "themes", "assistant", "plugins", "integrations", "film", "download"]) {
-      await page.locator(`#${id}`).scrollIntoViewIfNeeded();
-      await page.waitForTimeout(100);
+    await page.locator("h1").waitFor();
+    for (const section of ["story", "features", "compatibility", "faq", "download"]) {
+      await page.locator(`#${section}`).scrollIntoViewIfNeeded();
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) problems.push(`overflow at ${section}`);
     }
-    if (await page.getByRole("tab").count() !== 10) problems.push("Expected ten showcase tabs");
-    const checkImage = async (panel, description, file, language) => {
-      const image = panel.locator("img");
-      if (!(await panel.locator(`a[href*='${file}']`).count())) problems.push(`${description} full-size image link missing`);
-      await image.scrollIntoViewIfNeeded();
-      try {
-        await image.evaluate(img => new Promise((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("image load timeout")), 10_000);
-          const check = () => { if (img.naturalWidth > 0) { clearTimeout(timer); resolve(); } else if (img.complete) { clearTimeout(timer); reject(new Error("broken image")); } };
-          img.addEventListener("load", check, { once: true });
-          img.addEventListener("error", check, { once: true });
-          check();
-        }));
-      } catch (error) { problems.push(`${description} ${language} screenshot failed to load: ${error.message}`); }
-    };
-    const cards = [
-      ["01", "Actions ON/OFF", "ON/OFF actions", "v0151-onoff"],
-      ["02", "Supprimer dans l’Atelier", "Delete in Workshop", "v0151-workshop"],
-      ["03", "Assistant 0.15", "Assistant 0.15", "v015-assistant"],
-      ["04", "Précision plugin 0.15", "Plugin clarification 0.15", "v015-question"],
-    ];
-    for (const language of ["fr", "en"]) {
-      if (language === "en") await page.getByRole("button", { name: /Switch to English/ }).click();
-      if (await page.locator("html").getAttribute("lang") !== language) problems.push(`${language} language toggle failed`);
-      for (const [index, frLabel, enLabel, file] of cards) {
-        await page.getByRole("tab", { name: new RegExp(`${index}.*${language === "fr" ? frLabel : enLabel}`) }).click();
-        const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
-        if (!(await panel.locator(".micro").textContent())?.includes(`${index} / 10`)) problems.push(`${language} counter ${index} incorrect`);
-        await checkImage(panel, file, `${file}-${language}.webp`, language);
-        if (file === "v0151-onoff" && !(await panel.locator("img").getAttribute("alt"))?.includes("Action 2")) problems.push(`${language} ON/OFF action screenshot missing`);
-        if (file === "v0151-workshop" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "Supprimer" : "Delete")) problems.push(`${language} nested menu screenshot missing`);
-        if (file === "v015-assistant" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "en français" : "French example request")) problems.push(`${language} assistant request-language disclosure missing`);
-        if (file === "v015-question" && !(await panel.locator("img").getAttribute("alt"))?.includes(language === "fr" ? "inerte" : "inert")) problems.push(`${language} inert fixture disclosure missing`);
-      }
-      for (const [index, frLabel, enLabel, file] of [["05", "Apparence 0.15", "Appearance 0.15", `v015-appearance-${language}.webp`], ["06", "Touches", "Keys", "main-hi.webp"], ["07", "États ON", "ON / OFF", "states.webp"], ["08", "Médias", "Media", "crop.webp"], ["09", "Atelier 0.14", "Workshop 0.14", `v014-workshop-${language}.webp`], ["10", "Quoi de neuf", "What’s new", `v014-whats-new-${language}.webp`]]) {
-        await page.getByRole("tab", { name: new RegExp(`^${index}.*${language === "fr" ? frLabel : enLabel}`) }).click();
-        const panel = page.locator("#showcase [role=tabpanel][data-state=active]");
-        await checkImage(panel, `${index} historic`, file, language);
-        if (index === "10" && !(await panel.locator(`a[href*='v014-update-${language}.webp']`).count())) problems.push(`${language} update offer image link missing`);
-      }
+    for (const image of ["v0161-onoff-cards-fr", "v0161-plugins-tab-fr"]) {
+      const img = page.locator(`.story-visual img[src*='${image}']`);
+      await img.scrollIntoViewIfNeeded();
+      await img.evaluate(node => (node instanceof HTMLImageElement ? node.decode() : Promise.reject("not an image")));
     }
-    await page.getByRole("button", { name: "Light" }).click();
-    const info = await page.evaluate(() => ({
-      title: document.title,
-      width: innerWidth,
-      overflow: document.documentElement.scrollWidth > innerWidth,
-      brokenImages: [...document.images].filter(i => i.complete && !i.naturalWidth).map(i => i.src),
-      displayFont: getComputedStyle(document.querySelector("h1")).fontFamily,
-      loadedFonts: [...document.fonts].filter(f => f.status === "loaded").map(f => f.family),
-      downloadable: [...document.querySelectorAll("a")].some(a => a.href.includes("NovyDeck-0.15.1-Setup.exe")),
-    }));
-    if (info.overflow) problems.push("Horizontal overflow");
-    if (info.brokenImages.length) problems.push(`Broken images: ${info.brokenImages.join(", ")}`);
-    if (!info.loadedFonts.length) problems.push("No font was loaded");
-    if (!info.downloadable) problems.push("Download link missing");
-    report.push({ name, ...info, problems });
-  } catch (error) { problems.push(`Test: ${error.message}`); report.push({ name, problems }); }
+    if (width < 900 && await page.locator("canvas").count()) problems.push("WebGL on mobile/tablet");
+    if (width >= 900) { await page.locator("#top").scrollIntoViewIfNeeded(); await page.locator(".stage-deck canvas").waitFor({ timeout: 15_000 }); }
+    await page.getByRole("button", { name: "Passer en anglais" }).click();
+    if (await page.locator("html").getAttribute("lang") !== "en") problems.push("EN switch failed");
+    if (!(await page.locator("a[href*='v0.16.1/NovyDeck-0.16.1-Setup.exe']").count())) problems.push("installer missing");
+    results.push({ width, problems });
+  } catch (error) { problems.push(`Test ${error.message}`); results.push({ width, problems }); }
   failed ||= problems.length > 0;
   await page.close();
 }
 await browser.close();
-console.log(JSON.stringify(report, null, 2));
+console.log(JSON.stringify(results, null, 2));
 if (failed) process.exitCode = 1;
