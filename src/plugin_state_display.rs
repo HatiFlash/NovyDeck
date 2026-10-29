@@ -92,6 +92,18 @@ impl Cache {
         })?;
         Some((index, self.record(&current, owner, message)))
     }
+    /// A short press supplies a visual fallback only while no real state is reported.
+    /// The source identity prevents a fallback from leaking across settings or pages.
+    pub fn toggle_local(&mut self, config: &Config, index: usize, key: &Key) -> Option<bool> {
+        let source = source(config, index, key.plugin_state.as_ref()?)?;
+        let active = match self.lookup_source(&source) {
+            Observation::Unknown => true,
+            Observation::Local(previous) => !previous,
+            Observation::Confirmed(_) | Observation::SourceReported(_) => return None,
+        };
+        self.values.insert(source.context.clone(), (source, Observation::Local(active)));
+        Some(active)
+    }
     /// Call with the current, trusted source (not fields copied from a plugin message).
     /// Unexpected owner, action or context cannot overwrite a previous observation.
     pub fn record(&mut self, source: &Source, owner: &str, message: &Value) -> Observation {
@@ -100,7 +112,12 @@ impl Cache {
             return self.lookup_source(source);
         }
         let observation = match message["event"].as_str() {
-            Some("novydeckStateUnknown") => Observation::Unknown,
+            // A plugin may repeatedly report unavailable state (e.g. RTSS without its DLL).
+            // Such a report must not erase the short-press local visual fallback.
+            Some("novydeckStateUnknown") => match self.lookup_source(source) {
+                Observation::Local(active) => Observation::Local(active),
+                _ => Observation::Unknown,
+            },
             Some("setState") => {
                 let value = match message["payload"]["state"].as_u64() { Some(0) => false, Some(1) => true, _ => { self.values.remove(&source.context); return Observation::Unknown; } };
                 match message["payload"]["novydeckStateSource"].as_str() {
@@ -124,9 +141,9 @@ impl Cache {
         key.plugin_state.as_ref().and_then(|target| source(config, index, target)).map_or(Observation::Unknown, |source| self.lookup_source(&source))
     }
     pub fn apply(&self, config: &Config, index: usize, key: &Key) -> Key {
-        match (key.state_display.as_ref(), self.lookup(config, index, key).active()) {
-            (Some(display), Some(active)) => display.apply(key, active),
-            _ => key.clone(),
+        match key.state_display.as_ref() {
+            Some(display) => display.apply(key, self.lookup(config, index, key).active().unwrap_or(false)),
+            None => key.clone(),
         }
     }
     pub fn clear_plugin(&mut self, plugin: &str) { self.values.retain(|_, (source, _)| source.plugin != plugin); }
@@ -161,7 +178,8 @@ mod tests {
     }
     #[test] fn provenance_unknown_and_safe_faces() {
         let (config, key) = fixture(); let s = source(&config, 0, key.plugin_state.as_ref().unwrap()).unwrap(); let mut cache = Cache::default();
-        assert_eq!(cache.apply(&config, 0, &key).image, "custom.png");
+        assert_eq!(cache.apply(&config, 0, &key).display_kind, crate::audio::builtin_kind("builtin:speakers"));
+        assert!(cache.apply(&config, 0, &key).runtime_badge.is_none());
         let msg = |state: Value, origin: Option<&str>| { let mut v = json!({"event":"setState","context":s.context,"action":s.action,"payload":{"state":state}}); if let Some(origin) = origin { v["payload"]["novydeckStateSource"] = json!(origin); } v };
         assert_eq!(cache.record(&s, "owner", &msg(json!(1), Some("confirmed"))), Observation::Confirmed(true));
         assert_eq!(cache.observe(&config, "other", &msg(json!(0), None)), None);
@@ -182,7 +200,11 @@ mod tests {
         alien["action"] = json!("switch"); alien["context"] = json!("other"); assert_eq!(cache.record(&s, "owner", &alien), Observation::Local(false));
         assert_eq!(cache.record(&s, "owner", &msg(json!(1), None)), Observation::SourceReported(true));
         assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Unknown);
-        assert_eq!(cache.apply(&config, 0, &key).image, "custom.png");
+        assert_eq!(cache.toggle_local(&config, 0, &key), Some(true));
+        assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Local(true));
+        assert_eq!(cache.record(&s, "owner", &msg(json!(0), Some("confirmed"))), Observation::Confirmed(false));
+        assert_eq!(cache.record(&s, "owner", &json!({"event":"novydeckStateUnknown","context":s.context,"action":s.action})), Observation::Unknown);
+        assert_eq!(cache.apply(&config, 0, &key).display_kind, crate::audio::builtin_kind("builtin:speakers"));
     }
     #[test] fn paths_settings_and_instances() {
         let (mut config, key) = fixture();

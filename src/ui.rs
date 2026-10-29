@@ -699,9 +699,7 @@ impl App {
     fn state_key(&self,index:usize,key:Key)->Key {self.state_key_in(&self.config,index,key)}
     fn state_key_in(&self, config: &Config, index: usize, key: Key) -> Key {
         if key.plugin_state.is_some() {
-            let mut presented = self.plugin_states.apply(config, index, &key);
-            if self.plugin_states.lookup(config, index, &key).active().is_none() { presented.runtime_badge = Some(tr("État inconnu").into()); }
-            return presented;
+            return self.plugin_states.apply(config, index, &key);
         }
         match (key.state_display.clone(), self.state_values.get(index).copied().flatten()) {
             (Some(display), active) if display.toggle => display.apply(&key, active.unwrap_or(false)),
@@ -710,6 +708,14 @@ impl App {
         }
     }
     fn toggle_key_face(&mut self, index: usize) {
+        if let Some(key) = self.applied.keys().get(index) {
+            if key.plugin_state.is_some() {
+                if self.plugin_states.toggle_local(&self.applied, index, key).is_some() {
+                    self.send_state_face(index);
+                }
+                return;
+            }
+        }
         if self.applied.keys().get(index).is_some_and(|key| key.plugin_state.is_none() && key.state_display.as_ref().is_some_and(|state| state.toggle)) {
             self.state_values[index] = Some(!self.state_values[index].unwrap_or(false));
             self.toggle_faces.insert(self.toggle_face_id(index), self.state_values[index].unwrap());
@@ -728,8 +734,26 @@ impl App {
             }
         }
     }
+    fn send_edited_plugin_face(&self, index: usize) {
+        if !self.wanted || !self.gate.connected || self.pending.is_some() || self.sleep.sleeping
+            || self.config.active != self.applied.active || self.config.page != self.applied.page
+            || index >= self.device_keys() { return; }
+        let Some(key) = self.config.keys().get(index) else { return };
+        let Some(target) = key.plugin_state.as_ref() else { return };
+        let Some(applied) = self.applied.keys().get(index) else { return };
+        if key.state_display == applied.state_display
+            || crate::plugin_state_display::source(&self.config, index, target)
+                != applied.plugin_state.as_ref().and_then(|target| crate::plugin_state_display::source(&self.applied, index, target)) { return; }
+        let presented = self.state_key_in(&self.config, index, key.clone());
+        if let Ok(font) = crate::key_render::font() {
+            if let Ok(jpeg) = crate::key_render::for_plugin(&presented, self.config.image_size, &font, None, None) {
+                let _ = self.device.send(Command::KeyImage(index, jpeg));
+            }
+        }
+    }
     fn edited(&mut self) {
         self.plugin_states.retain(&self.config);
+        self.send_edited_plugin_face(self.selected);
         self.sync_state_display();
         self.long_press.clear();
         self.gate.dirty = true;

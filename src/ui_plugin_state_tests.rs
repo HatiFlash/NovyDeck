@@ -26,10 +26,38 @@ fn event(h:&Harness,index:usize,state:Option<u64>,origin:Option<&str>)->serde_js
     }
 }
 #[test]
+fn unknown_press_fallback_face_edit_and_reported_state_update_device() {
+    let mut h=setup();
+    let (tx,rx)=std::sync::mpsc::channel();h.app.device=tx;
+    h.app.wanted=true;h.app.gate.connected=true;h.app.gate.dirty=false;
+    let off=h.app.presented_key(0);
+    assert!(off.image.ends_with("off.png"));assert_eq!(off.label,"OFF");assert!(off.runtime_badge.is_none());
+    h.app.toggle_key_face(0);
+    assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Local(true));
+    assert!(h.app.presented_key(0).image.ends_with("on.png"));
+    let unknown=event(&h,0,None,None);h.app.plugin_message(OWNER,&unknown);
+    assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Local(true));
+    h.app.toggle_key_face(0);
+    assert!(h.app.presented_key(0).image.ends_with("off.png"));
+    let confirmed=event(&h,0,Some(1),Some("confirmed"));h.app.plugin_message(OWNER,&confirmed);
+    assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Confirmed(true));
+    h.app.toggle_key_face(0);
+    assert!(h.app.presented_key(0).image.ends_with("on.png"),"confirmed state must win over local presses");
+    let new_icon=h.dir.path().join("updated.png");
+    image::RgbImage::from_pixel(96,96,image::Rgb([90,40,210])).save(&new_icon).unwrap();
+    h.app.config.keys_mut()[0].state_display.as_mut().unwrap().on.image=Some(new_icon.to_string_lossy().into_owned());
+    let _=rx.try_iter().count();h.app.edited();
+    let key=h.app.presented_key(0);
+    assert_eq!(key.image,new_icon.to_string_lossy());
+    let jpeg=rx.try_iter().filter_map(|command|match command {crate::device::Command::KeyImage(0,bytes)=>Some(bytes),_=>None}).last().expect("edited icon sent to deck without full apply");
+    let font=crate::key_render::font().unwrap();
+    assert_eq!(jpeg,crate::key_render::for_plugin(&key,h.app.config.image_size,&font,None,None).unwrap());
+}
+#[test]
 fn app_state_events_match_preview_and_captured_device_jpeg_without_mutating_config() {
     let mut h=setup();let original=serde_json::to_value(&h.app.config).unwrap();
     let (tx,rx)=std::sync::mpsc::channel();h.app.device=tx;h.app.wanted=true;h.app.gate.connected=true;h.app.gate.dirty=false;
-    for (state,origin,observation,image_name) in [(Some(1),Some("confirmed"),Observation::Confirmed(true),"on.png"),(Some(0),Some("local"),Observation::Local(false),"off.png"),(None,None,Observation::Unknown,"base.png"),(Some(2),None,Observation::Unknown,"base.png")] {
+    for (state,origin,observation,image_name) in [(Some(1),Some("confirmed"),Observation::Confirmed(true),"on.png"),(None,None,Observation::Unknown,"off.png"),(Some(0),Some("local"),Observation::Local(false),"off.png"),(Some(2),None,Observation::Unknown,"off.png")] {
         let _=rx.try_iter().count();let msg=event(&h,0,state,origin);h.app.plugin_message(OWNER,&msg);
         assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),observation);
         let key=h.app.presented_key(0);assert!(key.image.ends_with(image_name),"{}",key.image);
@@ -58,7 +86,7 @@ fn macro_states_are_distinct_and_unknown_clears_only_selected_instance() {
     assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Local(true));
     assert_eq!(h.app.plugin_states.lookup(&h.app.config,1,&h.app.config.keys()[1]),Observation::Local(false));
     let msg=event(&h,0,None,None);h.app.plugin_message(OWNER,&msg);
-    assert!(h.app.presented_key(0).image.ends_with("base.png"));assert!(h.app.presented_key(1).image.ends_with("off.png"));
+    assert!(h.app.presented_key(0).image.ends_with("on.png"));assert!(h.app.presented_key(1).image.ends_with("off.png"));
     assert_eq!(h.app.applied.keys()[0].steps,h.app.config.keys()[0].steps);
 }
 #[test]
