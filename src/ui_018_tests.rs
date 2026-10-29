@@ -28,7 +28,7 @@ fn ui018_drag_follows_and_finishes_without_residual_card_or_repaint() {
     assert!(!v.advance(0.54, true));
     let settled = ctx.run(egui::RawInput { time: Some(0.55), ..Default::default() }, |_| ());
     assert!(settled.shapes.is_empty(), "no residual tooltip after animation");
-    assert_eq!(settled.repaint_after, std::time::Duration::MAX, "no repaint at rest");
+    assert!(!ctx.has_requested_repaint(), "no repaint at rest");
 }
 
 #[test]
