@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.1"><img src="https://img.shields.io/badge/Release-v0.16.1-3478F6.svg" alt="Release v0.16.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.17.0"><img src="https://img.shields.io/badge/Release-v0.17.0-3478F6.svg" alt="Release v0.17.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,21 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.17.0
+
+- **Deck colour:** eight shades (original black, graphite, white, silver, midnight blue, red, green, pink) or any custom colour, in **Settings › General**. Existing configurations stay black.
+- **Larger preview** of the deck, with the key inspector still fully usable below it.
+- **Collapsible "Recent activity"** panel, folded into a single line.
+- **Subtle animations:** keys brighten on hover and bounce on click, panels and colour changes fade in. They can be turned off with **Interface animations** and follow the Windows animation setting.
+
+![0.17.0 deck preview with a custom purple colour, French UI, off-screen Windows UI capture](docs/images/v017-deck-color-free-fr.png)
+
+![0.17.0 white deck preview, French UI, off-screen Windows UI capture](docs/images/v017-deck-white-fr.png)
+
+![0.17.0 collapsed Recent activity panel, French UI, off-screen Windows UI capture](docs/images/v017-activity-collapsed-fr.png)
+
+These are off-screen UI captures from the Windows test harness, not tests on a connected deck. See the [0.17.0 release notes](docs/RELEASE-0.17.0.md).
 
 ## What's new in 0.16.1
 

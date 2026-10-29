@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.16.1"><img src="https://img.shields.io/badge/Release-v0.16.1-3478F6.svg" alt="Version 0.16.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.17.0"><img src="https://img.shields.io/badge/Release-v0.17.0-3478F6.svg" alt="Version 0.17.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,21 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.17.0
+
+- **Couleur du deck :** huit teintes (noir d'origine, graphite, blanc, argent, bleu nuit, rouge, vert, rose) ou une couleur libre, dans **Réglages › Général**. Les configurations existantes restent noires.
+- **Aperçu du deck plus grand**, avec l'inspecteur de touche toujours utilisable en dessous.
+- **Panneau « Activité récente » repliable** sur une seule ligne.
+- **Animations sobres :** les touches s'éclairent au survol et rebondissent au clic, les panneaux et changements de couleur apparaissent en fondu. Le réglage **Animations de l'interface** permet de les couper ; elles suivent aussi le réglage d'animations de Windows.
+
+![Aperçu du deck 0.17.0 en couleur libre violette, capture du harnais Windows hors écran](docs/images/v017-deck-color-free-fr.png)
+
+![Aperçu du deck blanc 0.17.0, capture du harnais Windows hors écran](docs/images/v017-deck-white-fr.png)
+
+![Panneau Activité récente replié 0.17.0, capture du harnais Windows hors écran](docs/images/v017-activity-collapsed-fr.png)
+
+Ces captures proviennent du harnais d'interface Windows hors écran, pas d'un essai sur un deck connecté. Voir les [notes de version 0.17.0](docs/RELEASE-0.17.0.md).
 
 ## Nouveautés 0.16.1
 
