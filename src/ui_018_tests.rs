@@ -14,6 +14,8 @@ fn ui018_real_frames() {
         let mut h = demo_harness();
         h.app.preferences.reduce_motion = false;
         h.app.preferences.interface_animations = true;
+        // Laisser finir l'intro de démarrage (voile + logo) avant de filmer.
+        for _ in 0..50 { h.frame(size, vec![]); }
         h
     };
     let shot = |h: &mut Harness, sequence: &str, index: usize, events: Vec<Input>| {
