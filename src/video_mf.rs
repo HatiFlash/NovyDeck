@@ -23,11 +23,18 @@ fn validate_mp4_header(path: &Path) -> Result<()> {
 }
 
 /// Square `size`x`size` frames sampled at `fps`, cropped like the FFmpeg path (cover + centre crop).
+/// Media Foundation runs on a fresh MTA thread: a caller thread already initialised as STA
+/// (UI, shell or test thread) would otherwise make the source reader wait for a message pump forever.
 pub fn decode(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<RgbaImage>> {
+    let path = path.to_path_buf();
+    std::thread::spawn(move || decode_mta(&path, fps, max_secs, size)).join().map_err(|_| anyhow!("Décodage vidéo interrompu"))?
+}
+fn decode_mta(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0 && size > 0, "Paramètres vidéo invalides");
     validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+        if !com { return Err(anyhow!("Initialisation COM multithread impossible pour Media Foundation")); }
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
         let result = match started {
             Ok(()) => { let r = read(path, fps, max_secs, size); let _ = MFShutdown(); r }
@@ -42,10 +49,15 @@ pub fn decode(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<Rgb
 
 /// Decode raw uncropped RGBA frames from video using Windows Media Foundation.
 pub fn decode_raw(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage>> {
+    let path = path.to_path_buf();
+    std::thread::spawn(move || decode_raw_mta(&path, fps, max_secs)).join().map_err(|_| anyhow!("Décodage vidéo interrompu"))?
+}
+fn decode_raw_mta(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0, "Paramètres vidéo invalides");
     validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+        if !com { return Err(anyhow!("Initialisation COM multithread impossible pour Media Foundation")); }
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
         let result = match started {
             Ok(()) => { let r = read_raw(path, fps, max_secs); let _ = MFShutdown(); r }
