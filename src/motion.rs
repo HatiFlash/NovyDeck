@@ -60,7 +60,8 @@ pub fn progress(ctx: &egui::Context, id: egui::Id, key: impl Hash, seconds: f64,
     }
     let t = ((time - start) / seconds) as f32;
     if t < 1.0 {
-        ctx.request_repaint();
+        // A non-zero delay avoids egui's extra outstanding frame after the animation ends.
+        ctx.request_repaint_after(std::time::Duration::from_millis(1));
     }
     ease_out(t)
 }
@@ -141,7 +142,7 @@ pub fn workshop_card(ctx: &egui::Context, id: egui::Id, target: egui::Pos2, inse
     };
     ctx.data_mut(|d| d.insert_temp(id, (origin, destination, start, born)));
     if t < 1.0 && offset.length_sq() > 0.01 || born >= 0.0 && now - born < 0.22 {
-        ctx.request_repaint();
+        ctx.request_repaint_after(std::time::Duration::from_millis(1));
     }
     (offset, pop)
 }

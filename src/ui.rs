@@ -368,7 +368,7 @@ impl DragVisual {
             let badge = egui::Rect::from_center_size(self.center - Vec2::new(size.x * 0.36, 0.0), Vec2::splat(36.0 * scale));
             painter.rect_filled(badge, 9.0, iconset::family_color(ctx, icon).gamma_multiply(alpha * 0.22));
             iconset::paint(&painter, badge.center(), 23.0 * scale, icon, icon.family(), alpha, 15);
-            painter.text(self.center + Vec2::new(-size.x * 0.23, 0.0), egui::Align2::LEFT_CENTER, self.label(), theme::strong(13.0 * scale), p.ink.gamma_multiply(alpha));
+            painter.text(self.center + Vec2::new(-size.x * 0.23, 0.0), egui::Align2::LEFT_CENTER, self.label(), egui::FontId::proportional(13.0 * scale), p.ink.gamma_multiply(alpha));
         }
         if self.phase == 1 {
             if let Some((_, target)) = self.target {
