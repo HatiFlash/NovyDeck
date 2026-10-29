@@ -241,6 +241,7 @@ pub struct App {
     history_at: Instant,
     replaying: bool,
     drag: crate::gesture::Drag<DragItem>,
+    drag_visual: Option<DragVisual>,
     drag_sources: Vec<(egui::Rect, DragItem)>,
     drop_targets: Vec<(egui::Rect, usize)>,
     recording: Option<(usize, String, usize, Vec<usize>, bool)>,
@@ -301,6 +302,84 @@ enum DragItem {
     Action(Key),
     Position(usize, String, usize),
     NewFolder,
+}
+/// Presentation only: the business drop remains exclusively in gesture::Drag.
+#[derive(Clone)]
+struct DragVisual {
+    item: DragItem,
+    source: egui::Rect,
+    center: egui::Pos2,
+    goal: egui::Pos2,
+    target: Option<(usize, egui::Rect)>,
+    phase: u8, // 0 = follow, 1 = successful drop, 2 = cancel
+    started: f64,
+    last: f64,
+}
+impl DragVisual {
+    fn label(&self) -> String {
+        match &self.item {
+            DragItem::Bind(k) | DragItem::Action(k) => k.label.clone(),
+            DragItem::Position(_, _, i) => trf("Touche {key}", &[("key", &format!("{:02}", i + 1))]),
+            DragItem::NewFolder => tr("Nouveau dossier").into(),
+        }
+    }
+    fn icon(&self) -> Ico {
+        match &self.item {
+            DragItem::Bind(k) | DragItem::Action(k) => iconset::for_steps(&k.steps),
+            _ => Ico::Folder,
+        }
+    }
+    fn advance(&mut self, now: f64, enabled: bool) -> bool {
+        if !enabled { return false; }
+        let dt = (now - self.last).clamp(0.0, 0.05) as f32;
+        self.last = now;
+        if self.phase == 0 {
+            // Critically damped follow; never changes the actual pointer or target hit-test.
+            let alpha = 1.0 - (-dt * 24.0).exp();
+            self.center = self.center.lerp(self.goal, alpha);
+            true
+        } else {
+            let duration = if self.phase == 1 { 0.16 } else { 0.20 };
+            let t = ((now - self.started) / duration) as f32;
+            self.center = self.center.lerp(self.goal, motion::ease_out(t).max(1.0 - (-dt * 30.0).exp()));
+            t < if self.phase == 1 { 3.0 } else { 1.0 }
+        }
+    }
+    fn paint(&self, ctx: &egui::Context, now: f64) {
+        let p = theme::palette(ctx);
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("drag_visual")));
+        let t = if self.phase == 0 { 0.0 } else { ((now - self.started) / if self.phase == 1 { 0.16 } else { 0.20 }) as f32 };
+        let eased = motion::ease_out(t);
+        let alpha = if self.phase == 2 { 1.0 - eased } else { 1.0 };
+        let scale = if self.phase == 1 { 1.05 - 0.65 * eased } else { 1.05 };
+        let size = Vec2::new(190.0, 56.0) * scale;
+        let rect = egui::Rect::from_center_size(self.center, size);
+        if self.phase != 1 || t < 1.0 {
+            // Soft layered shadow, then a subtly tilted card.
+            for (spread, opacity) in [(13.0, 0.045), (7.0, 0.09), (3.0, 0.13)] {
+                painter.rect_filled(rect.translate(Vec2::new(0.0, 6.0)).expand(spread), 13.0 + spread, Color32::BLACK.gamma_multiply(alpha * opacity));
+            }
+            let tilt = 0.070_f32;
+            let c = self.center;
+            let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
+            let rotated: Vec<_> = corners.iter().map(|v| { let d = *v - c; c + Vec2::new(d.x - d.y * tilt, d.y + d.x * tilt) }).collect();
+            painter.add(egui::Shape::convex_polygon(rotated, p.raised.gamma_multiply(alpha), egui::Stroke::new(1.0, p.accent.gamma_multiply(alpha * 0.55))));
+            let icon = self.icon();
+            let badge = egui::Rect::from_center_size(self.center - Vec2::new(size.x * 0.36, 0.0), Vec2::splat(36.0 * scale));
+            painter.rect_filled(badge, 9.0, iconset::family_color(ctx, icon).gamma_multiply(alpha * 0.22));
+            iconset::paint(&painter, badge.center(), 23.0 * scale, icon, icon.family(), alpha, 15);
+            painter.text(self.center + Vec2::new(-size.x * 0.23, 0.0), egui::Align2::LEFT_CENTER, self.label(), theme::strong(13.0 * scale), p.ink.gamma_multiply(alpha));
+        }
+        if self.phase == 1 {
+            if let Some((_, target)) = self.target {
+                let pulse = ((now - self.started - 0.16) / 0.32) as f32;
+                if (0.0..1.0).contains(&pulse) {
+                    let ring = target.expand(3.0 + 14.0 * motion::ease_out(pulse));
+                    painter.rect_stroke(ring, 12.0, egui::Stroke::new(2.0, p.accent.gamma_multiply(1.0 - pulse)), egui::StrokeKind::Outside);
+                }
+            }
+        }
+    }
 }
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Runner {
@@ -485,6 +564,7 @@ impl App {
             history_at: Instant::now(),
             replaying: false,
             drag: Default::default(),
+            drag_visual: None,
             drag_sources: vec![],
             drop_targets: vec![],
             recording: None,
@@ -3505,6 +3585,16 @@ impl App {
                                                 && self.drag.position.is_some_and(|pos| r.contains(pos)));
                                             let enabled = self.animations();
                                             let hover = ctx.animate_bool_with_time(egui::Id::new(("deck_face_hover", r.min.x.to_bits(), r.min.y.to_bits())), hovering, if enabled { 0.12 } else { 0.0 });
+                                            let drag_over = enabled && self.drag.moving() && self.drag.position.is_some_and(|pos| r.contains(pos));
+                                            let magnetic = ctx.animate_bool_with_time(egui::Id::new(("drag_magnet", i)), drag_over, if enabled { 0.12 } else { 0.0 });
+                                            let pop = self.drag_visual.as_ref().filter(|v| v.phase == 1 && v.target.is_some_and(|(idx, _)| idx == i))
+                                                .map_or(1.0, |v| {
+                                                    let t = ((ctx.input(|input| input.time) - v.started - 0.16) / 0.32) as f32;
+                                                    if t <= 0.0 || t >= 1.0 { 1.0 }
+                                                    else if t < 0.38 { 1.0 + 0.14 * motion::ease_out(t / 0.38) }
+                                                    else if t < 0.72 { 1.14 - 0.17 * motion::ease_out((t - 0.38) / 0.34) }
+                                                    else { 0.97 + 0.03 * motion::ease_out((t - 0.72) / 0.28) }
+                                                });
                                             let bounce_id = egui::Id::new(("deck_key_bounce", i));
                                             // Lire le clic AVANT data_mut : clicked() lit ctx.input, ce qui bloquerait sous le verrou.
                                             let clicked = response.clicked();
@@ -3515,7 +3605,11 @@ impl App {
                                             });
                                             let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.26, enabled);
                                             let shrink = if clicks == 0 || !enabled { 1.0 } else { motion::bounce(phase) };
-                                            let painted = egui::Rect::from_center_size(r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)), r.size() * shrink);
+                                            let painted = egui::Rect::from_center_size(r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)), r.size() * shrink * (1.0 + 0.06 * magnetic) * pop);
+                                            if magnetic > 0.0 {
+                                                ui.painter().rect_filled(painted.expand(5.0), 15.0, p.accent.gamma_multiply(0.30 * magnetic));
+                                                ui.painter().rect_stroke(painted.expand(3.0), 12.0, egui::Stroke::new(2.0, p.accent.gamma_multiply(magnetic)), egui::StrokeKind::Outside);
+                                            }
                                             match chassis {
                                                 Some(s) => crate::deck_chassis::paint_face(ui.painter(), painted, s, selected, hover, flashing, motion::deck_color(ctx, self.preferences.deck_color, enabled)),
                                                 None => theme::key_face(ui.painter(), painted, selected || hovering, flashing),
@@ -4780,15 +4874,52 @@ impl App {
             || self.assistant_settings
             || !self.proposals.pending.is_empty()
             || ctx.memory(|m| m.any_popup_open());
+        let now = ctx.input(|i| i.time);
+        let was_moving = self.drag.moving();
+        let prior = self.drag.active.as_ref().map(|(item, start)| (item.clone(), *start));
+        let previous_pos = self.drag.position;
+        let mut dropped = None;
         if modal {
             self.drag.cancel();
         } else {
             let events = ctx.input(|i| i.events.clone());
-            if let Some((item, target)) =
-                self.drag
-                    .update(&events, &self.drag_sources, &self.drop_targets)
-            {
-                self.assign(item, target);
+            dropped = self.drag.update(&events, &self.drag_sources, &self.drop_targets);
+        }
+        if let Some((item, target)) = &dropped { self.assign(item.clone(), *target); }
+        let enabled = self.animations();
+        if !enabled || modal { self.drag_visual = None; }
+        else {
+            if self.drag.moving() && self.drag_visual.as_ref().is_none_or(|v| v.phase != 0) {
+                if let Some((item, start)) = &self.drag.active {
+                    let source = self.drag_sources.iter().find(|(r, _)| r.contains(*start)).map(|(r, _)| *r)
+                        .unwrap_or_else(|| egui::Rect::from_center_size(*start, Vec2::splat(48.0)));
+                    self.drag_visual = Some(DragVisual { item: item.clone(), source, center: *start,
+                        goal: self.drag.position.unwrap_or(*start), target: None, phase: 0, started: now, last: now });
+                }
+            }
+            // A press, move and release may all arrive in a single input frame.
+            if self.drag_visual.is_none() && was_moving && dropped.is_some() {
+                if let Some((item, start)) = prior {
+                    let source = self.drag_sources.iter().find(|(r, _)| r.contains(start)).map(|(r, _)| *r)
+                        .unwrap_or_else(|| egui::Rect::from_center_size(start, Vec2::splat(48.0)));
+                    self.drag_visual = Some(DragVisual { item, source, center: previous_pos.unwrap_or(start),
+                        goal: previous_pos.unwrap_or(start), target: None, phase: 0, started: now, last: now });
+                }
+            }
+            if let Some(v) = &mut self.drag_visual {
+                if v.phase == 0 {
+                    if let Some((_, target)) = &dropped {
+                        v.target = self.drop_targets.iter().find(|(_, i)| i == target).copied();
+                        v.goal = v.target.map_or(v.goal, |(_, r)| r.center());
+                        v.phase = 1; v.started = now;
+                    } else if !self.drag.moving() {
+                        v.goal = v.source.center(); v.phase = 2; v.started = now;
+                    } else if let Some(pos) = self.drag.position {
+                        v.goal = pos + Vec2::new(15.0, -18.0);
+                    }
+                }
+                if !v.advance(now, enabled) { self.drag_visual = None; }
+                else { ctx.request_repaint(); }
             }
         }
         self.drag_sources.clear();
@@ -4813,23 +4944,12 @@ impl App {
         }
         let logo = theme::intro_logo_texture(ctx);
         motion::intro(ctx, &logo, self.animations());
-        if self.drag.moving() {
-            if let (Some((item, _)), Some(pos)) = (&self.drag.active, self.drag.position) {
-                let label = match item {
-                    DragItem::Bind(k) | DragItem::Action(k) => k.label.clone(),
-                    DragItem::Position(_, _, i) => trf("Touche {key}", &[("key", &format!("{:02}", i + 1))]),
-                    DragItem::NewFolder => tr("Nouveau dossier").into(),
-                };
-                egui::Area::new(egui::Id::new("drag_preview"))
-                    .order(egui::Order::Tooltip)
-                    .interactable(false)
-                    .fixed_pos(pos + Vec2::new(14.0, 14.0))
-                    .show(ctx, |ui| {
-                        egui::Frame::popup(ui.style()).show(ui, |ui| {
-                            ui.label(label);
-                        });
-                    });
+        if let Some(v) = &self.drag_visual {
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drag_source_dim")));
+            if v.phase == 0 {
+                painter.rect_filled(v.source, 8.0, theme::palette(ctx).surface.gamma_multiply(0.50));
             }
+            v.paint(ctx, now);
         }
         self.extras(ctx);
         self.windows(ctx);
