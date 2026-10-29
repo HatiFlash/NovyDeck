@@ -1,6 +1,110 @@
 //! Drag presentation tests: the binding/swap decision is still owned by gesture::Drag.
 use super::*;
 
+/// Full application frames (including actual fonts, icons, menus and deck), not painted mockups.
+/// Run with NOVYDECK_UI_OUTPUT set; each frame advances the egui clock by 33 ms.
+#[test]
+#[ignore]
+fn ui018_real_frames() {
+    let dir = std::path::PathBuf::from(std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let size = vec2(1366.0, 768.0);
+    crate::i18n::set_language("fr");
+    let new_scene = || {
+        let mut h = demo_harness();
+        h.app.preferences.reduce_motion = false;
+        h.app.preferences.interface_animations = true;
+        h
+    };
+    let shot = |h: &mut Harness, sequence: &str, index: usize, events: Vec<Input>| {
+        // Harness::frame adds 50 ms; compensate to get real 33 ms egui input timestamps.
+        h.time -= 0.017;
+        let frame = h.frame(size, events);
+        h.png(size, frame, &dir.join(format!("ui018r-{sequence}-{index:02}.png")));
+    };
+
+    let mut h = new_scene();
+    h.app.selected = 0;
+    let initial = h.warm(size);
+    let advanced = text_position(&initial.shapes, "Avancé").expect("inspector advanced tab");
+    let action = text_position(&initial.shapes, "Action").expect("inspector action tab");
+    for i in 0..13 {
+        let events = match i {
+            2 => vec![Input::PointerMoved(advanced), button(advanced, true)],
+            3 => vec![button(advanced, false)],
+            8 => vec![Input::PointerMoved(action), button(action, true)],
+            9 => vec![button(action, false)],
+            _ => vec![],
+        };
+        shot(&mut h, "tabs", i, events);
+    }
+
+    let mut h = new_scene();
+    let initial = h.warm(size);
+    let menu = text_position(&initial.shapes, "Réglages").expect("settings menu");
+    let mut device_pos = None;
+    for i in 0..13 {
+        let events = match i {
+            2 => vec![Input::PointerMoved(menu), button(menu, true)],
+            3 => vec![button(menu, false)],
+            _ => vec![],
+        };
+        if i == 5 {
+            let open = h.frame(size, vec![]);
+            let device = open.shapes.iter().filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text.starts_with("Réglages — ") => {
+                    let pos = t.pos + t.galley.size() * 0.5;
+                    s.clip_rect.contains(pos).then_some(pos)
+                }, _ => None,
+            }).next().expect("device settings in menu");
+            device_pos = Some(device);
+            shot(&mut h, "settings", i, vec![Input::PointerMoved(device), button(device, true)]);
+        } else {
+            shot(&mut h, "settings", i, if i == 6 {
+                vec![button(device_pos.expect("settings pointer"), false)]
+            } else { events });
+        }
+    }
+    assert!(h.app.settings, "real settings dialog opened");
+
+    let mut h = new_scene();
+    let initial = h.warm(size);
+    let source = h.app.drag_sources.iter().find_map(|(rect, item)|
+        matches!(item, DragItem::Action(_)).then_some(rect.center())).expect("real library action");
+    let target = h.app.drop_targets.iter().find(|(_, i)| *i == 7).expect("deck key 8").0.center();
+    let before = h.app.config.keys()[7].clone();
+    for i in 0..14 {
+        let events = match i {
+            1 => vec![Input::PointerMoved(source), button(source, true)],
+            2..=7 => vec![Input::PointerMoved(source + (target - source) * ((i - 1) as f32 / 6.0))],
+            8 => vec![Input::PointerMoved(target), button(target, false)],
+            _ => vec![],
+        };
+        shot(&mut h, "drag", i, events);
+    }
+    assert_ne!(h.app.config.keys()[7].steps, before.steps, "library action dropped on key 8");
+
+    let mut h = new_scene();
+    h.app.show_workflow = true;
+    h.app.selected = 0;
+    h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 111 }, Step::Delay { ms: 222 }, Step::Delay { ms: 333 }];
+    let initial = h.warm(size);
+    let source = text_position(&initial.shapes, "Attendre 333 ms").expect("actual workshop card");
+    let target = text_position(&initial.shapes, "1").expect("first workshop slot");
+    for i in 0..14 {
+        let events = match i {
+            1 => vec![Input::PointerMoved(source), button(source, true)],
+            2..=7 => vec![Input::PointerMoved(source + (target - source) * ((i - 1) as f32 / 6.0))],
+            8 => vec![Input::PointerMoved(target), button(target, false)],
+            _ => vec![],
+        };
+        shot(&mut h, "atelier", i, events);
+    }
+    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "workshop block reinserted");
+    crate::i18n::set_language("fr");
+}
+
+
 #[test]
 fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
     let ctx = egui::Context::default();
