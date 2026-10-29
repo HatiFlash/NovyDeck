@@ -3488,9 +3488,11 @@ impl App {
                                             let enabled = self.animations();
                                             let hover = ctx.animate_bool_with_time(egui::Id::new(("deck_face_hover", r.min.x.to_bits(), r.min.y.to_bits())), hovering, if enabled { 0.12 } else { 0.0 });
                                             let bounce_id = egui::Id::new(("deck_key_bounce", i));
+                                            // Lire le clic AVANT data_mut : clicked() lit ctx.input, ce qui bloquerait sous le verrou.
+                                            let clicked = response.clicked();
                                             let clicks = ctx.data_mut(|d| {
                                                 let count = d.get_temp_mut_or_default::<u64>(bounce_id);
-                                                if response.clicked() { *count += 1; }
+                                                if clicked { *count += 1; }
                                                 *count
                                             });
                                             let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.18, enabled);
