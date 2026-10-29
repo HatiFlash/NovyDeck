@@ -1047,6 +1047,8 @@
     "Réduire": "Minimize",
     "Replier": "Collapse",
     "Étendre": "Expand",
+    "Animations de l'interface": "Interface animations",
+    "Coupe l'intro et les fondus ; l'indicateur de chargement reste.": "Disables the intro and fades; the loading indicator remains.",
     "Réduire les animations": "Reduce animations",
     "Réduire les autres fenêtres": "Minimize other windows",
     "Réduire toutes les autres fenêtres (garder {who})": "Minimize all other windows (keep {who})",

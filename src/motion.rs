@@ -10,6 +10,7 @@ use std::hash::Hash;
 /// Windows accessibility setting, read once at startup (headless tests keep animations enabled).
 pub fn system_animations() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if cfg!(test) { return true; } // CI runners disable Windows animations; tests drive the preference.
     *ENABLED.get_or_init(|| {
         #[cfg(windows)]
         {
