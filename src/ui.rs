@@ -3083,15 +3083,18 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let long = theme::segmented(ui, self.long_editor, tr("Appui long"));
                         if long.clicked() { self.long_editor = true; }
+                        let long_rect = long.rect;
                         let short = theme::segmented(ui, !self.long_editor, tr("Appui court"));
                         ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("inspector_press_toggle"), short.rect));
                         if short.clicked() { self.long_editor = false; }
+                        let target = if self.long_editor { long_rect } else { short.rect };
+                        let rect = motion::indicator(ui.ctx(), egui::Id::new("inspector_press_indicator"), target, self.animations());
+                        ui.painter().rect_stroke(rect, 7.0, egui::Stroke::new(1.5, p.accent), egui::StrokeKind::Inside);
                     });
                 }
             });
             ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("inspector_button_rects"), buttons));
             ui.ctx().data_mut(|d| d.insert_persisted(tab_id, tab));
-            motion::fade(ui, "inspector", (tab, self.selected, self.long_editor, self.config.page.clone()), 0.25, self.animations());
             if let Some(shortcut) = extras::discord_shortcut(&self.config.keys()[self.selected]) {
                 ui.group(|ui| {
                     ui.label(tr("Discord : configure ce raccourci dans Discord → Paramètres → Raccourcis clavier"));
@@ -3138,6 +3141,8 @@ impl App {
             // Une seule réservation : l'UI enfant dessine dedans sans allouer une deuxième hauteur.
             let (body, _) = ui.allocate_exact_size(Vec2::new(width, body_height), egui::Sense::hover());
             let mut body_ui = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::left_to_right(egui::Align::Min)));
+            let inspector_slide = motion::begin_slide(&body_ui, "inspector_body", (tab as i32) * 2 + i32::from(tab == 0 && self.long_editor), self.animations());
+            motion::fade(&mut body_ui, "inspector_body", (tab, self.long_editor, self.selected, self.config.page.clone()), 0.0, self.animations());
             body_ui.horizontal_top(|ui| {
                 let lower = key.image.to_ascii_lowercase();
                 let can_recrop = !key.image.is_empty() && !lower.ends_with(".svg") && std::path::Path::new(&key.image).is_file();
@@ -3442,6 +3447,7 @@ impl App {
                     }
                 });
             });
+            motion::end_slide(&body_ui, inspector_slide);
             match advanced { Some(0)=>self.copy_key(), Some(1)=>self.paste_key(self.selected), Some(2)=>self.duplicate_key(self.selected), _=>{} }
             if open_workflow || open_model || open_assistant { self.show_workflow = true; }
             if open_assistant { self.workshop_chat.open = true; self.pending_chat_focus = true; }

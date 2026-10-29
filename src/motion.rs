@@ -111,7 +111,7 @@ pub fn begin_slide(ui: &egui::Ui, id: &str, index: i32, enabled: bool) -> Slide 
     let t = progress(ctx, egui::Id::new(("slide_progress", id)), index, FADE, enabled);
     let layer = ui.layer_id();
     let first = ctx.graphics_mut(|g| g.entry(layer).next_idx().0);
-    Slide { first, layer, clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()), offset: direction * 38.0 * (1.0 - t) }
+    Slide { first, layer, clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()), offset: direction * 72.0 * (1.0 - t) }
 }
 
 pub fn end_slide(ui: &egui::Ui, slide: Slide) {
