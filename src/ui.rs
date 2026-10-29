@@ -4514,6 +4514,29 @@ impl App {
                                 self.save_preferences();
                             }
                             ui.separator();
+                            ui.horizontal(|ui| {
+                                ui.label(tr("Langue"));
+                                let current = crate::i18n::languages().into_iter()
+                                    .find(|(code, _)| *code == self.preferences.language)
+                                    .map(|(_, name)| name).unwrap_or(tr("Langue de Windows"));
+                                egui::ComboBox::from_id_salt("settings_language")
+                                    .selected_text(current).show_ui(ui, |ui| {
+                                        if ui.selectable_value(&mut self.preferences.language, String::new(), tr("Langue de Windows")).changed() {
+                                            crate::i18n::set_language(crate::i18n::resolve(&self.preferences.language));
+                                            self.save_preferences();
+                                        }
+                                        for (code, name) in crate::i18n::languages() {
+                                            if ui.selectable_value(&mut self.preferences.language, code.to_owned(), name).changed() {
+                                                crate::i18n::set_language(crate::i18n::resolve(&self.preferences.language));
+                                                self.save_preferences();
+                                            }
+                                        }
+                                    });
+                            });
+                            if ui.link(format!("{} ↗", tr("Aider à traduire NovyDeck"))).clicked() {
+                                ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/HatiFlash/NovyDeck/blob/main/docs/TRANSLATING.md"));
+                            }
+                            ui.separator();
                             ui.label(RichText::new(tr("Couleur du deck affiché")).strong());
                             let deck_color_name = |name| match name {
                                 "Noir actuel" => tr("Noir actuel"), "Graphite" => tr("Graphite"),
@@ -4550,29 +4573,6 @@ impl App {
                                     self.assistant_settings = true;
                                 }
                             });
-                            ui.separator();
-                            ui.horizontal(|ui| {
-                                ui.label(tr("Langue"));
-                                let current = crate::i18n::languages().into_iter()
-                                    .find(|(code, _)| *code == self.preferences.language)
-                                    .map(|(_, name)| name).unwrap_or(tr("Langue de Windows"));
-                                egui::ComboBox::from_id_salt("settings_language")
-                                    .selected_text(current).show_ui(ui, |ui| {
-                                        if ui.selectable_value(&mut self.preferences.language, String::new(), tr("Langue de Windows")).changed() {
-                                            crate::i18n::set_language(crate::i18n::resolve(&self.preferences.language));
-                                            self.save_preferences();
-                                        }
-                                        for (code, name) in crate::i18n::languages() {
-                                            if ui.selectable_value(&mut self.preferences.language, code.to_owned(), name).changed() {
-                                                crate::i18n::set_language(crate::i18n::resolve(&self.preferences.language));
-                                                self.save_preferences();
-                                            }
-                                        }
-                                    });
-                            });
-                            if ui.link(format!("{} ↗", tr("Aider à traduire NovyDeck"))).clicked() {
-                                ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/HatiFlash/NovyDeck/blob/main/docs/TRANSLATING.md"));
-                            }
                         }
                         1 => {
                             iconset::heading(ui, Ico::Brightness, RichText::new(tr("Affichage")).size(17.0).strong());
