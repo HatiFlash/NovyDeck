@@ -131,6 +131,7 @@ pub fn end_slide(ui: &egui::Ui, slide: Slide) {
 
 /// Impulsion amortie sur la face peinte seulement (les rectangles interactifs restent fixes).
 pub fn bounce(t: f32) -> f32 {
+    if t >= 1.0 { return 1.0; }
     if t < 0.38 { 1.0 - 0.08 * ease_out(t / 0.38) }
     else if t < 0.70 { 0.92 + 0.12 * ease_out((t - 0.38) / 0.32) }
     else { 1.04 - 0.04 * ease_out((t - 0.70) / 0.30) }
