@@ -2618,7 +2618,7 @@ impl App {
                     }
                     if let Some(target) = active_pill {
                         let rect = motion::indicator(ui.ctx(), egui::Id::new("library_pill"), target, self.animations());
-                        ui.painter().set(pill_shape, egui::Shape::rect_filled(rect, 8.0, p.accent_soft.gamma_multiply(0.45)));
+                        ui.painter().rect_stroke(rect, 8.0, egui::Stroke::new(1.5, p.accent), egui::StrokeKind::Inside);
                     }
                 });
                 ui.add_space(6.0);
