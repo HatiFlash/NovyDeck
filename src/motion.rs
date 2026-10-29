@@ -337,20 +337,21 @@ mod tests {
             let ctx = egui::Context::default();
             let mut samples = Vec::new();
             for (time, index) in [(0.0, 0), (0.01, 2), (0.08, 2), (0.30, 2), (0.31, 0), (0.38, 0), (0.65, 0), (0.66, 2)] {
+                let mut widget = egui::Rect::NOTHING;
                 let output = ctx.run(egui::RawInput { time: Some(time), screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(400.0, 200.0))), ..Default::default() }, |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         let slide = begin_slide(ui, name, index, time != 0.66);
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(80.0, 24.0), egui::Sense::click());
                         ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
                         end_slide(ui, slide);
-                        rect
-                    }).inner
+                        widget = rect;
+                    });
                 });
                 let painted = output.shapes.iter().find_map(|clipped| match &clipped.shape {
                     egui::Shape::Rect(shape) if shape.fill == Color32::WHITE => Some(shape.rect.min.x),
                     _ => None,
                 }).expect("painted rectangle");
-                samples.push((output.inner, painted, output.viewport_output[&egui::ViewportId::ROOT].repaint_delay));
+                samples.push((widget, painted, output.viewport_output[&egui::ViewportId::ROOT].repaint_delay));
             }
             assert!(samples.iter().all(|sample| sample.0 == samples[0].0), "layout and hit-test unchanged: {name}");
             assert!(samples[1].1 > samples[2].1 && samples[2].1 > samples[3].1, "forward slide: {name}");
