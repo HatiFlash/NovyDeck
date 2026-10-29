@@ -7,6 +7,25 @@
 use eframe::egui::{self, Color32, Vec2};
 use std::hash::Hash;
 
+/// Windows accessibility setting, read once at startup (headless tests keep animations enabled).
+pub fn system_animations() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        #[cfg(windows)]
+        {
+            let mut enabled: i32 = 1;
+            // A failed query must not silently turn off the user's saved preference.
+            let ok = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::SystemParametersInfoW(
+                windows_sys::Win32::UI::WindowsAndMessaging::SPI_GETCLIENTAREAANIMATION,
+                0, &mut enabled as *mut i32 as *mut _, 0,
+            ) };
+            ok == 0 || enabled != 0
+        }
+        #[cfg(not(windows))]
+        { true }
+    })
+}
+
 /// Durée d'un fondu de page ou d'onglet.
 pub const FADE: f64 = 0.24;
 /// Durée totale de l'intro (logo, puis fondu vers l'interface).
@@ -48,10 +67,26 @@ pub fn progress(ctx: &egui::Context, id: egui::Id, key: impl Hash, seconds: f64,
 /// Fondu du reste du contenu de `ui` quand `key` change (page, onglet, profil…).
 /// L'opacité part de `from` pour rester discrète ; les positions ne bougent pas.
 pub fn fade(ui: &mut egui::Ui, id: &str, key: impl Hash, from: f32, enabled: bool) {
-    let t = progress(ui.ctx(), egui::Id::new(("motion_fade", id)), key, FADE, enabled);
+    let seconds = if id == "settings_appear" || id == "activity" { 0.18 } else { FADE };
+    let t = progress(ui.ctx(), egui::Id::new(("motion_fade", id)), key, seconds, enabled);
     if t < 1.0 {
         ui.set_opacity(from + (1.0 - from) * t);
     }
+}
+
+/// Interpole une nouvelle couleur de boîtier sans toucher aux rectangles ni au choix sauvegardé.
+pub fn deck_color(ctx: &egui::Context, color: Option<[u8; 3]>, enabled: bool) -> Option<[u8; 3]> {
+    let id = egui::Id::new("deck_color_previous");
+    let (previous, current) = ctx.data_mut(|d| {
+        let pair = d.get_temp_mut_or_insert_with(id, || (color, color));
+        if pair.1 != color { *pair = (pair.1, color); }
+        *pair
+    });
+    let t = progress(ctx, id.with("fade"), color, 0.18, enabled);
+    if t >= 1.0 { return current; }
+    let old = previous.unwrap_or([30, 35, 42]);
+    let new = current.unwrap_or([30, 35, 42]);
+    Some(std::array::from_fn(|i| (old[i] as f32 + (new[i] as f32 - old[i] as f32) * t).round() as u8))
 }
 
 fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
@@ -187,6 +222,25 @@ mod tests {
         let ctx = egui::Context::default();
         frame(&ctx, 0.0, |ui| assert_eq!(progress(ui.ctx(), egui::Id::new("t"), 1, FADE, false), 1.0));
         frame(&ctx, 0.1, |ui| assert_eq!(progress(ui.ctx(), egui::Id::new("t"), 2, FADE, false), 1.0, "« Réduire les animations »"));
+    }
+
+    #[test]
+    fn repaint_stops_after_transition_and_is_absent_when_disabled() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("repaint_transition");
+        let mut delays = Vec::new();
+        let mut values = Vec::new();
+        for (time, key, enabled) in [(0.0, 0, true), (0.1, 1, true), (0.2, 1, true), (0.35, 1, true), (0.5, 1, true), (0.6, 2, false)] {
+            let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| values.push(progress(ui.ctx(), id, key, 0.18, enabled)));
+            });
+            delays.push(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay);
+        }
+        assert!(delays[1].is_zero(), "repaint pendant le fondu");
+        assert_eq!(values[3], 1.0);
+        assert!(!delays[4].is_zero(), "pas de boucle de rendu après la fin");
+        assert_eq!(values[5], 1.0);
+        assert!(!delays[5].is_zero(), "préférence désactivée : pas de repaint");
     }
 
     #[test]

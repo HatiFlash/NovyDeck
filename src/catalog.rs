@@ -620,6 +620,9 @@ pub struct Preferences {
     /// Coupe l'intro et les fondus (l'indicateur de chargement reste).
     #[serde(default)]
     pub reduce_motion: bool,
+    /// Animation des éléments de l'interface (indépendante des médias envoyés au deck).
+    #[serde(default = "default_true")]
+    pub interface_animations: bool,
     /// Langue de l'interface (`fr`, `en`, …) ; vide = langue de Windows.
     #[serde(default)]
     pub language: String,
@@ -673,6 +676,7 @@ impl Default for Preferences {
             activity_collapsed: false,
             local_ai: LocalAi::default(),
             reduce_motion: false,
+            interface_animations: true,
             language: String::new(),
             update_check: None,
             last_seen_version: String::new(),

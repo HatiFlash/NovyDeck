@@ -325,6 +325,7 @@ impl App {
     /// background plugin validation, which runs while the real application is open.
     fn init_with(ctx: &egui::Context, override_path: Option<PathBuf>, configure_variables: bool) -> Self {
         let isolated = override_path.is_some();
+        let _ = motion::system_animations();
         theme::install(ctx);
         let path = override_path.unwrap_or_else(|| {
             std::env::current_exe()
@@ -759,9 +760,9 @@ impl App {
         self.device_model.as_ref().map_or_else(|| tr("périphérique").into(), |d| d.name.clone())
     }
     fn is_d6(&self) -> bool { self.device_model.as_ref().is_none_or(|d| d.name.contains("D6")) }
-    /// Animations d'interface actives (réglage « Réduire les animations »).
+    /// Animations d'interface actives si l'utilisateur et Windows les autorisent.
     fn animations(&self) -> bool {
-        !self.preferences.reduce_motion
+        self.preferences.interface_animations && !self.preferences.reduce_motion && motion::system_animations()
     }
     /// État résumé des deux IA (locale et connectée) pour un seul bouton.
     fn ai_status_label(&self) -> &'static str {
@@ -2993,6 +2994,7 @@ impl App {
                 .resizable(!self.preferences.activity_collapsed)
                 .frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, if self.preferences.activity_collapsed { 4 } else { 12 })))
                 .show(ctx, |ui| {
+                    motion::fade(ui, "activity", self.preferences.activity_collapsed, 0.55, self.animations());
                     ui.horizontal(|ui| {
                         let chevron = if self.preferences.activity_collapsed { "▸" } else { "▾" };
                         if ui.button(format!("{chevron} {}", tr("Activité récente"))).clicked() {
@@ -3483,11 +3485,22 @@ impl App {
                                             });
                                             let hovering = response.hovered() || (self.drag.moving()
                                                 && self.drag.position.is_some_and(|pos| r.contains(pos)));
+                                            let enabled = self.animations();
+                                            let hover = ctx.animate_bool_with_time(egui::Id::new(("deck_face_hover", r.min.x.to_bits(), r.min.y.to_bits())), hovering, if enabled { 0.12 } else { 0.0 });
+                                            let bounce_id = egui::Id::new(("deck_key_bounce", i));
+                                            let clicks = ctx.data_mut(|d| {
+                                                let count = d.get_temp_mut_or_default::<u64>(bounce_id);
+                                                if response.clicked() { *count += 1; }
+                                                *count
+                                            });
+                                            let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.18, enabled);
+                                            let shrink = if clicks == 0 || !enabled { 1.0 } else { 1.0 - 0.04 * (1.0 - (2.0 * phase - 1.0).abs()) };
+                                            let painted = egui::Rect::from_center_size(r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)), r.size() * shrink);
                                             match chassis {
-                                                Some(s) => crate::deck_chassis::paint_face(ui.painter(), r, s, selected, hovering, flashing, self.preferences.deck_color),
-                                                None => theme::key_face(ui.painter(), r, selected || hovering, flashing),
+                                                Some(s) => crate::deck_chassis::paint_face(ui.painter(), painted, s, selected, hover, flashing, motion::deck_color(ctx, self.preferences.deck_color, enabled)),
+                                                None => theme::key_face(ui.painter(), painted, selected || hovering, flashing),
                                             }
-                                            let lcd = chassis.map_or(r.shrink(5.0), |s| crate::deck_chassis::lcd(r, s));
+                                            let lcd = chassis.map_or(painted.shrink(5.0), |s| crate::deck_chassis::lcd(painted, s));
                                             let lcd_radius = chassis.map_or(theme::KEY_LCD_RADIUS, |s| crate::deck_chassis::lcd_radius(r, s));
                                             match self.key_previews.texture(
                                                 ctx,
@@ -3783,7 +3796,7 @@ impl App {
                     if self.flicker.as_ref().is_some_and(|session| session.active()) {
                         self.diagnostic_key_width = width;
                     }
-                    if !crate::deck_chassis::paint(ui.painter(), chassis, self.preferences.deck_color) {
+                    if !crate::deck_chassis::paint(ui.painter(), chassis, motion::deck_color(ctx, self.preferences.deck_color, self.animations())) {
                         theme::device_shell(ui.painter(), chassis);
                     }
                     for i in 0..grid.keys {
@@ -4439,6 +4452,7 @@ impl App {
                 });
             self.show_device_report = open;
         }
+        let _ = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.18, self.animations());
         if self.settings {
             let mut open = true;
             let d6 = self.is_d6();
@@ -4450,6 +4464,8 @@ impl App {
                 .default_height(540.0)
                 .vscroll(true)
                 .show(ctx, |ui| {
+                    let appear = motion::progress(ui.ctx(), egui::Id::new("settings_visibility"), self.settings, 0.18, self.animations());
+                    if appear < 1.0 { ui.set_opacity(0.65 + 0.35 * appear); }
                     // Onglets : la fenêtre reste courte et tient sur un écran de portable.
                     ui.horizontal(|ui| {
                         for (i, (ico, label)) in [(Ico::Palette, tr("Général")), (Ico::Device, tr("Périphérique")), (Ico::Diagnostic, "Diagnostic")].into_iter().enumerate() {
@@ -4496,12 +4512,14 @@ impl App {
                                 });
                                 ui.end_row();
                             });
-                            if theme::checkbox(ui, &mut self.preferences.reduce_motion, tr("Réduire les animations"))
-                                .on_hover_text(tr("Coupe l'intro du démarrage et les fondus de page ; l'indicateur de chargement reste."))
-                                .changed()
-                            {
-                                self.save_preferences();
-                            }
+                            ui.horizontal(|ui| {
+                                if theme::checkbox(ui, &mut self.preferences.interface_animations, tr("Animations de l'interface")).changed() {
+                                    self.save_preferences();
+                                }
+                                if theme::checkbox(ui, &mut self.preferences.reduce_motion, tr("Réduire les animations"))
+                                    .on_hover_text(tr("Coupe l'intro et les fondus ; l'indicateur de chargement reste."))
+                                    .changed() { self.save_preferences(); }
+                            });
                             if theme_changed {
                                 theme::set_theme(&self.preferences.scheme, &self.preferences.accent);
                                 theme::apply(ctx, self.preferences.dark);

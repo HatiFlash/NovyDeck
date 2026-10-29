@@ -4,6 +4,7 @@ use super::*;
 fn ui017_deck_color_saved_and_legacy_black() {
     let old: crate::catalog::Preferences = serde_json::from_str("{}").unwrap();
     assert_eq!(old.deck_color, None);
+    assert!(old.interface_animations, "anciens fichiers : animations activées");
     assert!(!old.activity_collapsed);
     let mut h = Harness::new();
     crate::i18n::set_language("fr");
@@ -61,6 +62,29 @@ fn ui017_activity_collapses_and_expands_with_persistence() {
     h.click(size, toggle);
     assert!(!h.app.preferences.activity_collapsed);
     crate::i18n::set_language("fr");
+}
+
+#[test]
+fn ui017_interface_animations_toggle_is_persisted_and_disabled_is_immediate() {
+    let mut h = Harness::new();
+    let size = vec2(1366.0, 768.0);
+    h.app.settings = true;
+    let general = h.warm(size);
+    let toggle = text_position(&general.shapes, "Animations de l'interface").expect("préférence visible");
+    h.click(size, toggle);
+    assert!(!h.app.preferences.interface_animations);
+    let saved = crate::catalog::Preferences::load(&h.dir.path().join("preferences.json")).unwrap();
+    assert!(!saved.interface_animations);
+    h.app.preferences.reduce_motion = false;
+    assert!(!h.app.animations());
+    let ctx = egui::Context::default();
+    let mut positions = Vec::new();
+    for (time, key) in [(0.0, 0), (0.05, 1), (0.1, 1)] {
+        let _ = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
+            positions.push(crate::motion::progress(ctx, egui::Id::new("disabled"), key, 0.18, false));
+        });
+    }
+    assert_eq!(positions, [1.0; 3]);
 }
 
 #[test]

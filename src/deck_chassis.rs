@@ -162,14 +162,14 @@ pub fn paint(painter: &egui::Painter, chassis: Rect, color: Option<[u8; 3]>) -> 
 }
 
 /// Face 3D dynamique : ombre intérieure dans le dégradé, un unique contour et un reflet discret.
-pub fn paint_face(painter: &egui::Painter, face: Rect, scale: f32, selected: bool, hovering: bool, flashing: bool, color: Option<[u8; 3]>) {
+pub fn paint_face(painter: &egui::Painter, face: Rect, scale: f32, selected: bool, fade: f32, flashing: bool, color: Option<[u8; 3]>) {
     let p = crate::theme::palette(painter.ctx());
     let radius = 10.0;
     let glow = if flashing { crate::theme::GREEN } else { p.accent_ring };
     if selected || flashing {
         painter.rect_filled(face.expand(2.0), radius + 2.0, glow.gamma_multiply(0.14));
     }
-    let fade = painter.ctx().animate_bool_with_time(egui::Id::new(("deck_face_hover", face.min.x.to_bits(), face.min.y.to_bits())), hovering, painter.ctx().style().animation_time.min(0.1));
+    // La géométrie reçue est déjà transformée uniquement pour le dessin ; le layout reste fixe.
     // Les faces sont posées sur le châssis graphite dans les deux thèmes : teintes fixes,
     // sinon la surface claire du thème clair dessine un liseré blanc autour des touches.
     let (rest, lit) = color.map_or((Color32::from_rgb(36, 40, 47), Color32::from_rgb(48, 53, 62)), |[r, g, b]| {
