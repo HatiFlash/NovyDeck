@@ -32,8 +32,8 @@ fn ui017_preview_grows_without_clipping_at_three_sizes() {
         h.ctx.set_pixels_per_point(dpi);
         let _frame = h.warm(size);
         assert_eq!(h.app.drop_targets.len(), 15);
-        let first = h.app.drop_targets[0];
-        let last = h.app.drop_targets[14];
+        let first = h.app.drop_targets[0].0;
+        let last = h.app.drop_targets[14].0;
         assert!(first.min.x >= 0.0 && last.max.x <= size.x && last.max.y < size.y - 125.0, "deck clipped at {physical:?} @ {dpi}: {last:?}");
         widths.push(first.width() * dpi);
     }
