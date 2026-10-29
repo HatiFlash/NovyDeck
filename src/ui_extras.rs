@@ -877,6 +877,18 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
     let dragged = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")));
     // Cible calculée à l'image précédente : l'emplacement est dessiné là où le dépôt aurait lieu.
     let shown = if dragging { ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_shown"))) } else { None };
+    // Stable content identities let cards follow their previous painted positions after a move.
+    // Duplicate blocks get distinct occurrence numbers within the same branch.
+    let seen_id = egui::Id::new(("workshop_card_seen", parent));
+    let previously = ctx.data(|d| d.get_temp::<Vec<egui::Id>>(seen_id));
+    let mut identities = Vec::with_capacity(steps.len());
+    let mut occurrences = std::collections::HashMap::new();
+    for step in steps {
+        let signature = serde_json::to_string(step).unwrap_or_default();
+        let occurrence = occurrences.entry(signature.clone()).or_insert(0_usize);
+        identities.push(egui::Id::new(("workshop_card_motion", parent, signature, *occurrence)));
+        *occurrence += 1;
+    }
     for (i, step) in steps.iter().enumerate() {
         let mut path = parent.to_vec(); path.push(i);
         let slot_here = shown.as_deref() == Some(path.as_slice());
@@ -927,6 +939,8 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             let mut chevron_rect = egui::Rect::NOTHING;
             let mut header_bottom = f32::NEG_INFINITY;
             let mut grip: Option<(egui::Painter, egui::layers::ShapeIdx, egui::Rect)> = None;
+            let paint_layer = ui.layer_id();
+            let paint_start = ctx.graphics_mut(|g| g.entry(paint_layer).next_idx().0);
             let scope = ui.scope_builder(egui::UiBuilder::new().sense(egui::Sense::click_and_drag()), |ui| {
                 if is_dragged { ui.set_opacity(0.35); } else if disabled { ui.set_opacity(0.5); }
                 ui.spacing_mut().indent = 22.0;
@@ -1077,6 +1091,21 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             if let Some((painter, index, rect)) = grip {
                 painter.set(index, grip_shape(rect, if card.hovered() || is_dragged { accent() } else { p.muted }));
             }
+            let new_card = previously.as_ref().is_some_and(|ids| !ids.contains(&identities[i]));
+            let (offset, scale) = motion::workshop_card(&ctx, identities[i], r.center(), new_card, enabled);
+            if offset.length_sq() > 0.01 || (scale - 1.0).abs() > 0.001 {
+                let transform = egui::emath::TSTransform {
+                    scaling: scale,
+                    translation: r.center().to_vec2() * (1.0 - scale) + offset,
+                };
+                ctx.graphics_mut(|g| {
+                    let list = g.entry(paint_layer);
+                    let end = list.next_idx().0;
+                    for n in paint_start..end { list.mutate_shape(egui::layers::ShapeIdx(n), |shape| {
+                        shape.shape.transform(transform);
+                    });}
+                });
+            }
             let pressed_on_control = ui.input(|i| i.pointer.press_origin()).is_some_and(|origin| menu_rect.contains(origin) || chevron_rect.contains(origin) || settings_rect.contains(origin));
             if card.drag_started() && !pressed_on_control {
                 let grab = ui.input(|i| i.pointer.press_origin()).map_or(egui::vec2(24.0, 16.0), |origin| origin - r.min);
@@ -1124,6 +1153,7 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
             workshop_drop_hit(ui, bottom, &after, false);
         });
     }
+    ctx.data_mut(|d| d.insert_temp(seen_id, identities));
     let mut end = parent.to_vec(); end.push(steps.len());
     if shown.as_deref() == Some(end.as_slice()) {
         workshop_slot_zone(ui, &end, true);
@@ -1183,6 +1213,36 @@ fn workshop_float_pos(ctx: &egui::Context, target: egui::Pos2, enabled: bool) ->
     if enabled && result.distance(target) > 0.4 { ctx.request_repaint(); }
     result
 }
+/// Slightly tilted carried card; only Tooltip paint is rotated, never the source hit-tests.
+fn workshop_ghost_tilt(ctx: &egui::Context, layer: egui::LayerId, center: egui::Pos2) {
+    let angle = -4.0_f32.to_radians();
+    fn rotate(pos: egui::Pos2, center: egui::Pos2, angle: f32) -> egui::Pos2 {
+        let v = pos - center;
+        center + egui::vec2(v.x * angle.cos() - v.y * angle.sin(), v.x * angle.sin() + v.y * angle.cos())
+    }
+    fn shape(shape: &mut egui::Shape, center: egui::Pos2, angle: f32) {
+        match shape {
+            egui::Shape::Vec(shapes) => for child in shapes { shape(child, center, angle); },
+            egui::Shape::Rect(rect) => {
+                let points = [rect.rect.left_top(), rect.rect.right_top(), rect.rect.right_bottom(), rect.rect.left_bottom()]
+                    .map(|p| rotate(p, center, angle)).to_vec();
+                *shape = egui::Shape::convex_polygon(points, rect.fill, rect.stroke);
+            }
+            egui::Shape::Path(path) => for point in &mut path.points { *point = rotate(*point, center, angle); },
+            egui::Shape::Text(text) => { text.pos = rotate(text.pos, center, angle); text.angle += angle; },
+            egui::Shape::Circle(circle) => circle.center = rotate(circle.center, center, angle),
+            egui::Shape::LineSegment { points, .. } => for point in points { *point = rotate(*point, center, angle); },
+            egui::Shape::Mesh(mesh) => for vertex in &mut std::sync::Arc::make_mut(mesh).vertices { vertex.pos = rotate(vertex.pos, center, angle); },
+            _ => {}
+        }
+    }
+    ctx.graphics_mut(|g| {
+        let list = g.entry(layer);
+        for n in 0..list.next_idx().0 {
+            list.mutate_shape(egui::layers::ShapeIdx(n), |clipped| shape(&mut clipped.shape, center, angle));
+        }
+    });
+}
 /// Calque Tooltip non interactif : la carte ne perturbe jamais le survol des blocs dessous.
 fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, plugins: &[crate::plugins::Plugin], enabled: bool) {
     let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
@@ -1220,6 +1280,7 @@ fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, pl
             scaling: scale,
             translation: area.response.rect.center().to_vec2() * (1.0 - scale),
         });
+        workshop_ghost_tilt(ctx, area.response.layer_id, area.response.rect.center());
     }
 }
 /// Fantôme d'un bloc de la bibliothèque glissé vers la séquence.
@@ -1244,6 +1305,7 @@ fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins
             scaling: scale,
             translation: area.response.rect.center().to_vec2() * (1.0 - scale),
         });
+        workshop_ghost_tilt(ctx, area.response.layer_id, area.response.rect.center());
     }
 }
 /// Enregistre la cible de dépôt sous le pointeur. Le chemin le plus profond gagne ; `weak` ne vaut que

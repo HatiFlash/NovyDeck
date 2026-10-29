@@ -1,6 +1,34 @@
 //! Drag presentation tests: the binding/swap decision is still owned by gesture::Drag.
 use super::*;
 
+#[test]
+fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
+    let ctx = egui::Context::default();
+    let id = egui::Id::new("ui018_atelier_move");
+    let a = egui::pos2(40.0, 80.0);
+    let b = egui::pos2(40.0, 152.0);
+    let mut samples = vec![];
+    for (time, target, inserted, enabled) in [
+        (0.0, a, false, true), (0.01, b, false, true), (0.07, b, false, true),
+        (0.15, b, false, true), (0.24, b, false, true), (0.25, a, false, false),
+    ] {
+        let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
+            motion::workshop_card(ctx, id, target, inserted, enabled)
+        });
+        samples.push(output.inner);
+    }
+    assert_eq!(samples[0], (Vec2::ZERO, 1.0));
+    assert!(samples[1].0.y < samples[2].0.y && samples[2].0.y < samples[3].0.y);
+    assert_eq!(samples[4], (Vec2::ZERO, 1.0));
+    assert_eq!(samples[5], (Vec2::ZERO, 1.0));
+    let pop = egui::Id::new("ui018_atelier_pop");
+    let first = ctx.run(egui::RawInput { time: Some(0.30), ..Default::default() }, |ctx| motion::workshop_card(ctx, pop, b, true, true));
+    assert!(first.inner.1 < 1.0);
+    let settled = ctx.run(egui::RawInput { time: Some(0.54), ..Default::default() }, |ctx| motion::workshop_card(ctx, pop, b, false, true));
+    assert_eq!(settled.inner, (Vec2::ZERO, 1.0));
+    assert!(!ctx.has_requested_repaint(), "atelier must stay idle after 220 ms");
+}
+
 fn visual() -> DragVisual {
     let source = egui::Rect::from_min_size(egui::pos2(26.0, 68.0), Vec2::new(140.0, 56.0));
     DragVisual { item: DragItem::NewFolder, source, center: source.center(), goal: source.center(),

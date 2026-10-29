@@ -114,6 +114,37 @@ pub fn begin_slide(ui: &egui::Ui, id: &str, index: i32, enabled: bool) -> Slide 
     Slide { first, layer, clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()), offset: direction * 72.0 * (1.0 - t) }
 }
 
+/// Draw-only displacement for workshop cards; layout and hit-tests retain their original rects.
+/// The target can change repeatedly while a slot is being hovered: restart from the painted position.
+pub fn workshop_card(ctx: &egui::Context, id: egui::Id, target: egui::Pos2, inserted: bool, enabled: bool) -> (egui::Vec2, f32) {
+    let now = ctx.input(|i| i.time);
+    let previous = ctx.data(|d| d.get_temp::<(egui::Pos2, egui::Pos2, f64, f64)>(id));
+    if !enabled {
+        ctx.data_mut(|d| d.insert_temp(id, (target, target, now, -1.0)));
+        return (egui::Vec2::ZERO, 1.0);
+    }
+    let (origin, destination, start, born) = match previous {
+        None => (target, target, now, if inserted { now } else { -1.0 }),
+        Some((from, old_target, since, born)) if old_target != target => {
+            let t = ease_out(((now - since) / 0.22).clamp(0.0, 1.0) as f32);
+            (from.lerp(old_target, t), target, now, born)
+        }
+        Some(state) => state,
+    };
+    let t = ((now - start) / 0.22).clamp(0.0, 1.0) as f32;
+    let offset = origin.lerp(destination, ease_out(t)) - target;
+    let pop = if born < 0.0 { 1.0 } else {
+        let u = ((now - born) / 0.22).clamp(0.0, 1.0) as f32;
+        1.0 + 0.10 * (1.0 - u).powi(2) * (u * std::f32::consts::PI * 2.0).sin()
+            - 0.12 * (1.0 - ease_out((u * 2.0).min(1.0)))
+    };
+    ctx.data_mut(|d| d.insert_temp(id, (origin, destination, start, born)));
+    if t < 1.0 && offset.length_sq() > 0.01 || born >= 0.0 && now - born < 0.22 {
+        ctx.request_repaint();
+    }
+    (offset, pop)
+}
+
 pub fn end_slide(ui: &egui::Ui, slide: Slide) {
     if slide.offset.abs() < 0.01 { return; }
     let ctx = ui.ctx();
