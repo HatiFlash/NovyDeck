@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.0"><img src="https://img.shields.io/badge/Release-v0.18.0-3478F6.svg" alt="Release v0.18.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.1"><img src="https://img.shields.io/badge/Release-v0.18.1-3478F6.svg" alt="Release v0.18.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,10 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.18.1
+
+- Two-state keys driven by a plugin state (e.g. RivaTuner OSD) now show your **Off** face instead of being stuck on the base icon when the plugin state is unknown; presses toggle On/Off until the plugin reports its real state. See the [0.18.1 release notes](docs/RELEASE-0.18.1.md).
 
 ## What's new in 0.18.0
 

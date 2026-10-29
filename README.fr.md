@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.0"><img src="https://img.shields.io/badge/Release-v0.18.0-3478F6.svg" alt="Version 0.18.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.1"><img src="https://img.shields.io/badge/Release-v0.18.1-3478F6.svg" alt="Version 0.18.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,10 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.18.1
+
+- Les touches à deux états pilotées par un plugin (ex. RivaTuner OSD) affichent ta face **Désactivé** au lieu de rester bloquées sur l'icône de base quand l'état du plugin est inconnu ; un appui bascule Activé/Désactivé jusqu'à ce que le plugin indique son vrai état. Voir les [notes de version 0.18.1](docs/RELEASE-0.18.1.md).
 
 ## Nouveautés 0.18.0
 
