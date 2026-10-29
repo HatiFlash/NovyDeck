@@ -29,6 +29,49 @@ fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
     assert!(!ctx.has_requested_repaint(), "atelier must stay idle after 220 ms");
 }
 
+/// Deterministic headless workshop paint frames; no hardware or app window.
+#[test]
+#[ignore]
+fn ui018_atelier_motion_frames() {
+    let dir = std::path::PathBuf::from(std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let ctx = egui::Context::default();
+    let size = Vec2::new(360.0, 280.0);
+    for (i, ms) in [0_u32, 60, 120, 200, 280].iter().enumerate() {
+        let output = ctx.run(egui::RawInput { time: Some(f64::from(*ms) / 1000.0),
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() }, |ctx| {
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("atelier_frames")));
+            painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::ZERO, size), 0.0, Color32::from_rgb(27, 31, 40));
+            for (n, base) in [58.0_f32, 119.0, 180.0].iter().enumerate() {
+                let target = egui::pos2(34.0, *base + if *ms == 0 || n == 0 { 0.0 } else { 48.0 });
+                let (delta, scale) = motion::workshop_card(ctx, egui::Id::new(("atelier_frame", n)), target, false, true);
+                let rect = egui::Rect::from_min_size(target + delta, Vec2::new(286.0, 43.0));
+                let rect = egui::Rect::from_center_size(rect.center(), rect.size() * scale);
+                painter.rect_filled(rect, 8.0, Color32::from_rgb(53 + n as u8 * 14, 67 + n as u8 * 10, 91 + n as u8 * 11));
+                painter.rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height())), 0.0, Color32::from_rgb(72, 155, 244));
+            }
+            if *ms != 0 {
+                let slot = egui::Rect::from_min_size(egui::pos2(34.0, 119.0), Vec2::new(286.0, 43.0));
+                painter.rect_stroke(slot, 8.0, egui::Stroke::new(2.0, Color32::from_rgb(72, 155, 244)), egui::StrokeKind::Inside);
+            }
+        });
+        let mut png = image::RgbaImage::from_pixel(360, 280, image::Rgba([27, 31, 40, 255]));
+        for clipped in &output.shapes {
+            let (rect, color) = match &clipped.shape {
+                egui::Shape::Rect(s) => (s.rect, s.fill), _ => continue,
+            };
+            if color == Color32::TRANSPARENT { continue; }
+            let rect = rect.intersect(clipped.clip_rect);
+            for y in (rect.top().max(0.0) as u32)..(rect.bottom().min(280.0) as u32) {
+                for x in (rect.left().max(0.0) as u32)..(rect.right().min(360.0) as u32) {
+                    png.put_pixel(x, y, image::Rgba([color.r(), color.g(), color.b(), 255]));
+                }
+            }
+        }
+        png.save(dir.join(format!("ui018-atelier-{i:02}.png"))).unwrap();
+    }
+}
+
 fn visual() -> DragVisual {
     let source = egui::Rect::from_min_size(egui::pos2(26.0, 68.0), Vec2::new(140.0, 56.0));
     DragVisual { item: DragItem::NewFolder, source, center: source.center(), goal: source.center(),

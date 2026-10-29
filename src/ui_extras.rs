@@ -1220,9 +1220,9 @@ fn workshop_ghost_tilt(ctx: &egui::Context, layer: egui::LayerId, center: egui::
         let v = pos - center;
         center + egui::vec2(v.x * angle.cos() - v.y * angle.sin(), v.x * angle.sin() + v.y * angle.cos())
     }
-    fn shape(shape: &mut egui::Shape, center: egui::Pos2, angle: f32) {
+    fn rotate_shape(shape: &mut egui::Shape, center: egui::Pos2, angle: f32) {
         match shape {
-            egui::Shape::Vec(shapes) => for child in shapes { shape(child, center, angle); },
+            egui::Shape::Vec(shapes) => for child in shapes { rotate_shape(child, center, angle); },
             egui::Shape::Rect(rect) => {
                 let points = [rect.rect.left_top(), rect.rect.right_top(), rect.rect.right_bottom(), rect.rect.left_bottom()]
                     .map(|p| rotate(p, center, angle)).to_vec();
@@ -1239,7 +1239,7 @@ fn workshop_ghost_tilt(ctx: &egui::Context, layer: egui::LayerId, center: egui::
     ctx.graphics_mut(|g| {
         let list = g.entry(layer);
         for n in 0..list.next_idx().0 {
-            list.mutate_shape(egui::layers::ShapeIdx(n), |clipped| shape(&mut clipped.shape, center, angle));
+            list.mutate_shape(egui::layers::ShapeIdx(n), |clipped| rotate_shape(&mut clipped.shape, center, angle));
         }
     });
 }
