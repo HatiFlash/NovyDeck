@@ -12,20 +12,23 @@ fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
         (0.0, a, false, true), (0.01, b, false, true), (0.07, b, false, true),
         (0.15, b, false, true), (0.24, b, false, true), (0.25, a, false, false),
     ] {
-        let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
-            motion::workshop_card(ctx, id, target, inserted, enabled)
+        let mut value = (Vec2::ZERO, 1.0);
+        ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
+            value = motion::workshop_card(ctx, id, target, inserted, enabled);
         });
-        samples.push(output.inner);
+        samples.push(value);
     }
     assert_eq!(samples[0], (Vec2::ZERO, 1.0));
     assert!(samples[1].0.y < samples[2].0.y && samples[2].0.y < samples[3].0.y);
     assert_eq!(samples[4], (Vec2::ZERO, 1.0));
     assert_eq!(samples[5], (Vec2::ZERO, 1.0));
     let pop = egui::Id::new("ui018_atelier_pop");
-    let first = ctx.run(egui::RawInput { time: Some(0.30), ..Default::default() }, |ctx| motion::workshop_card(ctx, pop, b, true, true));
-    assert!(first.inner.1 < 1.0);
-    let settled = ctx.run(egui::RawInput { time: Some(0.54), ..Default::default() }, |ctx| motion::workshop_card(ctx, pop, b, false, true));
-    assert_eq!(settled.inner, (Vec2::ZERO, 1.0));
+    let mut first = (Vec2::ZERO, 1.0);
+    ctx.run(egui::RawInput { time: Some(0.30), ..Default::default() }, |ctx| { first = motion::workshop_card(ctx, pop, b, true, true); });
+    assert!(first.1 < 1.0);
+    let mut settled = (Vec2::ZERO, 1.0);
+    ctx.run(egui::RawInput { time: Some(0.54), ..Default::default() }, |ctx| { settled = motion::workshop_card(ctx, pop, b, false, true); });
+    assert_eq!(settled, (Vec2::ZERO, 1.0));
     assert!(!ctx.has_requested_repaint(), "atelier must stay idle after 220 ms");
 }
 
