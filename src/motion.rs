@@ -332,6 +332,55 @@ mod tests {
     }
 
     #[test]
+    fn settings_and_deck_slides_move_only_paint_in_navigation_direction() {
+        for name in ["settings_tabs", "deck_page_grid"] {
+            let ctx = egui::Context::default();
+            let mut samples = Vec::new();
+            for (time, index) in [(0.0, 0), (0.01, 2), (0.08, 2), (0.30, 2), (0.31, 0), (0.38, 0), (0.65, 0), (0.66, 2)] {
+                let output = ctx.run(egui::RawInput { time: Some(time), screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(400.0, 200.0))), ..Default::default() }, |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        let slide = begin_slide(ui, name, index, time != 0.66);
+                        let (rect, _) = ui.allocate_exact_size(Vec2::new(80.0, 24.0), egui::Sense::click());
+                        ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
+                        end_slide(ui, slide);
+                        rect
+                    }).inner
+                });
+                let painted = output.shapes.iter().find_map(|clipped| match &clipped.shape {
+                    egui::Shape::Rect(shape) if shape.fill == Color32::WHITE => Some(shape.rect.min.x),
+                    _ => None,
+                }).expect("painted rectangle");
+                samples.push((output.inner, painted, output.viewport_output[&egui::ViewportId::ROOT].repaint_delay));
+            }
+            assert!(samples.iter().all(|sample| sample.0 == samples[0].0), "layout and hit-test unchanged: {name}");
+            assert!(samples[1].1 > samples[2].1 && samples[2].1 > samples[3].1, "forward slide: {name}");
+            assert!(samples[4].1 < samples[5].1 && samples[5].1 < samples[6].1, "backward slide: {name}");
+            assert_eq!(samples[3].1, samples[0].1);
+            assert_eq!(samples[6].1, samples[0].1);
+            assert_eq!(samples[7].1, samples[0].1, "disabled jumps straight to final paint");
+            assert!(!samples[6].2.is_zero(), "no repaint after slide: {name}");
+        }
+    }
+
+    #[test]
+    fn activity_panel_height_eases_between_collapsed_and_expanded() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("activity_height_test");
+        let mut heights = Vec::new();
+        for (time, expanded) in [(0.0, false), (0.01, true), (0.07, true), (0.14, true), (0.31, true), (0.32, false), (0.40, false), (0.65, false)] {
+            frame(&ctx, time, |ui| {
+                let t = ui.ctx().animate_bool_with_time(id, expanded, 0.26);
+                heights.push(36.0 + 129.0 * ease_out(t));
+            });
+        }
+        assert_eq!(heights[0], 36.0);
+        assert!(heights[1] < heights[2] && heights[2] < heights[3] && heights[3] < heights[4]);
+        assert_eq!(heights[4], 165.0);
+        assert!(heights[5] > heights[6] && heights[6] > heights[7]);
+        assert_eq!(heights[7], 36.0);
+    }
+
+    #[test]
     fn intro_shows_then_disappears_and_can_be_disabled() {
         let ctx = egui::Context::default();
         let logo = ctx.load_texture("logo", egui::ColorImage::new([4, 4], Color32::WHITE), Default::default());
