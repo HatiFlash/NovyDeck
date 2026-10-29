@@ -1,4 +1,4 @@
 :HL["/NovyDeck/_next/static/media/ea5c6b416458340f-s.p.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-:HL["/NovyDeck/_next/static/css/304cf95e866bacc8.css","style"]
+:HL["/NovyDeck/_next/static/css/1515c99d2b0908f2.css","style"]
 1:[["children",{"s":"__PAGE__","h":160}]]
-0:{"b":"pv_9sLnY0zPb9Zu6y1dVY","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"Wn8W_XMYAETv1IuzyqWEv","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
