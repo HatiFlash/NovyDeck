@@ -68,6 +68,7 @@ fn ui018_real_frames() {
     assert!(h.app.settings, "real settings dialog opened");
 
     let mut h = new_scene();
+    h.app.catalog_tab = 0;
     let initial = h.warm(size);
     let source = h.app.drag_sources.iter().find_map(|(rect, item)|
         matches!(item, DragItem::Action(_)).then_some(rect.center())).expect("real library action");
