@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.17.0"><img src="https://img.shields.io/badge/Release-v0.17.0-3478F6.svg" alt="Release v0.17.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.0"><img src="https://img.shields.io/badge/Release-v0.18.0-3478F6.svg" alt="Release v0.18.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,21 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.18.0
+
+- **Sliding tabs** in the inspector, library and Settings.
+- **Drag & drop with a floating card** that follows the pointer, dives into the key and pops; dropping outside sends it back.
+- **Block Workshop** blocks slide aside, glide to their new place and pop on drop.
+- Settings, "Recent activity", deck pages and the key bounce are now clearly animated. Everything can be turned off with **Interface animations**.
+
+![0.18.0 sliding inspector tabs, French UI, off-screen Windows harness frames](docs/images/v018-tabs-fr.gif)
+
+![0.18.0 drag & drop card dropped on a key, French UI, off-screen Windows harness frames](docs/images/v018-drag-fr.gif)
+
+![0.18.0 Block Workshop reordering, French UI, off-screen Windows harness frames](docs/images/v018-atelier-fr.gif)
+
+These animations are rendered from real window frames by the Windows test harness, not filmed on a connected deck. See the [0.18.0 release notes](docs/RELEASE-0.18.0.md).
 
 ## What's new in 0.17.0
 

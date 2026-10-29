@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.17.0"><img src="https://img.shields.io/badge/Release-v0.17.0-3478F6.svg" alt="Version 0.17.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.0"><img src="https://img.shields.io/badge/Release-v0.18.0-3478F6.svg" alt="Version 0.18.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,21 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.18.0
+
+- **Onglets qui glissent** dans l'inspecteur, la bibliothèque et les Réglages.
+- **Glisser-déposer avec une carte flottante** qui suit la souris, plonge dans la touche et fait un pop ; lâchée à côté, elle revient.
+- **Atelier de blocs :** les blocs s'écartent, glissent vers leur nouvelle place et font un pop au dépôt.
+- Les Réglages, « Activité récente », les pages du deck et le rebond des touches sont maintenant bien animés. Tout se coupe avec **Animations de l'interface**.
+
+![Onglets de l'inspecteur qui glissent, 0.18.0, images du harnais Windows hors écran](docs/images/v018-tabs-fr.gif)
+
+![Carte de glisser-déposer lâchée sur une touche, 0.18.0, images du harnais Windows hors écran](docs/images/v018-drag-fr.gif)
+
+![Réorganisation dans l'Atelier de blocs, 0.18.0, images du harnais Windows hors écran](docs/images/v018-atelier-fr.gif)
+
+Ces animations sont rendues à partir de vraies images de la fenêtre par le harnais de test Windows, pas filmées sur un deck connecté. Voir les [notes de version 0.18.0](docs/RELEASE-0.18.0.md).
 
 ## Nouveautés 0.17.0
 
