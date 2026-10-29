@@ -101,13 +101,14 @@ pub struct Slide {
 
 pub fn begin_slide(ui: &egui::Ui, id: &str, index: i32, enabled: bool) -> Slide {
     let ctx = ui.ctx();
-    let previous = ctx.data_mut(|d| {
-        let slot = d.get_temp_mut_or_insert_with(egui::Id::new(("slide_index", id)), || index);
-        let previous = *slot;
-        *slot = index;
-        previous
+    let direction = ctx.data_mut(|d| {
+        let slot = d.get_temp_mut_or_insert_with(egui::Id::new(("slide_index", id)), || (index, 1.0_f32));
+        if slot.0 != index {
+            slot.1 = if index > slot.0 { 1.0 } else { -1.0 };
+            slot.0 = index;
+        }
+        slot.1
     });
-    let direction = if index >= previous { 1.0 } else { -1.0 };
     let t = progress(ctx, egui::Id::new(("slide_progress", id)), index, FADE, enabled);
     let layer = ui.layer_id();
     let first = ctx.graphics_mut(|g| g.entry(layer).next_idx().0);
