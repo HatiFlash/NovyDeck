@@ -4537,7 +4537,6 @@ impl App {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/HatiFlash/NovyDeck/blob/main/docs/TRANSLATING.md"));
                             }
                             ui.separator();
-                            ui.label(RichText::new(tr("Couleur du deck affiché")).strong());
                             let deck_color_name = |name| match name {
                                 "Noir actuel" => tr("Noir actuel"), "Graphite" => tr("Graphite"),
                                 "Blanc" => tr("Blanc"), "Argent" => tr("Argent"),
@@ -4546,23 +4545,23 @@ impl App {
                             };
                             let current = crate::deck_chassis::COLORS.iter().find(|(_, color)| *color == self.preferences.deck_color)
                                 .map_or(tr("Couleur libre"), |(name, _)| deck_color_name(name));
-                            egui::ComboBox::from_id_salt("deck_color").selected_text(current).show_ui(ui, |ui| {
-                                for (name, color) in crate::deck_chassis::COLORS {
-                                    if ui.selectable_label(self.preferences.deck_color == color, deck_color_name(name)).clicked() {
-                                        self.preferences.deck_color = color;
-                                        self.save_preferences();
-                                    }
-                                }
-                            });
+                            // Une seule ligne : la section Assistant IA doit rester visible sur un portable 1366×768.
                             ui.horizontal(|ui| {
-                                ui.label(tr("Couleur libre"));
+                                ui.label(RichText::new(tr("Couleur du deck affiché")).strong());
+                                egui::ComboBox::from_id_salt("deck_color").selected_text(current).show_ui(ui, |ui| {
+                                    for (name, color) in crate::deck_chassis::COLORS {
+                                        if ui.selectable_label(self.preferences.deck_color == color, deck_color_name(name)).clicked() {
+                                            self.preferences.deck_color = color;
+                                            self.save_preferences();
+                                        }
+                                    }
+                                });
                                 let mut rgb = self.preferences.deck_color.unwrap_or([65, 85, 120]);
-                                if ui.color_edit_button_srgb(&mut rgb).changed() {
+                                if ui.color_edit_button_srgb(&mut rgb).on_hover_text(tr("Couleur libre")).changed() {
                                     self.preferences.deck_color = Some(rgb);
                                     self.save_preferences();
                                 }
                             });
-                            ui.add_space(10.0);
                             ui.separator();
                             iconset::heading(ui, Ico::Robot, RichText::new(tr("Assistant IA")).size(17.0).strong());
                             ui.label(help(tr("IA locale sur ce PC et IA connectée (Claude, ChatGPT…) se règlent au même endroit.")));
