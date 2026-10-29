@@ -10,9 +10,22 @@ use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITH
 const VIDEO: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 const ALL: u32 = MF_SOURCE_READER_ALL_STREAMS.0 as u32;
 
+// Media Foundation may wait indefinitely opening a malformed MP4 on some Windows hosts.
+// Reject obvious non-ISO-BMFF input before touching the native decoder; other
+// containers are left to Media Foundation's own format detection.
+fn validate_mp4_header(path: &Path) -> Result<()> {
+    if matches!(path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase().as_str(),"mp4"|"mov") {
+        use std::io::Read;
+        let mut header=[0u8;8];let mut file=std::fs::File::open(path)?;
+        ensure!(file.read_exact(&mut header).is_ok() && &header[4..]==b"ftyp" && u32::from_be_bytes(header[..4].try_into()?)>=8,"En-tête MP4/MOV invalide");
+    }
+    Ok(())
+}
+
 /// Square `size`x`size` frames sampled at `fps`, cropped like the FFmpeg path (cover + centre crop).
 pub fn decode(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0 && size > 0, "Paramètres vidéo invalides");
+    validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
@@ -30,6 +43,7 @@ pub fn decode(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<Rgb
 /// Decode raw uncropped RGBA frames from video using Windows Media Foundation.
 pub fn decode_raw(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0, "Paramètres vidéo invalides");
+    validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
@@ -193,6 +207,14 @@ pub fn encode_gif(frames: Vec<RgbaImage>, fps: u32) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn malformed_mp4_never_reaches_media_foundation() {
+        let dir=tempfile::tempdir().unwrap();let path=dir.path().join("broken.mp4");
+        std::fs::write(&path,b"ceci n'est pas une video").unwrap();
+        assert!(validate_mp4_header(&path).unwrap_err().to_string().contains("En-tête"));
+        std::fs::write(&path,[0,0,0,16,b'f',b't',b'y',b'p',0,0,0,0,0,0,0,0]).unwrap();
+        assert!(validate_mp4_header(&path).is_ok());
+    }
     #[test]
     fn bottom_up_bgra_and_centre_crop() {
         let bytes = [0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0];

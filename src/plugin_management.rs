@@ -46,7 +46,8 @@ fn local(root:&Path,id:&str)->Result<(PathBuf,crate::plugins::Plugin)> {
 /// La fonction ne touche jamais à l'installation existante avant validation complète.
 /// Retourne le chemin du backup intégral, laissé en place pour restauration manuelle.
 /// Update without UI-provided protected paths. Unknown old files missing from the new package
-/// are retained unless they are executable/package artifacts; ambiguous collisions fail closed.
+/// are retained unless they are executable/package artifacts; divergent packaged assets
+/// win over unprotected local copies, which are archived inside the plugin data folder.
 pub fn replace_staged(root:&Path,id:&str,source:&Path)->Result<PathBuf>{replace_staged_preserving(root,id,source,&[])}
 /// `protected` lists exact relative *files* owned by the user's profile (e.g. an image
 /// referenced by a StateFace). The caller must provide all such collisions explicitly.
@@ -58,6 +59,7 @@ fn packaged(path:&Path)->bool {
     let name=path.file_name().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
     let ext=path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase();
     name=="manifest.json" || name=="package.json" || name=="package-lock.json" || name==".deckforge-import.json"
+        || ["readme.md","changelog.md","license"].contains(&name.as_str())
         || name.starts_with("i18n.") || name.starts_with("schema.")
         || ["js","mjs","cjs","dll","exe","node","html","css","wasm","map"].contains(&ext.as_str())
         || ["schema","schemas","localization","localizations","i18n","node_modules"].iter().any(|dir|path.components().any(|c|c.as_os_str().to_string_lossy().eq_ignore_ascii_case(dir)))
@@ -82,16 +84,31 @@ fn same_contents(left:&Path,right:&Path)->Result<bool> {
     }
 }
 fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
-    fn visit(base:&Path,candidate:&Path,relative:&Path,protected:&[PathBuf],count:&mut usize)->Result<()> {
+    fn visit(base:&Path,candidate:&Path,relative:&Path,protected:&[PathBuf],count:&mut usize,collisions:&mut Option<PathBuf>)->Result<()> {
         for entry in fs::read_dir(base.join(relative))? {
             let entry=entry?;*count+=1;anyhow::ensure!(*count<=4096,"Trop de fichiers locaux");
             let path=relative.join(entry.file_name());let ty=metadata(&entry.path())?;
-            if ty.is_dir(){visit(base,candidate,&path,protected,count)?;continue;}
+            if ty.is_dir(){visit(base,candidate,&path,protected,count,collisions)?;continue;}
             anyhow::ensure!(ty.is_file(),"Type local refusé");
             let target=candidate.join(&path);let explicit=protected.iter().any(|p|p==&path);
             if !packaged(&path) && !explicit && !mutable(&path) && target.exists(){
+                anyhow::ensure!(metadata(&target)?.is_file(),"Conflit fichier/dossier : {}",path.display());
                 if same_contents(&entry.path(),&target)? {continue;}
-                anyhow::bail!("Collision locale ambiguë : {} ; protection explicite requise",path.display());
+                anyhow::ensure!(ty.len()<=100*1024*1024,"Donnée locale trop volumineuse");
+                let archive=if let Some(dir)=collisions.as_ref(){dir.clone()}else{
+                    let data=candidate.join("data");fs::create_dir_all(&data)?;
+                    // Keep the user's archives; refuse further archival rather than silently
+                    // discarding history or growing without a bound.
+                    let prior=base.join("data");
+                    let existing=if prior.exists(){fs::read_dir(&prior)?.filter_map(|e|e.ok()).filter(|e|e.file_name().to_string_lossy().starts_with(".update-collisions-")).count()}else{0};
+                    anyhow::ensure!(existing<32,"Trop d'archives de collisions ; sauvegarder puis nettoyer data/.update-collisions-* avant la mise à jour");
+                    let dir=tempfile::Builder::new().prefix(".update-collisions-").tempdir_in(data)?.keep();
+                    *collisions=Some(dir.clone());dir
+                };
+                let saved=archive.join(&path);fs::create_dir_all(saved.parent().context("Parent absent")?)?;
+                fs::copy(entry.path(),&saved)?;
+                eprintln!("Mise à jour du plugin : {} remplacé par le paquet ; copie locale sauvegardée dans {}",path.display(),saved.display());
+                continue;
             }
             let keep=!packaged(&path) && (explicit || mutable(&path) || !target.exists());
             if !keep {continue;}
@@ -102,7 +119,7 @@ fn preserve(old:&Path,candidate:&Path,protected:&[PathBuf])->Result<()> {
         }
         Ok(())
     }
-    let mut count=0;visit(old,candidate,Path::new(""),protected,&mut count)
+    let mut count=0;let mut collisions=None;visit(old,candidate,Path::new(""),protected,&mut count,&mut collisions)
 }
 fn replace_staged_impl_with_paths(root:&Path,id:&str,source:&Path,protected:&[PathBuf],fail_commit:bool)->Result<PathBuf>{
     for path in protected {
@@ -208,14 +225,39 @@ pub fn uninstall(root:&Path,id:&str)->Result<PathBuf>{
         assert_eq!(fs::read(root.join("a.sdPlugin/main.js")).unwrap(),b"2.0");
         assert_eq!(fs::read(root.join("a.sdPlugin/images/icon.png")).unwrap(),b"same unchanged packaged icon");
     }
-    #[test] fn ambiguous_image_collision_refuses_before_mutation() {
+    #[test] fn divergent_asset_uses_package_and_archives_local_copy() {
+        let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
+        let old=root.join("a.sdPlugin");fs::create_dir(old.join("images")).unwrap();fs::write(old.join("images/user.png"),b"mine").unwrap();
+        fs::write(old.join("README.md"),b"old readme").unwrap();
+        let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
+        let incoming=stage.join("a.sdPlugin");fs::create_dir(incoming.join("images")).unwrap();fs::write(incoming.join("images/user.png"),b"new").unwrap();
+        fs::write(incoming.join("README.md"),b"new readme").unwrap();
+        let backup=replace_staged(&root,"test.a",&incoming).unwrap();
+        assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"new");
+        assert_eq!(fs::read(old.join("README.md")).unwrap(),b"new readme");
+        assert_eq!(fs::read(backup.join("images/user.png")).unwrap(),b"mine");
+        let archives=fs::read_dir(old.join("data")).unwrap().map(|e|e.unwrap().path()).collect::<Vec<_>>();
+        assert_eq!(archives.len(),1);
+        assert_eq!(fs::read(archives[0].join("images/user.png")).unwrap(),b"mine");
+        assert!(!archives[0].join("README.md").exists());
+        let next=d.path().join("next");fixture(&next,"a.sdPlugin","test.a","3.0");
+        let newer=next.join("a.sdPlugin");fs::create_dir(newer.join("images")).unwrap();
+        fs::write(newer.join("images/user.png"),b"newest").unwrap();
+        replace_staged(&root,"test.a",&newer).unwrap();
+        assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"newest");
+        assert_eq!(fs::read(archives[0].join("images/user.png")).unwrap(),b"mine");
+        let all=fs::read_dir(old.join("data")).unwrap().count();
+        assert_eq!(all,2,"la copie initiale reste accessible après une nouvelle mise à jour");
+    }
+    #[test] fn collision_commit_failure_restores_exact_original() {
         let d=tempfile::tempdir().unwrap();let root=d.path().join("plugins");fixture(&root,"a.sdPlugin","test.a","1.0");
         let old=root.join("a.sdPlugin");fs::create_dir(old.join("images")).unwrap();fs::write(old.join("images/user.png"),b"mine").unwrap();
         let stage=d.path().join("stage");fixture(&stage,"a.sdPlugin","test.a","2.0");
         let incoming=stage.join("a.sdPlugin");fs::create_dir(incoming.join("images")).unwrap();fs::write(incoming.join("images/user.png"),b"new").unwrap();
-        assert!(replace_staged(&root,"test.a",&incoming).unwrap_err().to_string().contains("ambiguë"));
+        assert!(replace_staged_impl(&root,"test.a",&incoming,true).is_err());
         assert_eq!(fs::read(old.join("images/user.png")).unwrap(),b"mine");
         assert_eq!(fs::read(old.join("main.js")).unwrap(),b"1.0");
+        assert!(!old.join("data").exists());
     }
     #[test] fn invalid_protection_never_mutates() {
         for path in ["../outside","/absolute","manifest.json","main.js","images/../main.js"] {
