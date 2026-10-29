@@ -8,6 +8,7 @@
 #[path = "ui_audit_tests.rs"] mod audit_tests;
 #[path = "ui_main015_tests.rs"] mod main015_tests;
 #[path = "ui_017_tests.rs"] mod ui_017_tests;
+#[path = "ui_018_tests.rs"] mod ui_018_tests;
 #[path = "ui_release013_tests.rs"] mod release013_tests;
 #[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
 #[path="ui_plugin_block_tests.rs"] mod plugin_block_tests;

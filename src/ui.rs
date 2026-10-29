@@ -5943,9 +5943,6 @@ fn step_summary(step: &Step) -> String {
 #[cfg(test)]
 #[path = "ui_tests.rs"]
 mod tests;
-#[cfg(test)]
-#[path = "ui_018_tests.rs"]
-mod ui_018_tests;
 
 #[path = "ui_extras.rs"]
 mod extras;
