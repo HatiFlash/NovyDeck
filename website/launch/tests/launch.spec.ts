@@ -55,6 +55,8 @@ test("language, keyboard navigation, FAQ and axe", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Every key");
   await expect(page.locator(".story-row")).toHaveCount(5);
   await expect(page.locator("img[alt*='French off-screen Windows harness']")).toHaveCount(2);
+  // Auditer après la fin des révélations au défilement, sans prendre leur état transitoire pour le contraste final.
+  await page.waitForTimeout(1100);
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(results.violations.filter(v => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
@@ -76,6 +78,6 @@ test("WebGL fits the stage and blue controls have no warm accent", async ({ page
   expect(box?.width).toBeGreaterThan(200);
   expect(box?.width).toBeLessThan(1000);
   const button = await page.locator(".button-primary").first().evaluate(el => getComputedStyle(el).backgroundColor);
-  expect(button).toBe("rgb(41, 151, 255)");
+  expect(button).toBe("rgb(0, 100, 189)");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
 });
