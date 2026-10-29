@@ -108,8 +108,22 @@ pub fn textures_loaded(ctx: &egui::Context) -> usize {
         .unwrap_or(0)
 }
 
+/// Présélections : la première (None) restitue exactement le boîtier historique.
+pub const COLORS: [(&str, Option<[u8; 3]>); 8] = [
+    ("Noir actuel", None), ("Graphite", Some([75, 80, 88])),
+    ("Blanc", Some([237, 239, 240])), ("Argent", Some([170, 179, 187])),
+    ("Bleu nuit", Some([35, 64, 110])), ("Rouge", Some([156, 45, 54])),
+    ("Vert", Some([46, 116, 82])), ("Rose", Some([181, 86, 137])),
+];
+fn mix(a: Color32, b: Color32, fraction: f32) -> Color32 {
+    let blend = |x: u8, y: u8| (x as f32 * (1.0 - fraction) + y as f32 * fraction).round() as u8;
+    Color32::from_rgb(blend(a.r(), b.r()), blend(a.g(), b.g()), blend(a.b(), b.b()))
+}
+pub fn light(color: Option<[u8; 3]>) -> bool {
+    color.is_some_and(|[r, g, b]| (r as u32 * 299 + g as u32 * 587 + b as u32 * 114) > 155_000)
+}
 /// Peint le châssis dans `chassis`. Retourne faux si le SVG n'a pas pu être rendu (repli).
-pub fn paint(painter: &egui::Painter, chassis: Rect) -> bool {
+pub fn paint(painter: &egui::Painter, chassis: Rect, color: Option<[u8; 3]>) -> bool {
     let ctx = painter.ctx();
     // Jamais au-delà de la taille de texture du GPU (le châssis est alors légèrement agrandi).
     let max_side = ctx.input(|i| i.max_texture_side).max(256) as f32 * VIEW.x / VIEW.y.max(VIEW.x);
@@ -136,17 +150,19 @@ pub fn paint(painter: &egui::Painter, chassis: Rect) -> bool {
     for (spread, opacity) in [(12.0, 9), (7.0, 13), (3.0, 17)] {
         painter.rect_filled(outer.translate(Vec2::new(0.0, 8.0 * s)).expand(spread * s), 80.0 * s, Color32::from_black_alpha(opacity));
     }
-    let shell_top = if ctx.style().visuals.dark_mode { Color32::from_rgb(43, 48, 56) } else { Color32::from_rgb(57, 61, 67) };
-    crate::theme::rounded_gradient(painter, outer, 80.0 * s, shell_top, Color32::from_rgb(22, 25, 30));
-    painter.rect_stroke(outer, 80.0 * s, Stroke::new((1.0 * s).max(0.8), p.border_strong), egui::StrokeKind::Inside);
+    let base = color.map(|[r, g, b]| Color32::from_rgb(r, g, b));
+    let shell_top = base.map_or(if ctx.style().visuals.dark_mode { Color32::from_rgb(43, 48, 56) } else { Color32::from_rgb(57, 61, 67) }, |c| mix(c, Color32::WHITE, 0.16));
+    let shell_bottom = base.map_or(Color32::from_rgb(22, 25, 30), |c| mix(c, Color32::BLACK, 0.28));
+    crate::theme::rounded_gradient(painter, outer, 80.0 * s, shell_top, shell_bottom);
+    painter.rect_stroke(outer, 80.0 * s, Stroke::new((1.0 * s).max(0.8), base.map_or(p.border_strong, |c| mix(c, if light(color) { Color32::BLACK } else { Color32::WHITE }, 0.25))), egui::StrokeKind::Inside);
     let inset = Rect::from_min_max(svg_point(chassis, egui::pos2(65.0, 54.0)), svg_point(chassis, egui::pos2(1335.0, 784.0)));
-    painter.rect_filled(inset, 63.0 * s, Color32::from_rgb(18, 21, 26));
-    painter.line_segment([svg_point(chassis, egui::pos2(108.0, 60.0)), svg_point(chassis, egui::pos2(1290.0, 60.0))], Stroke::new((1.0 * s).max(0.5), Color32::from_white_alpha(32)));
+    painter.rect_filled(inset, 63.0 * s, base.map_or(Color32::from_rgb(18, 21, 26), |c| mix(c, Color32::BLACK, 0.36)));
+    painter.line_segment([svg_point(chassis, egui::pos2(108.0, 60.0)), svg_point(chassis, egui::pos2(1290.0, 60.0))], Stroke::new((1.0 * s).max(0.5), if light(color) { Color32::from_black_alpha(38) } else { Color32::from_white_alpha(32) }));
     true
 }
 
 /// Face 3D dynamique : ombre intérieure dans le dégradé, un unique contour et un reflet discret.
-pub fn paint_face(painter: &egui::Painter, face: Rect, scale: f32, selected: bool, hovering: bool, flashing: bool) {
+pub fn paint_face(painter: &egui::Painter, face: Rect, scale: f32, selected: bool, hovering: bool, flashing: bool, color: Option<[u8; 3]>) {
     let p = crate::theme::palette(painter.ctx());
     let radius = 10.0;
     let glow = if flashing { crate::theme::GREEN } else { p.accent_ring };
@@ -156,20 +172,23 @@ pub fn paint_face(painter: &egui::Painter, face: Rect, scale: f32, selected: boo
     let fade = painter.ctx().animate_bool_with_time(egui::Id::new(("deck_face_hover", face.min.x.to_bits(), face.min.y.to_bits())), hovering, painter.ctx().style().animation_time.min(0.1));
     // Les faces sont posées sur le châssis graphite dans les deux thèmes : teintes fixes,
     // sinon la surface claire du thème clair dessine un liseré blanc autour des touches.
-    let (rest, lit) = (Color32::from_rgb(36, 40, 47), Color32::from_rgb(48, 53, 62));
+    let (rest, lit) = color.map_or((Color32::from_rgb(36, 40, 47), Color32::from_rgb(48, 53, 62)), |[r, g, b]| {
+        let base = Color32::from_rgb(r, g, b);
+        (mix(base, Color32::BLACK, 0.22), mix(base, Color32::WHITE, 0.13))
+    });
     let top = if flashing { Color32::from_rgb(22, 68, 62) } else {
         let blend = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * fade).round() as u8;
         Color32::from_rgb(blend(rest.r(), lit.r()), blend(rest.g(), lit.g()), blend(rest.b(), lit.b()))
     };
-    let bottom = if flashing { Color32::from_rgb(15, 46, 44) } else { Color32::from_rgb(24, 27, 32) };
+    let bottom = if flashing { Color32::from_rgb(15, 46, 44) } else { color.map_or(Color32::from_rgb(24, 27, 32), |[r, g, b]| mix(Color32::from_rgb(r, g, b), Color32::BLACK, 0.38)) };
     crate::theme::rounded_gradient(painter, face, radius, top, bottom);
-    let stroke = if flashing { crate::theme::GREEN } else if selected { p.accent_ring } else { Color32::from_white_alpha(16) };
+    let stroke = if flashing { crate::theme::GREEN } else if selected { p.accent_ring } else if light(color) { Color32::from_black_alpha(100) } else { Color32::from_white_alpha(38) };
     painter.rect_stroke(face, radius, Stroke::new(if selected || flashing { 2.0 } else { 1.0 }, stroke), egui::StrokeKind::Inside);
     {
         painter.line_segment([
             face.left_top() + Vec2::new(20.0, 2.0) * scale,
             face.right_top() + Vec2::new(-20.0, 2.0) * scale,
-        ], Stroke::new(1.0, Color32::from_white_alpha(25)));
+        ], Stroke::new(1.0, if light(color) { Color32::from_black_alpha(45) } else { Color32::from_white_alpha(25) }));
     }
 }
 

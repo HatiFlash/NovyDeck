@@ -2988,31 +2988,40 @@ impl App {
             });
         if self.show_logs {
             egui::TopBottomPanel::bottom("logs")
-                .default_height(165.0)
-                .height_range(100.0..=320.0)
-                .resizable(true)
-                .frame(egui::Frame::new().fill(p.surface).inner_margin(16))
+                .default_height(if self.preferences.activity_collapsed { 36.0 } else { 165.0 })
+                .height_range(if self.preferences.activity_collapsed { 36.0..=36.0 } else { 100.0..=320.0 })
+                .resizable(!self.preferences.activity_collapsed)
+                .frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, if self.preferences.activity_collapsed { 4 } else { 12 })))
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(tr("Activité récente")).strong());
-                        if ui.small_button(tr("Effacer")).clicked() {
+                        let chevron = if self.preferences.activity_collapsed { "▸" } else { "▾" };
+                        if ui.button(format!("{chevron} {}", tr("Activité récente"))).clicked() {
+                            self.preferences.activity_collapsed = !self.preferences.activity_collapsed;
+                            self.save_preferences();
+                        }
+                        if self.preferences.activity_collapsed {
+                            let last = self.logs.back().map(String::as_str).unwrap_or("—");
+                            ui.add(egui::Label::new(format!("{} · {last}", self.logs.len())).truncate()).on_hover_text(last);
+                        } else if ui.small_button(tr("Effacer")).clicked() {
                             self.logs.clear();
                         }
                     });
-                    egui::ScrollArea::vertical()
-                        .stick_to_bottom(true)
-                        .show(ui, |ui| {
-                            for s in &self.logs {
-                                ui.label(RichText::new(s).monospace().size(11.0).color(p.muted));
-                            }
-                        });
+                    if !self.preferences.activity_collapsed {
+                        egui::ScrollArea::vertical()
+                            .stick_to_bottom(true)
+                            .show(ui, |ui| {
+                                for s in &self.logs {
+                                    ui.label(RichText::new(s).monospace().size(11.0).color(p.muted));
+                                }
+                            });
+                    }
                 });
         }
     }
     fn editor(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
         let running = self.engine.running.load(Ordering::SeqCst);
-        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else{320.0}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
+        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else{(ctx.screen_rect().height()*0.25).clamp(220.0,300.0)}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
             let tab_id = egui::Id::new("inspector_tab");
             let mut tab = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id));
             let configured = { let k = &self.config.keys()[self.selected]; !k.steps.is_empty() || !k.long_steps.is_empty() || k.plugin.is_some() };
@@ -3475,7 +3484,7 @@ impl App {
                                             let hovering = response.hovered() || (self.drag.moving()
                                                 && self.drag.position.is_some_and(|pos| r.contains(pos)));
                                             match chassis {
-                                                Some(s) => crate::deck_chassis::paint_face(ui.painter(), r, s, selected, hovering, flashing),
+                                                Some(s) => crate::deck_chassis::paint_face(ui.painter(), r, s, selected, hovering, flashing, self.preferences.deck_color),
                                                 None => theme::key_face(ui.painter(), r, selected || hovering, flashing),
                                             }
                                             let lcd = chassis.map_or(r.shrink(5.0), |s| crate::deck_chassis::lcd(r, s));
@@ -3554,7 +3563,7 @@ impl App {
                                                 egui::Align2::RIGHT_TOP,
                                                 format!("{:02}", i + 1),
                                                 egui::FontId::proportional(chassis.map_or(10.0, |s| (10.0 * s).clamp(3.0, 10.0))),
-                                                p.text_tertiary,
+                                                if crate::deck_chassis::light(self.preferences.deck_color) && chassis.is_some() { Color32::from_rgb(32, 40, 53) } else { p.text_tertiary },
                                             );
                                             self.drag_sources.push((
                                                 r.intersect(ui.clip_rect()),
@@ -3774,7 +3783,7 @@ impl App {
                     if self.flicker.as_ref().is_some_and(|session| session.active()) {
                         self.diagnostic_key_width = width;
                     }
-                    if !crate::deck_chassis::paint(ui.painter(), chassis) {
+                    if !crate::deck_chassis::paint(ui.painter(), chassis, self.preferences.deck_color) {
                         theme::device_shell(ui.painter(), chassis);
                     }
                     for i in 0..grid.keys {
@@ -3787,7 +3796,7 @@ impl App {
                         egui::Align2::CENTER_CENTER,
                         "NOVYDECK",
                         egui::FontId::proportional((20.0 * s).clamp(7.0, 12.0)),
-                        Color32::from_rgba_unmultiplied(150, 172, 204, 150),
+                        if crate::deck_chassis::light(self.preferences.deck_color) { Color32::from_rgb(36, 44, 58) } else { Color32::from_rgba_unmultiplied(150, 172, 204, 150) },
                     );
                 } else {
                     // Le pavé suit la taille de la fenêtre : il occupe tout l'espace disponible, sans barre de défilement.
@@ -4498,6 +4507,26 @@ impl App {
                                 theme::apply(ctx, self.preferences.dark);
                                 self.save_preferences();
                             }
+                            ui.separator();
+                            ui.label(RichText::new(tr("Couleur du deck affiché")).strong());
+                            let current = crate::deck_chassis::COLORS.iter().find(|(_, color)| *color == self.preferences.deck_color)
+                                .map_or(tr("Couleur libre"), |(name, _)| tr(name));
+                            egui::ComboBox::from_id_salt("deck_color").selected_text(current).show_ui(ui, |ui| {
+                                for (name, color) in crate::deck_chassis::COLORS {
+                                    if ui.selectable_label(self.preferences.deck_color == color, tr(name)).clicked() {
+                                        self.preferences.deck_color = color;
+                                        self.save_preferences();
+                                    }
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(tr("Couleur libre"));
+                                let mut rgb = self.preferences.deck_color.unwrap_or([65, 85, 120]);
+                                if ui.color_edit_button_srgb(&mut rgb).changed() {
+                                    self.preferences.deck_color = Some(rgb);
+                                    self.save_preferences();
+                                }
+                            });
                             ui.add_space(10.0);
                             ui.separator();
                             iconset::heading(ui, Ico::Robot, RichText::new(tr("Assistant IA")).size(17.0).strong());

@@ -608,6 +608,12 @@ pub struct Preferences {
     /// Couleur d'accent (bleu, violet, emeraude, orange, rose).
     #[serde(default)]
     pub accent: String,
+    /// Teinte du boîtier de l'aperçu ; None conserve le noir historique.
+    #[serde(default)]
+    pub deck_color: Option<[u8; 3]>,
+    /// Le journal réduit ne garde que son en-tête et le dernier événement.
+    #[serde(default)]
+    pub activity_collapsed: bool,
     /// IA locale facultative de l'assistant de l'atelier (désactivée par défaut).
     #[serde(default)]
     pub local_ai: LocalAi,
@@ -663,6 +669,8 @@ impl Default for Preferences {
             allow_connected_ai: false,
             scheme: String::new(),
             accent: String::new(),
+            deck_color: None,
+            activity_collapsed: false,
             local_ai: LocalAi::default(),
             reduce_motion: false,
             language: String::new(),

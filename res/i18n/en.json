@@ -2,6 +2,13 @@
   "language": "English",
   "strings": {
     " (clair)": " (light)",
+    "Argent": "Silver",
+    "Blanc": "White",
+    "Couleur du deck affiché": "Preview deck color",
+    "Couleur libre": "Custom color",
+    "Noir actuel": "Original black",
+    "Rouge": "Red",
+    "Vert": "Green",
     " (enregistrée)": " (saved)",
     " (sombre)": " (dark)",
     " Choisis maintenant les deux périphériques audio dans l'inspecteur.": " Now select both audio devices in the inspector.",
