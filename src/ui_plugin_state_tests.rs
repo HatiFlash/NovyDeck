@@ -86,7 +86,9 @@ fn macro_states_are_distinct_and_unknown_clears_only_selected_instance() {
     assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Local(true));
     assert_eq!(h.app.plugin_states.lookup(&h.app.config,1,&h.app.config.keys()[1]),Observation::Local(false));
     let msg=event(&h,0,None,None);h.app.plugin_message(OWNER,&msg);
-    assert!(h.app.presented_key(0).image.ends_with("on.png"));assert!(h.app.presented_key(1).image.ends_with("off.png"));
+    assert_eq!(h.app.plugin_states.lookup(&h.app.config,0,&h.app.config.keys()[0]),Observation::Unknown);
+    assert_eq!(h.app.plugin_states.lookup(&h.app.config,1,&h.app.config.keys()[1]),Observation::Local(false));
+    assert!(h.app.presented_key(0).image.ends_with("off.png"));assert!(h.app.presented_key(0).runtime_badge.is_none());assert!(h.app.presented_key(1).image.ends_with("off.png"));
     assert_eq!(h.app.applied.keys()[0].steps,h.app.config.keys()[0].steps);
 }
 #[test]
