@@ -3021,7 +3021,7 @@ impl App {
     fn editor(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
         let running = self.engine.running.load(Ordering::SeqCst);
-        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else{(ctx.screen_rect().height()*0.25).clamp(220.0,300.0)}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
+        egui::TopBottomPanel::bottom("key_inspector").default_height(if ctx.screen_rect().height()<700.0 {(ctx.screen_rect().height()*0.34).clamp(180.0,240.0)}else if ctx.screen_rect().height()<800.0 {(ctx.screen_rect().height()*0.40).clamp(200.0,300.0)}else if ctx.screen_rect().height()<=900.0 {320.0}else{300.0}).height_range(120.0..=(ctx.screen_rect().height()*if ctx.screen_rect().height()<600.0 {0.31} else {0.5}).max(140.0)).resizable(true).frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, 12))).show(ctx,|ui| {
             let tab_id = egui::Id::new("inspector_tab");
             let mut tab = ui.ctx().data_mut(|d| *d.get_persisted_mut_or_default::<u8>(tab_id));
             let configured = { let k = &self.config.keys()[self.selected]; !k.steps.is_empty() || !k.long_steps.is_empty() || k.plugin.is_some() };
@@ -4508,12 +4508,24 @@ impl App {
                                 self.save_preferences();
                             }
                             ui.separator();
+                            let mut check = self.preferences.update_check.unwrap_or(false);
+                            if theme::checkbox(ui, &mut check, tr("Vérifier les mises à jour au démarrage")).changed() {
+                                self.preferences.update_check = Some(check);
+                                self.save_preferences();
+                            }
+                            ui.separator();
                             ui.label(RichText::new(tr("Couleur du deck affiché")).strong());
+                            let deck_color_name = |name| match name {
+                                "Noir actuel" => tr("Noir actuel"), "Graphite" => tr("Graphite"),
+                                "Blanc" => tr("Blanc"), "Argent" => tr("Argent"),
+                                "Bleu nuit" => tr("Bleu nuit"), "Rouge" => tr("Rouge"),
+                                "Vert" => tr("Vert"), "Rose" => tr("Rose"), _ => tr("Couleur libre"),
+                            };
                             let current = crate::deck_chassis::COLORS.iter().find(|(_, color)| *color == self.preferences.deck_color)
-                                .map_or(tr("Couleur libre"), |(name, _)| tr(name));
+                                .map_or(tr("Couleur libre"), |(name, _)| deck_color_name(name));
                             egui::ComboBox::from_id_salt("deck_color").selected_text(current).show_ui(ui, |ui| {
                                 for (name, color) in crate::deck_chassis::COLORS {
-                                    if ui.selectable_label(self.preferences.deck_color == color, tr(name)).clicked() {
+                                    if ui.selectable_label(self.preferences.deck_color == color, deck_color_name(name)).clicked() {
                                         self.preferences.deck_color = color;
                                         self.save_preferences();
                                     }
@@ -4560,12 +4572,6 @@ impl App {
                             });
                             if ui.link(format!("{} ↗", tr("Aider à traduire NovyDeck"))).clicked() {
                                 ui.ctx().open_url(egui::OpenUrl::new_tab("https://github.com/HatiFlash/NovyDeck/blob/main/docs/TRANSLATING.md"));
-                            }
-                            ui.separator();
-                            let mut check = self.preferences.update_check.unwrap_or(false);
-                            if theme::checkbox(ui, &mut check, tr("Vérifier les mises à jour au démarrage")).changed() {
-                                self.preferences.update_check = Some(check);
-                                self.save_preferences();
                             }
                         }
                         1 => {
