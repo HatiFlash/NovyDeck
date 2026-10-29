@@ -3793,6 +3793,9 @@ impl App {
                     ui.label(RichText::new(trf("{keys} touches supplémentaires conservées, masquées sur ce périphérique", &[("keys", &(self.config.keys().len() - grid.keys))])).small().color(p.muted));
                 }
                 ui.add_space(if ctx.screen_rect().height() < 700.0 { 2.0 } else { 4.0 });
+                let page_index = self.config.profiles[self.config.active].pages.iter()
+                    .position(|page| page.id == self.config.page).map_or(0, |index| index as i32 + 1);
+                let deck_slide = motion::begin_slide(ui, "deck_page_grid", page_index, self.animations());
                 if crate::deck_chassis::applies(grid.cols, grid.rows) {
                     // Châssis SVG (couche 1), faces dynamiques (couche 2), aperçus LCD (couche 3).
                     // Bornée à l'écran : à la première image, la zone disponible peut être démesurée.
@@ -3894,6 +3897,7 @@ impl App {
                         );
                     });
                 }
+                motion::end_slide(ui, deck_slide);
             });
     }
     fn windows(&mut self, ctx: &egui::Context) {
