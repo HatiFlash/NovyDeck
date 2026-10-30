@@ -1,43 +1,33 @@
-# NovyDeck 0.18.1 · film Remotion
+# NovyDeck 0.18.1 · film animé en composants Remotion
 
-1600 images, 53⅓ s, 1920 × 1080, 30 i/s. Onze scènes, dix transitions de 12 images et une bande-son originale stéréo 48 kHz synchronisée (`python make-sound.py`, Python stdlib). La scène 3D Three.js montre les 15 touches LCD du FIFINE D6. Aucun matériel ni plugin n'est déclenché au rendu. Les scènes d'interface emploient uniquement de vraies captures du projet : aucun écran recomposé ou simulé.
+Deux compositions de 55 s, 30 i/s : `NovyDeckMotion` (1920 × 1080) et `NovyDeckMotionVertical` (1080 × 1920). Le portrait est recomposé : fenêtre et panneaux empilés, deck cadré pour montrer les quinze touches, zone sûre supérieure/inférieure d'environ 10 %. L'interface est redessinée en composants React, sans aucune capture d'écran utilisée dans ces deux compositions. Les anciennes compositions `MotionPreview*` et `NovyDeckDemo` restent accessibles à titre historique (elles peuvent employer des captures).
 
-## Découpage (début en images)
+## Scènes
 
-| Image | Scène | Message |
-|---:|---|---|
-| 0 | Ouverture | Ton deck. Ton univers. / NovyDeck |
-| 138 | Deck 3D | Chaque touche, une idée. |
-| 276 | Interface | Tout commence ici. |
-| 414 | Personnalisation | Couleurs. Icônes. Ta signature. |
-| 562 | Glisser-déposer | Attrape. Glisse. C’est posé. |
-| 710 | Atelier de blocs | Des macros qui bougent. |
-| 853 | Deux états | Un appui. Deux visages. |
-| 996 | Plugins et magasin | Plus loin, ensemble. |
-| 1139 | Assistant IA | Décris. Relis. Crée. |
-| 1272 | Fluidité 0.18 | Tout coule de source. |
-| 1405 | Signature | NovyDeck 0.18.1 / github.com/HatiFlash/NovyDeck |
+| Temps | Séquence | Titre |
+|---|---|---|
+| 0–5 s | Logo en tuiles et deck 3D | Ton deck. Ton univers. |
+| 5–11 s | Quinze touches LCD, survol et appui | Chaque touche compte. |
+| 11–18 s | Apparence, couleur, icône et texte | À ton image. |
+| 18–25 s | Carte d'action flottante, touche cible et dépôt | Glisse et crée. |
+| 25–32 s | Atelier de blocs, réorganisation, exécution lumineuse | Compose tes macros. |
+| 32–37 s | Bascule entre les deux faces | Deux états. |
+| 37–43 s | Magasin et bibliothèque d'actions | Des plugins partout. |
+| 43–49 s | Assistant, proposition à relire puis appliquer | Décris, puis choisis. |
+| 49–55 s | Tuiles qui reforment le logo, version et dépôt GitHub | NovyDeck 0.18.1 |
 
-Les captures `public/shots/v*.png` proviennent de `docs/images/` : `v017-deck-white-fr`, `v017-deck-color-free-fr`, `v017-activity-collapsed-fr`, `v016-workshop-cards-fr`, `v016-workshop-library-fr`, `v015-assistant-fr`, `v015-appearance-fr`, `v0161-onoff-cards-fr`, `v0161-plugins-tab-fr`, `v014-update-fr`. Les photogrammes `ui018r-drag-00…13`, `ui018r-atelier-00…13`, `ui018r-tabs-00…12` sont des images réelles 0.18 du harnais Windows (environ 33 ms entre images), jouées à une image Remotion par photogramme, puis figées pour laisser le temps de lire. Les cadres, textes, perspective, zooms et transitions sont du motion design autour de ces captures. Les écrans LCD du deck 3D utilisent les textures déjà présentes dans `public/keys/` ; valider leur pertinence visuelle avant diffusion.
+Les scènes sont des démonstrations graphiques des fonctions décrites dans `README.fr.md` et `docs/RELEASE-0.18.1.md`, et non une capture d'exécution du logiciel ou du matériel. L'Assistant IA ne modifie rien automatiquement : la proposition doit être relue et appliquée. Aucun plugin ni appareil n'est actionné. Texte d'interface en français, palette nuit avec accent #3478f6. Le deck Three.js et les composants s'animent uniquement en fonction du numéro d'image (`useCurrentFrame`, `spring`, `interpolate`), sans animation CSS ni `useFrame`.
 
-## Sur Windows (PowerShell, dans `scripts/media/remotion`)
+## Reproduction
 
-Avec Node.js et les dépendances du `package-lock.json` (Remotion 4.0.537 / Three.js 0.175.0) :
+Depuis `scripts/media/remotion` après `npm ci` (versions verrouillées dans le lockfile) :
 
-    npm.cmd ci
-    npm.cmd run assets
-    npm.cmd run typecheck
-    npm.cmd run still -- 90 out/s0090.png
-    npm.cmd run still -- 600 out/s0600.png
-    npm.cmd run still -- 1510 out/s1510.png
-    npm.cmd run studio
+    python3 make-motion-sound.py
+    npm run typecheck
+    npx remotion still src/index.ts NovyDeckMotion out/scene.png --frame=780 --scale=0.5 --gl=swangle
+    npx remotion render src/index.ts NovyDeckMotion out/NovyDeck-0.18.1-motion-16x9.mp4 --gl=swangle --crf=18 --concurrency=16
+    npx remotion render src/index.ts NovyDeckMotionVertical out/NovyDeck-0.18.1-motion-9x16.mp4 --gl=swangle --crf=18 --concurrency=16
 
-Plage valide pour `still` : 0…1599. L'export final, uniquement après validation :
+`make-motion-sound.py` synthétise, avec Python standard uniquement, une piste stéréo 48 kHz déterministe de 55 s : musique, clics, glissés, dépôts, bascules et frappe synchronisés. La piste est limitée à −3 dBFS avant encodage AAC. Vérifier les exports réels avec ffprobe, `volumedetect` et inspection visuelle avant toute publication.
 
-    npm.cmd run render -- out/novydeck-0.18.1.mp4
-
-Le rendu H.264 utilise `--gl=angle` ; en cas de problème GPU, diagnostiquer le pilote et essayer `--gl=swangle`. Ne pas annoncer un MP4 comme validé sans rendu ni visionnage. Animation déterministe par image (`useCurrentFrame`, `interpolate`, `spring`), sans chronomètre ni animation CSS.
-
-## Origine et licences
-
-Inter (SIL OFL) : `public/fonts/Inter-LICENSE.txt`. Synthèse sonore sous MIT : `licenses/sfx-MIT-LICENSE.txt`. Logo, captures et textures LCD sont des ressources NovyDeck. Les captures sont celles des versions indiquées par leurs noms : elles illustrent des fonctions toujours documentées en 0.18.1, sans prétendre montrer une nouvelle capture de l'application 0.18.1. Les séquences animées 0.18 viennent du harnais hors écran ; elles ne prouvent pas une interaction physique sur un D6. La version 0.18.1 et le repli de l'état inconnu sont décrits dans `docs/RELEASE-0.18.1.md`.
+Inter (SIL OFL) : `public/fonts/Inter-LICENSE.txt`. Logo et textures LCD : ressources NovyDeck. Versions : Remotion 4.0.537, Three 0.175.0, sans modification des dépendances.

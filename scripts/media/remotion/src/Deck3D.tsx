@@ -13,14 +13,14 @@ const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
 const keyFiles = Array.from({length: 15}, (_, i) => `keys/key-${String(i).padStart(2, '0')}.png`);
 const animatedFiles = Array.from({length: 12}, (_, i) => `keys/key-09-f${String(i).padStart(2, '0')}.png`);
 
-const CameraRig: React.FC<{phase: number}> = ({phase}) => {
+const CameraRig: React.FC<{phase: number; portrait: boolean}> = ({phase, portrait}) => {
   const {camera} = useThree();
   useLayoutEffect(() => {
     // Deterministic camera orbit / dolly, no realtime clock or R3F useFrame.
-    camera.position.set(Math.sin(phase * 0.9) * 1.45, 6.7 + Math.cos(phase * 0.66) * 0.65, 8.8 - Math.min(phase, 1) * 0.7);
+    camera.position.set(Math.sin(phase * 0.9) * (portrait ? .8 : 1.45), (portrait ? 7.4 : 6.7) + Math.cos(phase * 0.66) * 0.65, (portrait ? 13 : 8.8) - Math.min(phase, 1) * 0.7);
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld();
-  }, [camera, phase]);
+  }, [camera, phase, portrait]);
   return null;
 };
 
@@ -83,13 +83,13 @@ export const Deck3D: React.FC<{offset?: number; zoom?: number}> = ({offset = 14,
   const phase = frame / fps;
   return (
     <div style={{position: 'absolute', inset: 0, opacity: interpolate(frame, [0, 14], [0, 1], clamp)}}>
-      <ThreeCanvas width={width} height={height} camera={{position: [0, 3, 9], fov: 39, near: 0.1, far: 60}} gl={{antialias: true, powerPreference: 'high-performance'}}>
+      <ThreeCanvas width={width} height={height} camera={{position: [0, 3, 9], fov: width < height ? 56 : 39, near: 0.1, far: 60}} gl={{antialias: true, powerPreference: 'high-performance'}}>
         <color attach="background" args={['#060e1b']} />
         <ambientLight intensity={1.55} />
         <hemisphereLight args={['#86dafa', '#0b1425', 2]} />
         <directionalLight position={[-3, 7, 6]} intensity={3.2} color="#a8e9ff" />
         <pointLight position={[4, 2, -4]} intensity={36} distance={15} color="#008ec7" />
-        <CameraRig phase={phase} />
+        <CameraRig phase={phase} portrait={width < height} />
         <group scale={zoom} position={[0, 0.65, 0]}>
           <Hardware phase={phase} offset={offset} />
         </group>
