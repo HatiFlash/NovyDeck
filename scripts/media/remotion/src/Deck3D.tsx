@@ -26,7 +26,7 @@ const CameraRig: React.FC<{phase: number; portrait: boolean}> = ({phase, portrai
 
 const Lcd: React.FC<{texture: Texture; mask: Texture; x: number; z: number; index: number; frame: number; offset: number}> =
   ({texture, mask, x, z, index, frame, offset}) => {
-    const pulse = Math.max(0, 1 - Math.abs(frame - (offset + index * 8)) / 10);
+    const pulse = Math.max(0, 1 - Math.abs(frame - (offset + index * 2)) / 8);
     return (
       <group position={[x, 0.25 - pulse * 0.08, z]}>
         <mesh castShadow>
@@ -57,7 +57,7 @@ const Hardware: React.FC<{phase: number; offset: number}> = ({phase, offset}) =>
     texture.magFilter = LinearFilter;
   }
   const start = interpolate(frame, [0, 38], [-0.37, 0], clamp);
-  const spin = interpolate(frame, [0, 170], [-0.32, 0.18], clamp);
+  const spin = interpolate(frame, [0, 65], [-0.32, 0.18], clamp);
   return (
     <group rotation={[start + 0.1 * Math.sin(phase * 0.7), spin + 0.09 * Math.sin(phase), 0.035 * Math.sin(phase * 0.8)]}>
       <mesh position={[0, -0.04, 0]} receiveShadow castShadow>
@@ -80,7 +80,7 @@ const Hardware: React.FC<{phase: number; offset: number}> = ({phase, offset}) =>
 export const Deck3D: React.FC<{offset?: number; zoom?: number}> = ({offset = 14, zoom = 1}) => {
   const frame = useCurrentFrame();
   const {width, height, fps} = useVideoConfig();
-  const phase = frame / fps;
+  const phase = frame / fps * 2.4;
   return (
     <div style={{position: 'absolute', inset: 0, opacity: interpolate(frame, [0, 14], [0, 1], clamp)}}>
       <ThreeCanvas width={width} height={height} camera={{position: [0, 3, 9], fov: width < height ? 56 : 39, near: 0.1, far: 60}} gl={{antialias: true, powerPreference: 'high-performance'}}>

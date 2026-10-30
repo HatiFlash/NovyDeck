@@ -48,21 +48,22 @@ for j in range(N):
     left[j] += fade*(pad+kick+shimmer*math.sin(sec*.67))
     right[j] += fade*(pad+kick+shimmer*math.cos(sec*.71))
 
-for s in (5,11,18,25,32,37,43,49):
-    cue(s-.16,'whoosh',.13,-.25 if s%2 else .25)
+# Cut points: 3, 7, 14, 21, 29, 35, 42 and 49 seconds.
+for s in (3,7,14,21,29,35,42,49):
+    cue(s-.12,'whoosh',.14,-.25 if s%2 else .25)
 for i in range(15):
-    cue(.25+i*.17,'click',.055,(i%5-2)*.28)
-for t in (7.96,12.1,13.3,19.5,26.2,27.7,29.9,33.8,38.7,39.9,45.5):
+    cue(.12+i*.065,'click',.065,(i%5-2)*.28)
+for t in (1.5,3.7,5.3,7.8,8.4,9.1,14.7,16.0,18.2,22.1,24.4,26.0,36.4,38.7,40.2,44.4,46.9):
     cue(t,'click',.12)
-for t in (22.7,29.2,40.7,47.7):
+for t in (19.0,24.5,39.0,46.5):
     cue(t,'drop',.18,.25)
-for t in (34.3,35.4,41.3):
+for t in (30.4,32.2,33.7):
     cue(t,'toggle',.14,-.2)
-for start, end, count in ((14.3,16.5,11),(44.2,46.7,31)):
+for start, end, count in ((9.6,11.6,11),(43.1,45.5,31)):
     for i in range(count):
         cue(start+(end-start)*i/count,'type',.045,(-1 if i%2 else 1)*.3)
 
-# Leave 3 dBFS of headroom for AAC and keep score beneath spot effects.
+# Leave AAC headroom, with the decoded peak below -1 dBFS.
 peak = max(max(abs(v) for v in left),max(abs(v) for v in right))
 gain = .70/peak
 path = Path('public/motion-soundtrack.wav')
