@@ -1,38 +1,43 @@
-# NovyDeck v0.8.11 · film Remotion
+# NovyDeck 0.18.1 · film Remotion
 
-43 secondes à 1920 × 1080 / 30 images par seconde. Sept chapitres éditables, six transitions, une vraie scène Three.js de 15 touches LCD (textures issues des touches réelles), caméra orbitale animée image par image par Remotion. La bande-son stéréo 48 kHz / 43 s est générée par `make-sound.py` et synchronisée aux chapitres. Aucun déclenchement de macro ni accès matériel pendant le rendu.
+1600 images, 53⅓ s, 1920 × 1080, 30 i/s. Onze scènes, dix transitions de 12 images et une bande-son originale stéréo 48 kHz synchronisée (`python make-sound.py`, Python stdlib). La scène 3D Three.js montre les 15 touches LCD du FIFINE D6. Aucun matériel ni plugin n'est déclenché au rendu. Les scènes d'interface emploient uniquement de vraies captures du projet : aucun écran recomposé ou simulé.
 
-## Ressources indispensables AVANT de rendre
+## Découpage (début en images)
 
-Déposer quatre captures de l'application NovyDeck v0.8.11, issues du logiciel, dans `public/shots/`, EXACTEMENT sous ces noms : `main.png`, `block-editor.png`, `assistant.png`, `media-crop.png`. Les captures NovyDeck validées sont incluses ; les régénérer après toute modification visuelle de l’application. Les vues doivent correspondre aux vrais écrans et être suffisamment nettes (idéalement 2560 × 1600). Aucun écran de remplacement n'est inventé.
+| Image | Scène | Message |
+|---:|---|---|
+| 0 | Ouverture | Ton deck. Ton univers. / NovyDeck |
+| 138 | Deck 3D | Chaque touche, une idée. |
+| 276 | Interface | Tout commence ici. |
+| 414 | Personnalisation | Couleurs. Icônes. Ta signature. |
+| 562 | Glisser-déposer | Attrape. Glisse. C’est posé. |
+| 710 | Atelier de blocs | Des macros qui bougent. |
+| 853 | Deux états | Un appui. Deux visages. |
+| 996 | Plugins et magasin | Plus loin, ensemble. |
+| 1139 | Assistant IA | Décris. Relis. Crée. |
+| 1272 | Fluidité 0.18 | Tout coule de source. |
+| 1405 | Signature | NovyDeck 0.18.1 / github.com/HatiFlash/NovyDeck |
 
-`public/logo-original.png` reprend le logo fourni ; `public/logo.png` est un premier cadrage carré 1024 × 1024 du même fichier, validé à partir de la ressource utilisateur. `public/keys/` contient les 15 images des écrans LCD existants et les 12 photogrammes d'une touche animée, effectivement joués dans la scène 3D. Si de nouveaux rendus NovyDeck des touches sont livrés, remplacer les 15 `key-00.png`…`key-14.png` et les 12 `key-09-f00.png`…`key-09-f11.png` sans changer les noms. L'examen OCR des touches existantes n'a pas détecté d'ancien nom de produit, mais vérifier visuellement les assets avant publication.
+Les captures `public/shots/v*.png` proviennent de `docs/images/` : `v017-deck-white-fr`, `v017-deck-color-free-fr`, `v017-activity-collapsed-fr`, `v016-workshop-cards-fr`, `v016-workshop-library-fr`, `v015-assistant-fr`, `v015-appearance-fr`, `v0161-onoff-cards-fr`, `v0161-plugins-tab-fr`, `v014-update-fr`. Les photogrammes `ui018r-drag-00…13`, `ui018r-atelier-00…13`, `ui018r-tabs-00…12` sont des images réelles 0.18 du harnais Windows (environ 33 ms entre images), jouées à une image Remotion par photogramme, puis figées pour laisser le temps de lire. Les cadres, textes, perspective, zooms et transitions sont du motion design autour de ces captures. Les écrans LCD du deck 3D utilisent les textures déjà présentes dans `public/keys/` ; valider leur pertinence visuelle avant diffusion.
 
-## Sur Windows (PowerShell, dans ce dossier)
+## Sur Windows (PowerShell, dans `scripts/media/remotion`)
 
-Installer Node.js récent puis :
+Avec Node.js et les dépendances du `package-lock.json` (Remotion 4.0.537 / Three.js 0.175.0) :
 
-    npm.cmd install
+    npm.cmd ci
     npm.cmd run assets
     npm.cmd run typecheck
+    npm.cmd run still -- 90 out/s0090.png
+    npm.cmd run still -- 600 out/s0600.png
+    npm.cmd run still -- 1510 out/s1510.png
     npm.cmd run studio
 
-Contrôle d'une image choisie (0 à 1289) :
+Plage valide pour `still` : 0…1599. L'export final, uniquement après validation :
 
-    npm.cmd run still -- 90
-    npm.cmd run still -- 420 out/dashboard.png
-    npm.cmd run still -- 1160 out/signature.png
+    npm.cmd run render -- out/novydeck-0.18.1.mp4
 
-Exporter H.264 (ANGLE utilise la GPU Windows lorsqu'elle est disponible) :
-
-    npm.cmd run render -- out/novydeck-v0.8.11.mp4
-
-Passer des options Remotion supplémentaires après le chemin, par exemple `--concurrency=1`. Avec Iris Xe, démarrer à `--concurrency=1` si la VRAM est insuffisante. Si `--gl=angle` échoue, diagnostiquer le pilote et tester `--gl=swangle` explicitement (logiciel, plus lent) ; ne pas prétendre avoir rendu sur ce portable depuis Linux. Le scénario est déterministe : ne pas utiliser de chronomètre, `useFrame()` ou animation CSS. Aucun réseau n'est requis à l'exécution une fois `npm install` terminé.
+Le rendu H.264 utilise `--gl=angle` ; en cas de problème GPU, diagnostiquer le pilote et essayer `--gl=swangle`. Ne pas annoncer un MP4 comme validé sans rendu ni visionnage. Animation déterministe par image (`useCurrentFrame`, `interpolate`, `spring`), sans chronomètre ni animation CSS.
 
 ## Origine et licences
 
-Inter (SIL Open Font License) : `public/fonts/Inter-LICENSE.txt`. Effets sonores instrumentaux déjà fournis, générés avec un moteur distribué sous licence MIT : `licenses/sfx-MIT-LICENSE.txt`. Logo et captures : ressources du projet NovyDeck, fournis et autorisés pour cette publication par Hatim. L'ancienne vidéo et ses captures ne sont pas insérées dans cette composition. Un `package-lock.json` issu de l’installation réelle Windows est fourni. Les dépendances Remotion sont toutes verrouillées à la même version 4.0.537 ; autres versions exactes dans `package.json`.
-
-Validation de publication : ressources présentes, `tsc --noEmit` réussi, export H.264/AAC sur le portable Windows Iris Xe et revue des images du MP4 final. Rendu image par image sous Remotion 4.0.537.
-
-Pour reconstruire le son : `python make-sound.py` (Python stdlib, moteur `sfx/` sous MIT). Les anciens projets Playwright ne sont pas utilisés pour cet export.
+Inter (SIL OFL) : `public/fonts/Inter-LICENSE.txt`. Synthèse sonore sous MIT : `licenses/sfx-MIT-LICENSE.txt`. Logo, captures et textures LCD sont des ressources NovyDeck. Les captures sont celles des versions indiquées par leurs noms : elles illustrent des fonctions toujours documentées en 0.18.1, sans prétendre montrer une nouvelle capture de l'application 0.18.1. Les séquences animées 0.18 viennent du harnais hors écran ; elles ne prouvent pas une interaction physique sur un D6. La version 0.18.1 et le repli de l'état inconnu sont décrits dans `docs/RELEASE-0.18.1.md`.
