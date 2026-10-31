@@ -35,8 +35,21 @@ pub struct DeviceModel {
     pub notes: &'static str,
 }
 
+impl DeviceModel {
+    /// True for hardware-verified FIFINE AmpliGame D6 revisions (`3142:0060` and `3142:0007`).
+    /// Both revisions share the D6 transport protocol (`CRT\0\0...` commands, bottom-to-top
+    /// `display_index` LCD key numbering, no synchronous post-`BAT` ACK, and explicit press/release
+    /// input packets `ACK\0\0OK\0\0<1..15><1|0>`), while differing in HID report size (`1024` vs
+    /// `512` bytes, read dynamically from the HID descriptor) and native key resolution (`126x126`
+    /// vs `100x100`).
+    pub fn is_fifine_d6(&self) -> bool {
+        matches!(self.id, "fifine_d6" | "fifine_d6_v1")
+    }
+}
+
 pub const MODELS: &[DeviceModel] = &[
     DeviceModel { id: "fifine_d6", name: "FIFINE D6", family: Family::Mirabox, vid: 0x3142, pid: 0x0060, rows: 3, cols: 5, keys: 15, image_w: 126, image_h: 126, image_format: ImageFormat::Jpeg, rotation: 180, mirror_x: true, mirror_y: true, packet_len: 512, protocol: Protocol::MiraboxV1, encoders: 0, verified: true, notes: "Taille de rapport mesuree sur le descripteur HID a la connexion ; 512 nominal." },
+    DeviceModel { id: "fifine_d6_v1", name: "FIFINE D6 (3142:0007)", family: Family::Mirabox, vid: 0x3142, pid: 0x0007, rows: 3, cols: 5, keys: 15, image_w: 100, image_h: 100, image_format: ImageFormat::Jpeg, rotation: 180, mirror_x: false, mirror_y: false, packet_len: 512, protocol: Protocol::MiraboxV1, encoders: 0, verified: true, notes: "Premiere revision materielle (3142:0007) ; rapports HID 512 octets, icones 100x100." },
     DeviceModel { id: "akp153", name: "AJAZZ AKP153 / Mirabox HSV293S / 293V3", family: Family::Mirabox, vid: 0x5548, pid: 0x6674, rows: 3, cols: 5, keys: 15, image_w: 85, image_h: 85, image_format: ImageFormat::Jpeg, rotation: 90, mirror_x: true, mirror_y: true, packet_len: 512, protocol: Protocol::MiraboxV1, encoders: 0, verified: false, notes: "Trois marques pour le meme VID:PID ; modele experimental." },
     DeviceModel { id: "akp153e", name: "AJAZZ AKP153E", family: Family::Mirabox, vid: 0x0300, pid: 0x1010, rows: 3, cols: 5, keys: 15, image_w: 85, image_h: 85, image_format: ImageFormat::Jpeg, rotation: 90, mirror_x: true, mirror_y: true, packet_len: 512, protocol: Protocol::MiraboxV1, encoders: 0, verified: false, notes: "" },
     DeviceModel { id: "akp153r", name: "AJAZZ AKP153R", family: Family::Mirabox, vid: 0x0300, pid: 0x1020, rows: 3, cols: 5, keys: 15, image_w: 85, image_h: 85, image_format: ImageFormat::Jpeg, rotation: 90, mirror_x: true, mirror_y: true, packet_len: 512, protocol: Protocol::MiraboxV1, encoders: 0, verified: false, notes: "" },
@@ -122,16 +135,16 @@ mod tests {
             assert!(m.image_w > 0 && m.image_h > 0 && m.packet_len > 0);
             assert!([0, 90, 180, 270].contains(&m.rotation));
             assert!(MODELS[..i].iter().all(|other| other.id != m.id && (other.vid, other.pid) != (m.vid, m.pid)), "{}", m.id);
-            assert_eq!(m.verified, m.id == "fifine_d6");
+            assert_eq!(m.verified, m.is_fifine_d6());
         }
     }
     #[test]
     fn d6_filter_is_identical_to_existing_device_code() {
         for page in [0, 0xfeff, 0xff00, 0xffff] {
-            for (vid, pid) in [(0x3142, 0x0060), (0x3142, 0x0061), (0x0300, 0x1001)] {
+            for (vid, pid) in [(0x3142, 0x0060), (0x3142, 0x0007), (0x3142, 0x0061), (0x0300, 0x1001)] {
                 let dev = info(vid, pid, page, -1);
-                let matched = detect(&[dev]).iter().any(|d| matches!(d, Detection::Matched { model, .. } if model.id == "fifine_d6"));
-                assert_eq!(matched, vid == 0x3142 && pid == 0x0060 && page >= 0xff00);
+                let matched = detect(&[dev]).iter().any(|d| matches!(d, Detection::Matched { model, .. } if model.is_fifine_d6()));
+                assert_eq!(matched, vid == 0x3142 && matches!(pid, 0x0060 | 0x0007) && page >= 0xff00);
             }
         }
     }
@@ -139,6 +152,7 @@ mod tests {
     fn unknown_pid_and_interface_are_candidates() {
         assert!(matches!(detect(&[info(0x0fd9, 0xdead, 0, 0)])[0], Detection::UnknownCandidate { .. }));
         assert!(matches!(detect(&[info(0x3142, 0x0060, 0, 0)])[0], Detection::UnknownCandidate { .. }));
+        assert!(matches!(detect(&[info(0x3142, 0x0007, 0, 0)])[0], Detection::UnknownCandidate { .. }));
         assert!(matches!(detect(&[info(0x0fd9, 0x0080, 0, 1)])[0], Detection::UnknownCandidate { .. }));
         assert!(detect(&[info(0x9999, 1, 0, 0)]).is_empty());
         assert!(matches!(detect(&[info(0x0fd9, 0x0080, 0, 0)])[0], Detection::Matched { .. }));

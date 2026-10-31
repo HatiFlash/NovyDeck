@@ -348,7 +348,7 @@ Quand NovyDeck se lance avec Windows, il peut maintenant rester réduit près de
 | Élément | État |
 |---|---|
 | Windows 10 et 11, 64 bits | Pris en charge ; installateur par utilisateur ou ZIP portable |
-| FIFINE AmpliGame D6 (15 touches) | Pris en charge et testé ; périphérique principal |
+| FIFINE AmpliGame D6 (15 touches, USB `3142:0060` et `3142:0007`) | Pris en charge et testé ; périphérique principal |
 | Elgato Stream Deck | Testé |
 | Autres decks sur base Mirabox (Mirabox, AJAZZ / Stream Dock…) | Devrait fonctionner ; pas encore testé |
 | Plugins Stream Deck | Plugins non chiffrés pris en charge ; plugins Elgato chiffrés non pris en charge |
@@ -389,7 +389,7 @@ Les captures des plugins utilisent des données du banc UI, et non des plugins i
 
 ### Périphériques
 
-Le **FIFINE AmpliGame D6** est le contrôleur principal : 15 touches LCD avec retour visuel, réglage de la luminosité et mise en veille automatique. L'**Elgato Stream Deck** a également été testé, avec un pilote HID direct, la synchronisation des touches et le retour d'état. Les autres contrôleurs sur base Mirabox (Mirabox, AJAZZ / Stream Dock…) partagent la plateforme matérielle du D6 et devraient fonctionner, mais n'ont pas encore été testés.
+Le **FIFINE AmpliGame D6** (révisions USB `3142:0060` et `3142:0007`) est le contrôleur principal : 15 touches LCD avec retour visuel, réglage de la luminosité et mise en veille automatique. L'**Elgato Stream Deck** a également été testé, avec un pilote HID direct, la synchronisation des touches et le retour d'état. Les autres contrôleurs sur base Mirabox (Mirabox, AJAZZ / Stream Dock…) partagent la plateforme matérielle du D6 et devraient fonctionner, mais n'ont pas encore été testés.
 
 ### Atelier de blocs
 

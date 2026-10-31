@@ -348,7 +348,7 @@ When NovyDeck starts with Windows, it can now stay minimized near the clock with
 | Component | Status |
 |---|---|
 | Windows 10 and 11, 64-bit | Supported; per-user installer or portable ZIP |
-| FIFINE AmpliGame D6 (15 keys) | Supported and tested; primary device |
+| FIFINE AmpliGame D6 (15 keys, USB `3142:0060` and `3142:0007`) | Supported and tested; primary device |
 | Elgato Stream Deck | Tested |
 | Other Mirabox-based decks (Mirabox, AJAZZ / Stream Dock…) | Expected to work; not tested yet |
 | Stream Deck plugins | Unencrypted plugins supported; encrypted Elgato plugins not supported |
@@ -389,7 +389,7 @@ The plugin screenshots use UI test data, not installed user plugins.
 
 ### Devices
 
-The **FIFINE AmpliGame D6** is the primary controller, with 15 LCD keys, visual feedback, brightness control and automatic sleep. The **Elgato Stream Deck** has also been tested, using a direct HID driver with key synchronization and state feedback. Other Mirabox-based controllers (Mirabox, AJAZZ / Stream Dock…) share the D6's hardware platform and should work, but have not been tested yet.
+The **FIFINE AmpliGame D6** (both USB `3142:0060` and `3142:0007` hardware revisions) is the primary controller, with 15 LCD keys, visual feedback, brightness control and automatic sleep. The **Elgato Stream Deck** has also been tested, using a direct HID driver with key synchronization and state feedback. Other Mirabox-based controllers (Mirabox, AJAZZ / Stream Dock…) share the D6's hardware platform and should work, but have not been tested yet.
 
 ### Visual block editor
 
