@@ -267,7 +267,7 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                         for event in d.decode_input(&data[..n]) {
                             match event {
                                 InputEvent::Key(mut k, down) if k < d.driver.model().keys as usize && k < config.keys().len() => {
-                                    if config.flip_input_rows && d.driver.model().id == "fifine_d6" { k = display_index(k); }
+                                    if config.flip_input_rows && d.driver.model().is_fifine_d6() { k = display_index(k); }
                                     if down && test_running {
                                         d.note(&format!("Test appui : brut={} ; index décodé={}", report::hex(&data[..n]), k+1));
                                         send_input(&tx, &ctx, Event::HardwareTestPress(report::hex(&data[..n]), k));
@@ -457,7 +457,7 @@ enum InputEvent { Key(usize, bool), Encoder(usize, i8) }
 // Pure transformations and packet construction: no HID handle and no hardware in tests.
 fn mirabox_key(model: &DeviceModel, index: usize) -> Result<u8> {
     anyhow::ensure!(index < model.keys as usize && index < 15, "Touche hors grille : {index}");
-    let index = if model.id == "fifine_d6" { display_index(index) } else { index };
+    let index = if model.is_fifine_d6() { display_index(index) } else { index };
     Ok(index as u8 + 1)
 }
 fn bat_tail(model: &DeviceModel, index: usize, len: usize) -> Result<[u8; 8]> {
@@ -465,6 +465,8 @@ fn bat_tail(model: &DeviceModel, index: usize, len: usize) -> Result<[u8; 8]> {
     Ok([b'B', b'A', b'T', 0, 0, (len >> 8) as u8, len as u8, mirabox_key(model, index)?])
 }
 fn canonical_image(jpeg: &[u8], model: &DeviceModel) -> Result<Vec<u8>> {
+    // 3142:0060 (`fifine_d6`) natively accepts the 126x126 / 112x112 JPEG produced by `key_render`,
+    // whereas 3142:0007 (`fifine_d6_v1`) falls through to resize to its native 100x100 framebuffer.
     if model.id == "fifine_d6" { return Ok(jpeg.to_vec()); }
     // key_render produces D6-oriented pixels (180 degrees). Undo that transform,
     // then apply the catalogue orientation; no re-encoding on the D6 path.
@@ -489,7 +491,7 @@ fn canonical_image(jpeg: &[u8], model: &DeviceModel) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 fn decode_model_input(model: &DeviceModel, data: &[u8], transitions: &Cell<u64>) -> Vec<InputEvent> {
-    if model.id == "fifine_d6" {
+    if model.is_fifine_d6() {
         return decode_input(data).map(|(k, down)| vec![InputEvent::Key(k, down)]).unwrap_or_default();
     }
     if model.family == Family::Elgato {
@@ -561,7 +563,7 @@ impl Deck {
     fn keepalive(&self) -> Result<()> { self.command(b"CONNECT") }
     fn decode_input(&self, data: &[u8]) -> Vec<InputEvent> { decode_model_input(self.driver.model(), data, &self.transitions) }
     fn await_ack(&self) -> Result<()> {
-        if self.driver.model().id == "fifine_d6" { return Ok(()); } // Never change D6 timing.
+        if self.driver.model().is_fifine_d6() { return Ok(()); } // Never change D6 timing.
         let mut data = [0u8; 2048];
         for _ in 0..4 {
             let n = self.hid.read_timeout(&mut data, 50)?;
@@ -612,7 +614,7 @@ impl Deck {
         let n = hid.get_report_descriptor(&mut descriptor)?;
         let (packet, rid) = if model.family == Family::Elgato { (model.packet_len as usize, 0) } else { output_report(&descriptor[..n])? };
         if let Some(r) = &report { r.log(&format!("Rapport sortie={} octets, ID={rid} ; tampon entrée=2048 octets ; descripteur={} octets", packet, n)); }
-        if model.id != "fifine_d6" { anyhow::ensure!(packet == model.packet_len as usize,
+        if !model.is_fifine_d6() { anyhow::ensure!(packet == model.packet_len as usize,
             "{} : rapport HID {} octets, {} attendus ; abandon prudent", model.name, packet, model.packet_len); }
         if model.family == Family::Elgato {
             let (id, len, _) = elgato::firmware_layout(model);
@@ -693,9 +695,9 @@ pub fn diagnostic() {
         let mut entries = Vec::new();
         for info in api
             .device_list()
-            .filter(|d| d.vendor_id() == 0x3142 && d.product_id() == 0x0060)
+            .filter(|d| d.vendor_id() == 0x3142 && matches!(d.product_id(), 0x0060 | 0x0007))
         {
-            let mut v = serde_json::json!({"vid":"3142", "pid":"0060", "usage_page":info.usage_page(), "usage":info.usage(), "interface":info.interface_number(), "product":info.product_string()});
+            let mut v = serde_json::json!({"vid":"3142", "pid":format!("{:04X}", info.product_id()), "usage_page":info.usage_page(), "usage":info.usage(), "interface":info.interface_number(), "product":info.product_string()});
             if info.usage_page() >= 0xFF00 {
                 match info.open_device(&api).and_then(|h| {
                     let mut b = [0; 4096];
@@ -898,6 +900,12 @@ mod tests {
         let converted = canonical_image(&jpeg, other).unwrap();
         let img = image::load_from_memory(&converted).unwrap();
         assert_eq!((img.width(), img.height()), (60, 60));
+        let d6_v1 = devices::MODELS.iter().find(|m| m.id == "fifine_d6_v1").unwrap();
+        for idx in 0..15 {
+            assert_eq!(bat_tail(d6_v1, idx, 512).unwrap(), bat_tail(d6, idx, 512).unwrap());
+        }
+        let d6_v1_img = image::load_from_memory(&canonical_image(&jpeg, d6_v1).unwrap()).unwrap();
+        assert_eq!((d6_v1_img.width(), d6_v1_img.height()), (100, 100));
     }
     #[test]
     fn input_events_are_pure_and_d6_release_is_unchanged() {
@@ -907,6 +915,11 @@ mod tests {
         assert_eq!(decode_model_input(d6, &data, &state), vec![InputEvent::Key(0, true)]);
         data[10] = 0;
         assert_eq!(decode_model_input(d6, &data, &state), vec![InputEvent::Key(0, false)]);
+        let d6_v1 = devices::MODELS.iter().find(|m| m.id == "fifine_d6_v1").unwrap();
+        data[10] = 1;
+        assert_eq!(decode_model_input(d6_v1, &data, &state), vec![InputEvent::Key(0, true)]);
+        data[10] = 0;
+        assert_eq!(decode_model_input(d6_v1, &data, &state), vec![InputEvent::Key(0, false)]);
         let other = devices::MODELS.iter().find(|m| m.id == "akp03").unwrap();
         assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Key(0, true)]);
         assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Key(0, false)]);
