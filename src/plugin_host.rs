@@ -133,6 +133,7 @@ struct InspectorChild {id:String,child:Child,#[cfg(windows)] job:Job}
 pub struct Host { #[cfg(windows)] job:Job, pub incoming:Receiver<Value>, outgoing:SyncSender<Value>, feedback:Sender<Value>, pub ws_port:u16, pub http_port:Option<u16>, pub inspectors:Option<crate::plugin_http::Inspectors>, pub folder:std::path::PathBuf, pub uuid:String, child:Child, worker:Option<thread::JoinHandle<()>>, stop:Arc<AtomicBool>, inspector_children:Mutex<Vec<InspectorChild>>, #[cfg(test)] simulated_inspectors:AtomicBool, _http:Option<crate::plugin_http::HtmlServer> }
 impl Host {
  pub fn start(plugin:&Plugin,device:&crate::plugin_runtime::Device)->anyhow::Result<Self>{
+  anyhow::ensure!(!crate::plugin_runtime::shutting_down(),"Session Windows en cours de fermeture : démarrage plugin interdit");
   if let Some(reason)=&plugin.prerequisite {anyhow::bail!("Prérequis manquant : {reason}");}
   // HTML plugin backends run in the isolated WebView2 process (hidden), never in Edge --app.
   let html_runtime=match &plugin.runtime {Runtime::Html(p)=>Some(p.clone()),_=>None};
@@ -165,6 +166,14 @@ impl Host {
   // Comme Stream Dock/Stream Deck sous Windows : un exécutable natif démarre dans son propre dossier
   // (ex. bin/ ou plugin/), ses chemins relatifs y sont résolus ; Node et HTML restent à la racine du plugin.
   let stdin=if runtime_url.is_some(){Stdio::piped()}else{Stdio::null()};
+  // Process-wide mode is inherited by plugin children. Keep stderr/exit errors in NovyDeck's
+  // own log; only Windows system crash/loader dialog boxes are suppressed.
+  #[cfg(windows)] static ERROR_MODE: std::sync::Once = std::sync::Once::new();
+  #[cfg(windows)] ERROR_MODE.call_once(|| unsafe {
+   use windows_sys::Win32::System::Diagnostics::Debug::{GetErrorMode,SetErrorMode,SEM_FAILCRITICALERRORS,SEM_NOGPFAULTERRORBOX};
+   SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+  });
+  anyhow::ensure!(!crate::plugin_runtime::shutting_down(),"Session Windows en cours de fermeture : démarrage plugin interdit");
   let mut child=process.current_dir(working_dir(plugin)).stdin(stdin).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(0x08000000).spawn()?;
   #[cfg(windows)] if let Err(e)=job.assign(&child){let _=child.kill();let _=child.wait();return Err(e.into());}
   if let Some(url)=&runtime_url {

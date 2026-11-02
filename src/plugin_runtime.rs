@@ -2,6 +2,18 @@
 use std::{collections::{HashMap,HashSet}, sync::mpsc::{self, Receiver, Sender}, thread, time::{Duration, Instant}};
 use serde_json::{json, Value};
 use crate::{model::Config, plugin_host::Host, plugins::Plugin};
+use std::sync::atomic::{AtomicBool, Ordering};
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+pub fn set_shutting_down(value: bool) { SHUTTING_DOWN.store(value, Ordering::SeqCst); }
+pub fn shutting_down() -> bool {
+    if SHUTTING_DOWN.load(Ordering::SeqCst) { return true; }
+    #[cfg(windows)] unsafe {
+        if windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows_sys::Win32::UI::WindowsAndMessaging::SM_SHUTTINGDOWN) != 0 { return true; }
+    }
+    false
+}
+fn restart_delay(attempts: usize) -> Duration { Duration::from_secs(5 * (1u64 << attempts.saturating_sub(1).min(3))) }
+fn may_restart(shutdown: bool, attempts: usize) -> bool { !shutdown && attempts < 3 }
 
 /// Identité SDK d'un appareil physique, ou de l'appareil virtuel d'essai.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -236,9 +248,11 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
     let mut inspectors:HashMap<String,Visible>=HashMap::new();
     let mut idle:HashMap<String,Instant>=HashMap::new();
     let mut restarts:HashMap<String,Vec<Instant>>=HashMap::new();
+    let mut retry_at:HashMap<String,Instant>=HashMap::new();
     let mut monitored:HashMap<String,std::collections::BTreeSet<String>>=HashMap::new();let mut last_poll:Option<Instant>=None;
     let mut paused=HashSet::<String>::new();
     loop {
+        if shutting_down() { break; }
         match requests.recv_timeout(Duration::from_millis(50)) {
             Ok(Request::Stop)|Err(mpsc::RecvTimeoutError::Disconnected)=>break,
             Ok(Request::Pause(id,ack,cancelled))=>{
@@ -328,7 +342,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
                 let notifications=settings_notifications(&current,&next,&inspectors,&device,origin.as_ref().map(|(id,from_pi)|(id.as_str(),*from_pi)));
                 let (gone,added)=diff(&current,&next);
                 for v in gone {if let Some(host)=hosts.get(&v.plugin){let _=host.send(event("willDisappear",&v,&device));}}
-                for v in added {if paused.contains(&v.plugin){continue;}if !hosts.contains_key(&v.plugin){
+                for v in added {if paused.contains(&v.plugin) || retry_at.contains_key(&v.plugin) || restarts.get(&v.plugin).is_some_and(|a|a.len()>=3 && a.last().is_some_and(|t|t.elapsed()<Duration::from_secs(300))) {continue;}if !hosts.contains_key(&v.plugin){
                     if let Some(p)=plugins.iter().find(|p|p.uuid==v.plugin){match Host::start(p,&device){Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));hosts.insert(v.plugin.clone(),h);},Err(e)=>{let _=reply.send(Reply::Error(v.plugin.clone(),e.to_string()));}}}
                     else{let _=reply.send(Reply::Error(v.plugin.clone(),"Plugin installé introuvable".into()));}
                 }
@@ -396,7 +410,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             Ok(Request::Catalog(next))=>{
                 plugins=next;
                 // Une touche liée avant l'import démarre maintenant, avec son willAppear.
-                let waiting=current.values().filter(|v|!paused.contains(&v.plugin) && !hosts.contains_key(&v.plugin)).map(|v|v.plugin.clone()).collect::<std::collections::BTreeSet<_>>();
+                let waiting=current.values().filter(|v|!paused.contains(&v.plugin) && !retry_at.contains_key(&v.plugin) && !restarts.get(&v.plugin).is_some_and(|a|a.len()>=3 && a.last().is_some_and(|t|t.elapsed()<Duration::from_secs(300))) && !hosts.contains_key(&v.plugin)).map(|v|v.plugin.clone()).collect::<std::collections::BTreeSet<_>>();
                 for id in waiting {if let Some(p)=plugins.iter().find(|p|p.uuid==id){match Host::start(p,&device){
                     Ok(h)=>{let _=h.send(device.event("deviceDidConnect"));for v in current.values().filter(|v|v.plugin==id){let _=h.send(event("willAppear",v,&device));}hosts.insert(id,h);},
                     Err(e)=>{let _=reply.send(Reply::Error(id,e.to_string()));}
@@ -480,15 +494,22 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             if current.values().any(|v|v.plugin==*id) && host.exited() {Some(id.clone())}else{None}
         }).collect::<Vec<_>>();
         for id in exited {
-            let _=reply.send(Reply::Error(id.clone(),"Plugin termine inopinement; redemarrage tente".into()));
-            hosts.remove(&id);inspectors.retain(|_,v|v.plugin!=id); // Drop kills any remaining descendants before restart.
+            hosts.remove(&id);inspectors.retain(|_,v|v.plugin!=id);
             let attempts=restarts.entry(id.clone()).or_default();
             attempts.retain(|when|when.elapsed()<Duration::from_secs(300));
-            if attempts.len()>=3 {
-                let _=reply.send(Reply::Error(id.clone(),"Erreur : plugin arrêté après 3 redémarrages en 5 minutes".into()));
+            if !may_restart(shutting_down(),attempts.len()) {
+                let _=reply.send(Reply::Error(id.clone(),"Erreur : plugin arrêté après 3 redémarrages en 5 minutes (ou fermeture de session)".into()));
                 continue;
             }
             attempts.push(Instant::now());
+            let delay=restart_delay(attempts.len());
+            retry_at.insert(id.clone(),Instant::now()+delay);
+            let _=reply.send(Reply::Error(id,format!("Plugin terminé inopinément ; redémarrage différé de {} s",delay.as_secs())));
+        }
+        let ready=retry_at.iter().filter(|(_,at)|Instant::now()>=**at).map(|(id,_)|id.clone()).collect::<Vec<_>>();
+        for id in ready {
+            retry_at.remove(&id);
+            if shutting_down() || paused.contains(&id) || !current.values().any(|v|v.plugin==id) {continue;}
             if let Some(p)=plugins.iter().find(|p|p.uuid==id) {
                 match Host::start(p,&device) {
                     Ok(host)=>{

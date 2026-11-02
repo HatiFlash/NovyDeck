@@ -196,6 +196,9 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
             if update && !test_running {
                 match d.apply(&config) {
                     Ok(warnings) => {
+                        // Old incremental frames belong to the previous HID image generation.
+                        // The UI replays current faces on Event::Applied.
+                        key_images.fill(None);
                         let _ = tx.send(Event::Device(
                             true,
                             format!("{}{} connecté · {} touches ({} × {}) · rapports {} octets", d.driver.model().name, if d.driver.model().verified { "" } else { " (expérimental)" }, d.driver.model().keys, d.driver.model().rows, d.driver.model().cols, d.packet),

@@ -946,6 +946,8 @@ impl App {
                     }
                 }
                 Event::Quit => {
+                    crate::plugin_runtime::set_shutting_down(true);
+                    self.plugins.take();
                     self.quitting = true;
                     self.engine.stop();
                 }
@@ -1053,15 +1055,17 @@ impl App {
                             if r == revision {
                                 self.applied = c;
                                 self.plugin_states.retain(&self.applied);
-                                for index in 0..self.device_keys() {
-                                    if self.state_values[index].is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
-                                        self.send_state_face(index);
-                                    }
-                                }
                                 if let Some(plugins)=&mut self.plugins { plugins.sync(&self.applied); }
                                 if self.sleep.sleeping {
                                     let _ = self.device.send(Command::Brightness(self.config.sleep_brightness));
                                 }
+                            }
+                        }
+                        // A full HID apply overwrites every runtime face; replay even when
+                        // there was no pending UI edit (USB reconnect / wake / profile refresh).
+                        for index in 0..self.device_keys() {
+                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
+                                self.send_state_face(index);
                             }
                         }
                         self.log(
@@ -5083,7 +5087,8 @@ impl App {
         if key.plugin_state.is_some() {return key;}
         let Some(binding)=config.keys().get(index).and_then(|key|key.plugin.as_ref()) else {return key};
         let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)) else {return key};
-        if !face.title.is_empty() {key.label=face.title.clone();}
+        // The configured title (including a two-state face title) always wins.
+        if key.label.is_empty() && key.image.is_empty() && key.display_kind.is_none() && !face.title.is_empty() {key.label=face.title.clone();}
         if key.image.is_empty() && key.display_kind.is_none() && face.image_bytes.is_none() {
             if let Some(action)=self.plugins.as_ref().and_then(|m|m.catalog.iter().find(|p|p.uuid==v.plugin)).and_then(|p|p.actions.iter().find(|a|a.uuid==v.action)) {
                 if key.label.is_empty() {if let Some(title)=action.titles.get(face.state as usize).and_then(Option::as_ref){key.label=title.clone();}}

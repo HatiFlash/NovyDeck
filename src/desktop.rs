@@ -128,6 +128,18 @@ impl State {
     }
 }
 unsafe extern "system" fn proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_QUERYENDSESSION {
+        crate::plugin_runtime::set_shutting_down(true);
+        return 1; // allow Windows to close the session
+    }
+    if msg == WM_ENDSESSION {
+        crate::plugin_runtime::set_shutting_down(w != 0);
+        if w != 0 {
+            let p = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut State;
+            if !p.is_null() { (&*p).send(Event::Quit); }
+        }
+        return 0;
+    }
     let p = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut State;
     if !p.is_null() {
         let s = &*p;
