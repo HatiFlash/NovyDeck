@@ -25,6 +25,7 @@ fn node_major(path:&std::path::Path)->Option<u32>{
  let mut command=Command::new(path);
  command.arg("--version").stdin(Stdio::null());
  #[cfg(windows)] command.creation_flags(0x08000000); // CREATE_NO_WINDOW : aucune console visible
+ if crate::plugin_runtime::shutting_down() { return None; }
  let output=command.output().ok()?;
  if !output.status.success(){return None;}
  let text=std::str::from_utf8(&output.stdout).ok()?;
@@ -212,6 +213,7 @@ impl Host {
   if simulated {return Ok(id);}
   let result=(||->anyhow::Result<InspectorChild>{
    #[cfg(windows)] let job=Job::new()?;
+   anyhow::ensure!(!crate::plugin_runtime::shutting_down(),"Session Windows en cours de fermeture : inspecteur interdit");
    let mut inspector=Command::new(inspector_exe()?).arg("--isolated-inspector")
        .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
    #[cfg(windows)] if let Err(e)=job.assign(&inspector){let _=inspector.kill();let _=inspector.wait();return Err(e.into());}
