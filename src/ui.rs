@@ -5080,16 +5080,28 @@ impl App {
         let binding=original.plugin.as_ref()?;
         self.plugins.as_ref()?.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)?;
         let key=self.state_key_in(config,index,original.clone());
-        if !key.image.is_empty() || key.display_kind.is_some() {return None;}
+        if !key.image.is_empty() || key.display_kind.is_some() || self.explicit_state_face(config, index) {return None;}
         face.and_then(|face|face.image_bytes.as_deref())
+    }
+    fn explicit_state_face(&self, config: &Config, index: usize) -> bool {
+        let Some(key) = config.keys().get(index) else { return false };
+        let Some(display) = key.state_display.as_ref() else { return false };
+        let active = if key.plugin_state.is_some() {
+            self.plugin_states.lookup(config, index, key).active().unwrap_or(false)
+        } else {
+            self.state_values.get(index).copied().flatten().unwrap_or(false)
+        };
+        let face = if active { &display.on } else { &display.off };
+        face.image.is_some() || face.label.is_some()
     }
     fn plugin_render_key(&self,index:usize,mut key:Key,face:&PluginFace,config:&Config)->Key {
         if key.plugin_state.is_some() {return key;}
         let Some(binding)=config.keys().get(index).and_then(|key|key.plugin.as_ref()) else {return key};
         let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)) else {return key};
         // The configured title (including a two-state face title) always wins.
-        if key.label.is_empty() && key.image.is_empty() && key.display_kind.is_none() && !face.title.is_empty() {key.label=face.title.clone();}
-        if key.image.is_empty() && key.display_kind.is_none() && face.image_bytes.is_none() {
+        let explicit = self.explicit_state_face(config, index);
+        if key.label.is_empty() && !explicit && key.image.is_empty() && key.display_kind.is_none() && !face.title.is_empty() {key.label=face.title.clone();}
+        if !explicit && key.image.is_empty() && key.display_kind.is_none() && face.image_bytes.is_none() {
             if let Some(action)=self.plugins.as_ref().and_then(|m|m.catalog.iter().find(|p|p.uuid==v.plugin)).and_then(|p|p.actions.iter().find(|a|a.uuid==v.action)) {
                 if key.label.is_empty() {if let Some(title)=action.titles.get(face.state as usize).and_then(Option::as_ref){key.label=title.clone();}}
                 if let Some(icon)=action.states.get(face.state as usize).and_then(Option::as_ref).or(action.icon.as_ref()) {key.image=icon.to_string_lossy().into_owned();}

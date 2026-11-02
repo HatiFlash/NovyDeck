@@ -109,6 +109,35 @@ fn user_images_and_builtin_faces_take_priority_over_plugin_pixels() {
     assert!(h.app.plugin_image_bytes(0,Some(&face),&h.app.config).is_some(),"legacy plugin pixels remain available without a user face");
 }
 #[test]
+fn plugin_messages_never_replace_custom_pixels_or_explicit_empty_state_faces_on_device() {
+    let mut h=setup();
+    let folder=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+    let p=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let plugin=p.uuid.clone();let action=p.actions[0].uuid.clone();
+    h.app.config.keys_mut()[0].plugin=Some(PluginBinding{plugin:plugin.clone(),action,settings:json!({}),state:0});
+    h.app.config.keys_mut()[0].plugin_state=None;
+    let base_image=h.app.config.keys()[0].image.clone();
+    h.app.config.keys_mut()[0].state_display=Some(StateDisplay{toggle:true,
+        on:StateFace{image:Some("".into()),label:Some("".into()),..Default::default()},
+        off:StateFace{image:Some(base_image),..Default::default()},..Default::default()});
+    h.app.applied=h.app.config.clone();
+    let mut manager=crate::plugin_runtime::Manager::new(vec![p]);manager.sync(&h.app.applied);
+    let context=manager.visible().values().next().unwrap().context.clone();h.app.plugins=Some(manager);
+    let (tx,rx)=std::sync::mpsc::channel();h.app.device=tx;h.app.wanted=true;h.app.gate.connected=true;h.app.gate.dirty=false;
+    let bytes=std::fs::read(&h.app.config.keys()[0].image).unwrap();
+    let encoded=base64::Engine::encode(&base64::engine::general_purpose::STANDARD,&bytes);
+    for active in [false,true] {
+        h.app.state_values[0]=Some(active);
+        let expected=h.app.presented_key(0);
+        h.app.plugin_message(&plugin,&json!({"event":"setTitle","context":context,"payload":{"title":format!("plugin-{active}")}}));
+        let message=json!({"event":"setImage","context":context,"payload":{"image":format!("data:image/png;base64,{encoded}")}});
+        h.app.plugin_message(&plugin,&message);
+        let jpeg=rx.try_iter().filter_map(|c|match c {crate::device::Command::KeyImage(0,b)=>Some(b),_=>None}).last().expect("plugin image event updates key");
+        let font=crate::key_render::font().unwrap();
+        assert!(jpeg==crate::key_render::for_plugin(&expected,h.app.applied.image_size,&font,None,None).unwrap(),"custom state face must match device");
+    }
+}
+#[test]
 fn state_source_picker_and_three_faces_are_visible_in_both_languages_at_hidpi() {
     let size=vec2(1366.0,768.0);
     for lang in ["fr","en"] {

@@ -541,6 +541,15 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
 #[cfg(all(test,windows))]
 #[path="plugin_block_native_tests.rs"] mod native_pi_tests;
 #[cfg(test)]mod tests {use super::*;use crate::model::{Config,PluginBinding};
+    #[test] fn shutdown_and_restart_budget_prevent_plugin_respawn() {
+        assert!(may_restart(false, 0));
+        assert!(may_restart(false, 2));
+        assert!(!may_restart(false, 3));
+        assert!(!may_restart(true, 0));
+        assert_eq!(restart_delay(1), Duration::from_secs(5));
+        assert_eq!(restart_delay(2), Duration::from_secs(10));
+        assert_eq!(restart_delay(3), Duration::from_secs(20));
+    }
     #[test] fn draft_inspectors_are_independent_and_survive_sync_without_keypress() {
         use tungstenite::Message;
         let fixture=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
