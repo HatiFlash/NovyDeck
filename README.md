@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.2"><img src="https://img.shields.io/badge/Release-v0.18.2-3478F6.svg" alt="Release v0.18.2"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.0"><img src="https://img.shields.io/badge/Release-v0.19.0-3478F6.svg" alt="Release v0.19.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,18 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.19.0
+
+### Real-time Home Assistant triggers
+
+- **Connection**: in Settings, enter your Home Assistant address and a long-lived access token. NovyDeck connects over WebSocket and listens to state changes live; the token is stored encrypted with Windows DPAPI. You can also reuse the address and token of the Home Assistant plugin (it is not modified).
+- **Trigger "Home Assistant state"**: pick an entity (with filter), optionally an attribute, a comparison (Equal / Different...) and a value. "For (seconds)" waits until the condition has held for that long (0 = immediate). It can also fire at startup if the condition is already true.
+- **Return action**: a second key can be triggered when the condition becomes false again.
+- **Key badge**: the key can show the state (countdown, triggered, disconnected).
+- **Home Assistant condition**: also available in the If / else and Wait until blocks of the Workshop.
+
+See the [0.19.0 release notes](docs/RELEASE-0.19.0.md). Not yet covered by screenshots; not tested against a live Home Assistant server.
 
 ## What's new in 0.18.2
 

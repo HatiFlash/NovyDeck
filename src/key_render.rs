@@ -233,7 +233,7 @@ fn jpeg_with_options(k: &crate::model::Key, size: u32, font: &FontArc, frame: Op
     if let Some(badge) = &k.runtime_badge {
         // Device pixels are composed here, before the transport rotation; preview uses this JPEG.
         let red = !matches!(badge.as_str(), "SCÈNE" | "×");
-        let color = if red { Rgb([220, 40, 53]) } else { Rgb([40, 146, 192]) };
+        let color = match crate::home_assistant::badge_color(badge) { Some(c) => Rgb(c), None if red => Rgb([220, 40, 53]), None => Rgb([40, 146, 192]) };
         let radius = (size / 13).max(4) as i32;
         let cx = size as i32 - radius - 6;
         let cy = radius + 6;

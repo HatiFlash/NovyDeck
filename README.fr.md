@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.18.2"><img src="https://img.shields.io/badge/Release-v0.18.2-3478F6.svg" alt="Version 0.18.2"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.0"><img src="https://img.shields.io/badge/Release-v0.19.0-3478F6.svg" alt="Version 0.19.0"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,18 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.19.0
+
+### Déclencheurs Home Assistant en temps réel
+
+- **Connexion** : dans les Réglages, saisis l'adresse de Home Assistant et un jeton d'accès longue durée. NovyDeck se connecte en WebSocket et suit les changements d'état en direct ; le jeton est stocké chiffré avec DPAPI de Windows. Tu peux aussi réutiliser l'adresse et le jeton du plugin Home Assistant (le plugin n'est pas modifié).
+- **Déclencheur « État Home Assistant »** : choisis une entité (avec filtre), éventuellement un attribut, une comparaison (Égal / Différent…) et une valeur. « Depuis (secondes) » attend que la condition soit vraie depuis cette durée (0 = immédiat). Il peut aussi se déclencher au démarrage si la condition est déjà vraie.
+- **Action de retour** : une seconde touche peut être déclenchée quand la condition redevient fausse.
+- **Pastille sur la touche** : la touche peut afficher l'état (compte à rebours, déclenché, déconnecté).
+- **Condition Home Assistant** : disponible aussi dans les blocs Si… sinon et Attendre que… de l'Atelier.
+
+Voir les [notes de version 0.19.0](docs/RELEASE-0.19.0.md). Pas encore de captures ; non testé avec un vrai serveur Home Assistant.
 
 ## Nouveautés 0.18.2
 

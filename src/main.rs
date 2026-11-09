@@ -7,6 +7,7 @@ mod automation;
 mod network_actions;
 mod catalog;
 mod conditions;
+mod home_assistant;
 mod control;
 mod desktop;
 mod device;

@@ -635,6 +635,9 @@ pub struct Preferences {
     /// Blocs épinglés de la bibliothèque de l'Atelier (`bloc:<n°>` ou `plugin:<uuid>|<action>`), dans l'ordre d'épinglage.
     #[serde(default)]
     pub workshop_favorites: Vec<String>,
+    /// Connexion Home Assistant de l'application ; jeton chiffré DPAPI, jamais exporté.
+    #[serde(default, skip_serializing_if = "crate::home_assistant::Prefs::is_default")]
+    pub home_assistant: crate::home_assistant::Prefs,
 }
 fn default_chat_mode() -> String { "auto".into() }
 fn default_true() -> bool { true }
@@ -681,6 +684,7 @@ impl Default for Preferences {
             update_check: None,
             last_seen_version: String::new(),
             workshop_favorites: vec![],
+            home_assistant: Default::default(),
         }
     }
 }

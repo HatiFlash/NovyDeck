@@ -286,6 +286,8 @@ pub struct App {
     trigger_days: Vec<u8>,
     trigger_minutes: u32,
     trigger_input: bool,
+    ha_runtime: crate::home_assistant::Runtime,
+    ha_edit: extras::HaEditor,
     icon_target: Option<icon_ui::Target>,
     icon_selected: Option<PathBuf>,
     icon_notice: String,
@@ -606,6 +608,8 @@ impl App {
             trigger_days: vec![],
             trigger_minutes: 5,
             trigger_input: false,
+            ha_runtime: Default::default(),
+            ha_edit: Default::default(),
             icon_target: None,
             icon_selected: None,
             icon_notice: String::new(),
@@ -630,6 +634,7 @@ impl App {
         }
         app.refresh_hotkeys();
         app.sync_state_display();
+        if !isolated && !ui_test && !smoke { app.configure_home_assistant(); }
         app
     }
     fn needs_whats_new(preferences: &Preferences, existed: bool, notes: &str) -> bool {
@@ -779,6 +784,7 @@ impl App {
                 }
             }
         }
+        self.apply_ha_badges(&mut deployed);
         self.pending = Some((revision, deployed.clone()));
         self.sync_state_display();
         let command = if connect {
@@ -790,6 +796,49 @@ impl App {
             self.fail(tr("Le service USB s’est arrêté. Relance NovyDeck.").into());
             self.gate.disconnect();
         }
+    }
+    /// Superpose la pastille Home Assistant (compte à rebours, déclenché, déconnecté) sans toucher à l'image ni à une pastille existante.
+    fn apply_ha_badges(&self, deployed: &mut Config) {
+        if !self.preferences.home_assistant.key_badge || self.ha_runtime.displays.is_empty() { return; }
+        for p in &mut deployed.profiles {
+            let name = p.name.clone();
+            let pages = std::iter::once((String::new(), &mut p.keys)).chain(p.pages.iter_mut().map(|page| (page.id.clone(), &mut page.keys)));
+            for (page, keys) in pages {
+                for (index, key) in keys.iter_mut().enumerate() {
+                    if key.runtime_badge.as_deref().is_some_and(|b| !b.is_empty()) { continue; }
+                    let badge = self.ha_runtime.display(&(name.clone(), page.clone(), index)).and_then(crate::home_assistant::badge);
+                    if badge.is_some() { key.runtime_badge = badge; }
+                }
+            }
+        }
+    }
+    /// Avance les déclencheurs Home Assistant (cache local, aucun réseau) et exécute les touches dues.
+    fn ha_tick(&mut self) {
+        if !self.preferences.triggers.iter().any(|t| t.kind == "ha_state") && self.ha_runtime.displays.is_empty() { return; }
+        let now = Instant::now();
+        let connected = crate::home_assistant::global().status().connected();
+        let blocked = !self.gate.enabled || self.gate.invalid || self.gate.dirty || self.trigger_recording
+            || self.recording.is_some() || !self.engine.allows_global_press(now);
+        let (targets, changed) = self.ha_runtime.tick(&self.preferences.triggers, now, connected, blocked, |entity, attribute| {
+            crate::home_assistant::cached_value(entity, attribute).flatten()
+        });
+        for (profile, page, index) in targets {
+            let Some(key) = self.config.profiles.iter().find(|p| p.name == profile)
+                .and_then(|p| p.keys_at(&page)).and_then(|keys| keys.get(index)) else { continue };
+            let mut key = key.clone();
+            key.runtime_id = Some(crate::engine::identity(&profile, &page, index));
+            self.log(trf("Home Assistant : touche {key} déclenchée", &[("key", &(index + 1))]));
+            let config = self.config.clone();
+            self.execute_key(key, false, false, &config);
+        }
+        if changed && self.preferences.home_assistant.key_badge && self.wanted && !self.gate.dirty && !self.gate.invalid { self.upload(false); }
+    }
+    pub(super) fn configure_home_assistant(&mut self) {
+        let prefs = &self.preferences.home_assistant;
+        let settings = if prefs.configured() {
+            prefs.token.reveal().ok().map(|token| crate::home_assistant::Settings { url: prefs.url.trim().to_owned(), token })
+        } else { None };
+        crate::home_assistant::global().configure(settings);
     }
     fn connect(&mut self) {
         if self.gate.invalid {
@@ -4878,6 +4927,7 @@ impl App {
         self.record_trigger(ctx);
         self.record_events(ctx);
         self.events();
+        self.ha_tick();
         self.plugin_events();
         self.housekeeping();
         self.assistant_events();
@@ -5231,6 +5281,7 @@ impl App {
         let initial=self.plugins.as_ref().map(|m|m.visible().values().filter(|v| !self.plugin_faces.contains_key(&v.context)).map(|v|(v.context.clone(),v.index,v.state)).collect::<Vec<_>>()).unwrap_or_default();
         for (context,index,state) in initial { self.plugin_faces.insert(context,PluginFace{state,..Default::default()}); self.send_plugin_face(index); }
         self.events();
+        self.ha_tick();
         self.plugin_events();
         self.housekeeping();
         let due = self.long_press.due(Instant::now(), self.applied.long_press_ms);
@@ -5304,7 +5355,7 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
         ("app_muted", tr("Application muette")), ("app_volume_compare", tr("Volume d’application")),
         ("device_muted", tr("Périphérique muet")), ("device_volume_compare", tr("Volume du périphérique")),
         ("audio_device_present", tr("Périphérique audio actif")), ("default_output_is", tr("Sortie par défaut")),
-        ("variable_compare", tr("Variable")), ("not", tr("NON")), ("all", tr("Toutes (ET)")), ("any", tr("Au moins une (OU)"))
+        ("variable_compare", tr("Variable")), ("home_assistant_state", tr("État Home Assistant")), ("not", tr("NON")), ("all", tr("Toutes (ET)")), ("any", tr("Au moins une (OU)"))
     ];
     let mut selected = condition.kind().to_owned();
     egui::ComboBox::from_id_salt(("condition_kind", depth)).selected_text(variants.iter().find(|(id, _)| *id == condition.kind()).map(|(_, label)| *label).unwrap_or(condition.label())).show_ui(ui, |ui| {
@@ -5325,6 +5376,7 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
             "audio_device_present" => C::AudioDevicePresent { name_contains: "Casque".into(), input: false },
             "default_output_is" => C::DefaultOutputIs { name_contains: "Casque".into() },
             "variable_compare" => C::VariableCompare { name: "mode".into(), op: "equals".into(), value: String::new() },
+            "home_assistant_state" => C::HomeAssistantState { entity: String::new(), attribute: String::new(), op: "equals".into(), value: String::new() },
             "not" => C::Not { condition: Box::new(C::default()) },
             "all" => C::All { conditions: vec![C::default()] },
             "any" => C::Any { conditions: vec![C::default()] },
@@ -5373,6 +5425,16 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
             ui.label(tr("Nom de variable")); changed |= ui.text_edit_singleline(name).changed();
             egui::ComboBox::from_id_salt("variable_operator").selected_text(match op.as_str() { "equals" => tr("Égale"), "not_equals" => tr("Différente"), "contains" => tr("Contient"), "greater" => tr("Supérieure"), "less" => tr("Inférieure"), _ => op.as_str() }).show_ui(ui, |ui| {
                 for (id, label) in [("equals", tr("Égale")), ("not_equals", tr("Différente")), ("contains", tr("Contient")), ("greater", tr("Supérieure")), ("less", tr("Inférieure"))] {
+                    changed |= ui.selectable_value(op, id.into(), label).changed();
+                }
+            });
+            ui.label(tr("Valeur")); changed |= ui.text_edit_singleline(value).changed();
+        }
+        C::HomeAssistantState { entity, attribute, op, value } => {
+            ui.label(tr("Entité Home Assistant")); changed |= ui.text_edit_singleline(entity).changed();
+            ui.label(tr("Attribut (optionnel)")); changed |= ui.text_edit_singleline(attribute).changed();
+            egui::ComboBox::from_id_salt("ha_condition_operator").selected_text(match op.as_str() { "equals" => tr("Égal"), "not_equals" => tr("Différent"), "above" => ">", _ => "<" }).show_ui(ui, |ui| {
+                for (id, label) in [("equals", tr("Égal")), ("not_equals", tr("Différent")), ("above", ">"), ("below", "<")] {
                     changed |= ui.selectable_value(op, id.into(), label).changed();
                 }
             });
