@@ -706,11 +706,19 @@ impl App {
         if key.plugin_state.is_some() {
             return self.plugin_states.apply(config, index, &key);
         }
+        // Option « Image de la touche selon le mode » : l'état Home Assistant, en mémoire, choisit la face.
+        if let (Some(display), Some(active)) = (key.state_display.as_ref(), self.ha_mode_for(config, index)) {
+            return display.apply(&key, active);
+        }
         match (key.state_display.clone(), self.state_values.get(index).copied().flatten()) {
             (Some(display), active) if display.toggle => display.apply(&key, active.unwrap_or(false)),
             (Some(display), Some(active)) => display.apply(&key, active),
             _ => key,
         }
+    }
+    fn ha_mode_for(&self, config: &Config, index: usize) -> Option<bool> {
+        let profile = config.profiles.get(config.active)?;
+        self.ha_runtime.mode(&(profile.name.clone(), config.page.clone(), index))
     }
     fn toggle_key_face(&mut self, index: usize) {
         if let Some(key) = self.applied.keys().get(index) {
@@ -819,6 +827,7 @@ impl App {
         let connected = crate::home_assistant::global().status().connected();
         let blocked = !self.gate.enabled || self.gate.invalid || self.gate.dirty || self.trigger_recording
             || self.recording.is_some() || !self.engine.allows_global_press(now);
+        let previous_modes = self.ha_runtime.modes.clone();
         let (targets, changed) = self.ha_runtime.tick(&self.preferences.triggers, now, connected, blocked, |entity, attribute| {
             crate::home_assistant::cached_value(entity, attribute).flatten()
         });
@@ -830,6 +839,15 @@ impl App {
             self.log(trf("Home Assistant : touche {key} déclenchée", &[("key", &(index + 1))]));
             let config = self.config.clone();
             self.execute_key(key, false, false, &config);
+        }
+        // Seule la touche dont le mode change reçoit une nouvelle image (rien n'est écrit sur le disque).
+        if self.ha_runtime.modes != previous_modes {
+            let profile = self.applied.profiles.get(self.applied.active).map(|p| p.name.clone()).unwrap_or_default();
+            let page = self.applied.page.clone();
+            for index in 0..self.device_keys().min(15) {
+                let target = (profile.clone(), page.clone(), index);
+                if self.ha_runtime.modes.get(&target) != previous_modes.get(&target) { self.send_state_face(index); }
+            }
         }
         if changed && self.preferences.home_assistant.key_badge && self.wanted && !self.gate.dirty && !self.gate.invalid { self.upload(false); }
     }
@@ -1113,7 +1131,7 @@ impl App {
                         // A full HID apply overwrites every runtime face; replay even when
                         // there was no pending UI edit (USB reconnect / wake / profile refresh).
                         for index in 0..self.device_keys() {
-                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
+                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.ha_mode_for(&self.applied, index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
                                 self.send_state_face(index);
                             }
                         }

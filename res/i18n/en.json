@@ -1474,6 +1474,11 @@
     "en attente": "waiting",
     "Échec du test : {error}": "Test failed: {error}",
     "Égal": "Equal",
-    "État Home Assistant": "Home Assistant state"
+    "État Home Assistant": "Home Assistant state",
+    "Image de la touche selon le mode": "Key image follows the mode",
+    "Afficher sur une autre touche": "Show on another key",
+    "Image « actif » quand le mode est actif, image « inactif » sinon. La pause globale bloque les actions, mais l'image continue de suivre l'état réel.": "“Active” image while the mode is active, “inactive” image otherwise. Global pause blocks actions, but the image keeps following the real state.",
+    "Ajoute une image pour l'état actif dans l'éditeur de la touche": "Add an image for the active state in the key editor",
+    "image selon le mode": "image follows the mode"
   }
 }

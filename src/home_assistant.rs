@@ -788,6 +788,12 @@ pub struct Rule {
     pub return_key: Option<usize>,
     /// Autorise le déclenchement si la condition est déjà vraie au démarrage.
     pub fire_on_start: bool,
+    /// L'image de la touche suit le mode : 2ᵉ état (« actif ») tant que le mode est actif, 1er état sinon.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub show_mode: bool,
+    /// Touche qui affiche le mode (None = la touche cible du déclencheur).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_key: Option<usize>,
 }
 impl Default for Rule {
     fn default() -> Self {
@@ -799,6 +805,8 @@ impl Default for Rule {
             hold_seconds: 0,
             return_key: None,
             fire_on_start: false,
+            show_mode: false,
+            display_key: None,
         }
     }
 }
@@ -839,6 +847,10 @@ impl Rule {
         anyhow::ensure!(
             self.return_key.is_none_or(|k| k < 15 && k != key),
             "Touche de retour invalide"
+        );
+        anyhow::ensure!(
+            self.display_key.is_none_or(|k| k < 15),
+            "Touche d'affichage invalide"
         );
         Ok(())
     }
@@ -947,6 +959,11 @@ impl Machine {
             }
         }
     }
+    /// Mode actif : le déclencheur s'est déclenché (ou la condition était déjà vraie au démarrage / pendant
+    /// une pause) et la condition n'est pas encore redevenue fausse. Conservé pendant une déconnexion.
+    pub fn active(&self) -> bool {
+        matches!(self.phase, Phase::Fired | Phase::Latched)
+    }
     pub fn display(&self, rule: &Rule, now: Instant, connected: bool) -> Display {
         if !connected {
             return Display::Disconnected;
@@ -973,6 +990,8 @@ pub type Target = (String, String, usize);
 pub struct Runtime {
     machines: Vec<(crate::desktop::Trigger, Machine)>,
     pub displays: HashMap<Target, Display>,
+    /// Mode actif/inactif des touches d'affichage (option « Image de la touche selon le mode »).
+    pub modes: HashMap<Target, bool>,
 }
 impl Runtime {
     /// Avance toutes les machines. `read` lit le cache (aucun réseau). Renvoie les touches à exécuter
@@ -1040,12 +1059,27 @@ impl Runtime {
                 })
                 .or_insert(shown);
         }
-        let changed = displays != self.displays;
+        let mut modes: HashMap<Target, bool> = HashMap::new();
+        for (trigger, machine) in &self.machines {
+            let Some(rule) = trigger.ha.as_ref().filter(|r| r.show_mode) else { continue };
+            let target = (
+                trigger.profile.clone(),
+                trigger.page.clone(),
+                rule.display_key.unwrap_or(trigger.key),
+            );
+            *modes.entry(target).or_insert(false) |= machine.active();
+        }
+        let modes_changed = modes != self.modes;
+        self.modes = modes;
+        let changed = displays != self.displays || modes_changed;
         self.displays = displays;
         (actions, changed)
     }
     pub fn display(&self, target: &Target) -> Option<Display> {
         self.displays.get(target).copied()
+    }
+    pub fn mode(&self, target: &Target) -> Option<bool> {
+        self.modes.get(target).copied()
     }
 }
 
@@ -1322,6 +1356,123 @@ mod tests {
         assert!(!format!("{settings:?}").contains("TOPSECRET"));
     }
 
+    fn mode_trigger(display_key: Option<usize>) -> crate::desktop::Trigger {
+        crate::desktop::Trigger {
+            profile: "P".into(),
+            page: String::new(),
+            key: 0,
+            keys: String::new(),
+            kind: "ha_state".into(),
+            value: String::new(),
+            days: vec![],
+            minutes: 0,
+            input: false,
+            ha: Some(Rule {
+                show_mode: true,
+                display_key,
+                ..rule(2)
+            }),
+        }
+    }
+    fn mode_of(rt: &Runtime, key: usize) -> Option<bool> {
+        rt.mode(&("P".into(), String::new(), key))
+    }
+    #[test]
+    fn mode_follows_inactive_countdown_active_return() {
+        let triggers = vec![mode_trigger(Some(7))];
+        let mut rt = Runtime::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let state = std::cell::RefCell::new("on");
+        let read = |_: &str, _: &str| Some(state.borrow().to_string());
+        // Démarrage : condition fausse -> inactif sur la touche d'affichage, pas sur la cible.
+        rt.tick(&triggers, at(0), true, false, read);
+        assert_eq!(mode_of(&rt, 7), Some(false));
+        assert_eq!(mode_of(&rt, 0), None);
+        // Compte à rebours : image inactive.
+        *state.borrow_mut() = "off";
+        rt.tick(&triggers, at(1), true, false, read);
+        assert_eq!(rt.display(&("P".into(), String::new(), 0)), Some(Display::Countdown(2)));
+        assert_eq!(mode_of(&rt, 7), Some(false));
+        // Déclenché : actif.
+        let (actions, changed) = rt.tick(&triggers, at(3), true, false, read);
+        assert_eq!(actions.len(), 1);
+        assert!(changed);
+        assert_eq!(mode_of(&rt, 7), Some(true));
+        // Retour : inactif + action de retour.
+        *state.borrow_mut() = "on";
+        let (actions, _) = rt.tick(&triggers, at(4), true, false, read);
+        assert_eq!(actions, vec![("P".into(), String::new(), 2)]);
+        assert_eq!(mode_of(&rt, 7), Some(false));
+    }
+    #[test]
+    fn mode_defaults_to_target_key_and_cancel_stays_inactive() {
+        let triggers = vec![mode_trigger(None)];
+        let mut rt = Runtime::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let state = std::cell::RefCell::new("on");
+        let read = |_: &str, _: &str| Some(state.borrow().to_string());
+        rt.tick(&triggers, at(0), true, false, read);
+        *state.borrow_mut() = "off";
+        rt.tick(&triggers, at(1), true, false, read);
+        *state.borrow_mut() = "on";
+        let (actions, _) = rt.tick(&triggers, at(2), true, false, read);
+        assert!(actions.is_empty(), "annulé : aucune action");
+        assert_eq!(mode_of(&rt, 0), Some(false));
+    }
+    #[test]
+    fn mode_is_active_at_startup_without_action_and_survives_disconnection() {
+        let triggers = vec![mode_trigger(None)];
+        let mut rt = Runtime::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let read = |_: &str, _: &str| Some("off".to_string());
+        // Condition déjà vraie depuis le démarrage : image active, aucune action.
+        let (actions, _) = rt.tick(&triggers, at(0), true, false, read);
+        assert!(actions.is_empty());
+        assert_eq!(mode_of(&rt, 0), Some(true));
+        // Déconnecté : dernière image connue conservée, pastille « HA × ».
+        let (actions, _) = rt.tick(&triggers, at(5), false, false, read);
+        assert!(actions.is_empty());
+        assert_eq!(mode_of(&rt, 0), Some(true));
+        assert_eq!(rt.display(&("P".into(), String::new(), 0)), Some(Display::Disconnected));
+        // Reconnexion, condition toujours vraie : toujours actif, aucune action.
+        let (actions, _) = rt.tick(&triggers, at(6), true, false, read);
+        assert!(actions.is_empty());
+        assert_eq!(mode_of(&rt, 0), Some(true));
+    }
+    #[test]
+    fn mode_pause_keeps_following_the_real_state_without_actions() {
+        let triggers = vec![mode_trigger(None)];
+        let mut rt = Runtime::default();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let state = std::cell::RefCell::new("on");
+        let read = |_: &str, _: &str| Some(state.borrow().to_string());
+        rt.tick(&triggers, at(0), true, true, read);
+        *state.borrow_mut() = "off";
+        rt.tick(&triggers, at(1), true, true, read);
+        let (actions, _) = rt.tick(&triggers, at(4), true, true, read);
+        assert!(actions.is_empty(), "pause : action bloquée");
+        assert_eq!(mode_of(&rt, 0), Some(true), "l'image suit l'état réel");
+        *state.borrow_mut() = "on";
+        let (actions, _) = rt.tick(&triggers, at(5), true, true, read);
+        assert!(actions.is_empty(), "pause : pas d'action de retour");
+        assert_eq!(mode_of(&rt, 0), Some(false));
+    }
+    #[test]
+    fn mode_option_is_off_by_default_and_validated() {
+        let r: Rule = serde_json::from_str(r#"{"entity":"sensor.t"}"#).unwrap();
+        assert!(!r.show_mode && r.display_key.is_none());
+        assert!(!serde_json::to_string(&r).unwrap().contains("show_mode"));
+        let mut rt = Runtime::default();
+        let plain = crate::desktop::Trigger { ha: Some(rule(0)), ..mode_trigger(None) };
+        rt.tick(&[plain], Instant::now(), true, false, |_: &str, _: &str| Some("off".to_string()));
+        assert!(rt.modes.is_empty());
+        assert!(Rule { display_key: Some(15), ..rule(0) }.validate(0).is_err());
+        assert!(Rule { display_key: Some(14), ..rule(0) }.validate(0).is_ok());
+    }
     #[test]
     fn runtime_executes_targets_and_reports_display_changes() {
         let trigger = crate::desktop::Trigger {

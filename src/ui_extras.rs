@@ -20,13 +20,16 @@ pub(super) struct HaEditor {
     return_on: bool,
     return_key: usize,
     fire_on_start: bool,
+    show_mode: bool,
+    display_other: bool,
+    display_key: usize,
     entities: (u64, Vec<(String, String)>),
 }
 impl Default for HaEditor {
     fn default() -> Self {
         Self { url: String::new(), token: String::new(), loaded: false, notice: String::new(), test: None, confirm_plugin: false,
             filter: String::new(), entity: String::new(), attribute: String::new(), op: "equals".into(), value: String::new(), hold: 0,
-            return_on: false, return_key: 0, fire_on_start: false, entities: (u64::MAX, vec![]) }
+            return_on: false, return_key: 0, fire_on_start: false, show_mode: false, display_other: false, display_key: 0, entities: (u64::MAX, vec![]) }
     }
 }
 impl HaEditor {
@@ -35,10 +38,12 @@ impl HaEditor {
         let fresh = Self::default();
         self.filter = fresh.filter; self.entity = fresh.entity; self.attribute = fresh.attribute; self.op = fresh.op; self.value = fresh.value;
         self.hold = fresh.hold; self.return_on = fresh.return_on; self.return_key = fresh.return_key; self.fire_on_start = fresh.fire_on_start;
+        self.show_mode = fresh.show_mode; self.display_other = fresh.display_other; self.display_key = fresh.display_key;
     }
     fn rule(&self) -> crate::home_assistant::Rule {
         crate::home_assistant::Rule { entity: self.entity.trim().to_owned(), attribute: self.attribute.trim().to_owned(), op: self.op.clone(),
-            value: self.value.trim().to_owned(), hold_seconds: self.hold, return_key: self.return_on.then_some(self.return_key), fire_on_start: self.fire_on_start }
+            value: self.value.trim().to_owned(), hold_seconds: self.hold, return_key: self.return_on.then_some(self.return_key), fire_on_start: self.fire_on_start,
+            show_mode: self.show_mode, display_key: (self.show_mode && self.display_other).then_some(self.display_key) }
     }
 }
 fn ha_status_text(status: &crate::home_assistant::Status, entities: usize) -> String {
@@ -141,7 +146,7 @@ fn ha_connection_ui(ui: &mut egui::Ui, ctx: &egui::Context, editor: &mut HaEdito
     (changed, reconfigure)
 }
 /// Formulaire du déclencheur « État Home Assistant ».
-fn ha_trigger_form(ui: &mut egui::Ui, editor: &mut HaEditor) {
+fn ha_trigger_form(ui: &mut egui::Ui, editor: &mut HaEditor, config: &Config, target_key: usize) {
     let monitor = crate::home_assistant::global();
     let generation = monitor.generation();
     if editor.entities.0 != generation { editor.entities = (generation, monitor.entity_list()); }
@@ -174,6 +179,18 @@ fn ha_trigger_form(ui: &mut egui::Ui, editor: &mut HaEditor) {
         if editor.return_on { let mut shown = editor.return_key + 1; ui.add(egui::DragValue::new(&mut shown).range(1..=15)); editor.return_key = shown - 1; }
     });
     ui.checkbox(&mut editor.fire_on_start, tr("Déclencher aussi au démarrage si la condition est déjà vraie"));
+    ui.checkbox(&mut editor.show_mode, tr("Image de la touche selon le mode"));
+    if editor.show_mode {
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut editor.display_other, tr("Afficher sur une autre touche"));
+            if editor.display_other { let mut shown = editor.display_key + 1; ui.add(egui::DragValue::new(&mut shown).range(1..=15)); editor.display_key = shown - 1; }
+        });
+        ui.label(RichText::new(tr("Image « actif » quand le mode est actif, image « inactif » sinon. La pause globale bloque les actions, mais l'image continue de suivre l'état réel.")).small());
+        let shown_key = if editor.display_other { editor.display_key } else { target_key };
+        if !config.keys().get(shown_key).and_then(|key| key.state_display.as_ref()).is_some_and(|display| display.on.image.as_deref().is_some_and(|image| !image.is_empty())) {
+            ui.colored_label(Color32::LIGHT_RED, tr("Ajoute une image pour l'état actif dans l'éditeur de la touche"));
+        }
+    }
 }
 fn ha_display_text(display: Option<crate::home_assistant::Display>) -> String {
     use crate::home_assistant::Display as D;
@@ -2141,7 +2158,7 @@ impl App {
                 }
             });
             match self.trigger_kind.as_str() {
-                "ha_state" => ha_trigger_form(ui, &mut self.ha_edit),
+                "ha_state" => ha_trigger_form(ui, &mut self.ha_edit, &self.config, key),
                 "timer" => { ui.horizontal(|ui| { ui.label(crate::i18n::tr("Toutes les (minutes)")); ui.add(egui::DragValue::new(&mut self.trigger_minutes).range(1..=1440)); }); },
                 "clock" => {
                     ui.horizontal(|ui| { ui.label(crate::i18n::tr("Heure HH:MM")); ui.text_edit_singleline(&mut self.trigger_value); });
@@ -2171,6 +2188,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let mut text = format!("{} → {} / {} / touche {:02}", trigger.description(), trigger.profile, if trigger.page.is_empty() { crate::i18n::tr("Accueil") } else { &trigger.page }, trigger.key + 1);
                     if let Some(rule) = trigger.ha.as_ref().filter(|_| trigger.kind == "ha_state") {
+                        if rule.show_mode { text.push_str(&format!(" · {}", crate::i18n::tr("image selon le mode"))); }
                         if let Some(back) = rule.return_key { text.push_str(&crate::i18n::trf(" · retour touche {key}", &[("key", &format!("{:02}", back + 1))])); }
                         text.push_str(&format!(" · {}", ha_display_text(self.ha_runtime.display(&(trigger.profile.clone(), trigger.page.clone(), trigger.key)))));
                     }
