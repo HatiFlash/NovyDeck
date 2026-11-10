@@ -6,6 +6,7 @@ fn sample() -> crate::app_update::Latest {
         page: "https://github.com/HatiFlash/NovyDeck/releases/tag/v0.14.0".into(),
         setup_url: "https://github.com/example/setup.exe".into(),
         sha_url: "https://github.com/example/setup.sha256".into(),
+        sig_url: "https://github.com/example/setup.sig".into(),
         setup_size: 32_456_789,
         notes: include_str!("../docs/RELEASE-0.14.0.md").into(),
     }

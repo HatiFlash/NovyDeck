@@ -117,6 +117,7 @@
     "Analyse du {date}": "Scanned on {date}",
     "Analyse à examiner avant installation.": "Scan findings to review before installing.",
     "Antivirus : rien détecté": "Antivirus: nothing detected",
+    "Catalogue non signé ou modifié : magasin indisponible": "Catalog unsigned or modified: store unavailable",
     "Exécutable natif non signé : il s'exécute avec vos droits": "Unsigned native executable: it runs with your user rights",
     "Animations GIF et vidéo sur les touches": "GIF and video animations on keys",
     "Annuler": "Cancel",

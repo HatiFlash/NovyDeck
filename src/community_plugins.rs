@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 pub const REGISTRY_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json";
 pub const CONTRIBUTE_URL: &str = "https://github.com/HatiFlash/novydeck-plugins/blob/main/CONTRIBUTING.md";
 pub const SECURITY_URL: &str = "https://github.com/HatiFlash/novydeck-plugins#security-badges";
+pub const REGISTRY_SIG_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json.sig";
 const SCAN_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/security/scan-results.json";
 const ARCHIVE_LIMIT: usize = 50 * 1024 * 1024;
 const REGISTRY_LIMIT: usize = 1024 * 1024;
@@ -129,7 +130,16 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Entry>> {
     }
     Ok(entries)
 }
-pub fn fetch() -> Result<Vec<Entry>> { parse(&crate::https_get::get(REGISTRY_URL, REGISTRY_LIMIT)?) }
+/// S-02 : le catalogue n'est lu qu'après vérification de la signature Ed25519 sur ses octets exacts.
+pub fn parse_signed(bytes: &[u8], sig_text: Option<&str>) -> Result<Vec<Entry>> {
+    sig_text.and_then(|sig| crate::signing::verify_registry(bytes, sig).ok()).context(crate::i18n::tr("Catalogue non signé ou modifié : magasin indisponible"))?;
+    parse(bytes)
+}
+pub fn fetch() -> Result<Vec<Entry>> {
+    let bytes = crate::https_get::get(REGISTRY_URL, REGISTRY_LIMIT)?;
+    let sig = crate::https_get::get(REGISTRY_SIG_URL, crate::signing::SIG_LIMIT).ok().and_then(|b| String::from_utf8(b).ok());
+    parse_signed(&bytes, sig.as_deref())
+}
 
 /// Network and image decoding are performed by callers on a worker thread, never on the UI thread.
 pub fn image(url: &str, icon: bool) -> Result<eframe::egui::ColorImage> {
@@ -274,6 +284,13 @@ pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
     #[test] fn scans_are_optional_and_bounded() {
         assert!(parse_scans(br#"{"plugins":[]}"#).unwrap().is_empty());
         assert!(parse_scans(&vec![b' ';REGISTRY_LIMIT+1]).is_err());
+    }
+    #[test] fn unsigned_or_modified_registry_is_refused_with_clear_message() {
+        let bytes = br#"{"schema":1,"plugins":[]}"#;
+        for sig in [None, Some(""), Some("AAAA"), Some("7a2ouLXVU9rMepZFt15oZmi5Se8GKndzkVme0FyNCFwEoT9qqbR6AH1J+QOnqX8fepm0LIQPlXDla2NM9palDg==")] {
+            let error = parse_signed(bytes, sig).unwrap_err().to_string();
+            assert!(error == "Catalogue non signé ou modifié : magasin indisponible" || error == "Catalog unsigned or modified: store unavailable", "{error}");
+        }
     }
     #[test] fn rejects_oversized_registry_and_unknown_schema() {
         assert!(parse(&vec![b' '; REGISTRY_LIMIT + 1]).is_err());

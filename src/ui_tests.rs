@@ -2583,6 +2583,7 @@ fn update_offer_widgets_follow_installation_mode_without_network() {
         setup_url: "https://github.com/x/setup.exe".into(),
         setup_size: 100,
         sha_url: "https://github.com/x/setup.exe.sha256".into(),
+        sig_url: "https://github.com/x/setup.exe.sig".into(),
         notes: "## Français\n- Une nouveauté testée".into(),
     };
     for installed in [true, false] {
@@ -2739,6 +2740,7 @@ fn startup_offer_shows_notes_and_installation_choice_without_network() {
         version: "v0.8.16".into(), page: "https://github.com/HatiFlash/NovyDeck".into(),
         setup_url: "https://github.com/x/setup.exe".into(), setup_size: 100,
         sha_url: "https://github.com/x/setup.sha256".into(),
+        sig_url: "https://github.com/x/setup.sig".into(),
         notes: "## Français\n- Fonction nouvelle injectée".into(),
     });
     let shown = h.warm(size);

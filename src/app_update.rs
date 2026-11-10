@@ -15,6 +15,7 @@ pub struct Latest {
     pub setup_url: String,
     pub setup_size: u64,
     pub sha_url: String,
+    pub sig_url: String,
     pub notes: String,
 }
 #[derive(Clone, Debug)]
@@ -96,6 +97,7 @@ pub fn parse_latest(bytes: &[u8]) -> Result<Latest> {
     https(&release.html_url)?;
     let setup = format!("NovyDeck-{}-Setup.exe", release.tag_name.trim_start_matches('v'));
     let sha = format!("{setup}.sha256");
+    let sig = format!("{setup}.sig");
     let asset = |name: &str| -> Result<&Asset> {
         let mut found = release.assets.iter().filter(|a| a.name == name);
         let item = found.next().context(format!("Fichier {name} absent de la version publiée"))?;
@@ -105,9 +107,11 @@ pub fn parse_latest(bytes: &[u8]) -> Result<Latest> {
     };
     let exe = asset(&setup)?;
     let digest = asset(&sha)?;
+    let signature = asset(&sig)?;
     anyhow::ensure!(exe.size > 0 && exe.size <= MAX_SETUP as u64, "Taille de l'installateur invalide");
     anyhow::ensure!(digest.size > 0 && digest.size <= 4096, "Taille de l'empreinte invalide");
-    Ok(Latest { version: release.tag_name, page: release.html_url, setup_url: exe.browser_download_url.clone(), setup_size: exe.size, sha_url: digest.browser_download_url.clone(), notes: release.body.unwrap_or_default() })
+    anyhow::ensure!(signature.size > 0 && signature.size <= crate::signing::SIG_LIMIT as u64, "Taille de la signature invalide");
+    Ok(Latest { version: release.tag_name, page: release.html_url, setup_url: exe.browser_download_url.clone(), setup_size: exe.size, sha_url: digest.browser_download_url.clone(), sig_url: signature.browser_download_url.clone(), notes: release.body.unwrap_or_default() })
 }
 pub fn check() -> Result<Status> {
     let latest = parse_latest(&crate::https_get::get(LATEST_URL, 1024 * 1024)?)?;
@@ -134,8 +138,14 @@ pub fn download_with_progress(latest: &Latest, verifying: impl FnOnce()) -> Resu
     anyhow::ensure!(latest.setup_size > 0 && latest.setup_size <= MAX_SETUP as u64, "Taille de l'installateur invalide");
     https(&latest.setup_url)?;
     https(&latest.sha_url)?;
+    https(&latest.sig_url)?;
     let hash = crate::https_get::get(&latest.sha_url, 4096).context("Téléchargement de l'empreinte impossible")?;
     let hash = std::str::from_utf8(&hash).context("Empreinte SHA-256 illisible")?;
+    // S-01 : signature Ed25519 vérifiée avant tout téléchargement de l'installateur.
+    let expected = hash.split_whitespace().next().context("Empreinte SHA-256 absente")?.to_ascii_lowercase();
+    let sig = crate::https_get::get(&latest.sig_url, crate::signing::SIG_LIMIT).context("Téléchargement de la signature impossible : rien n'a été téléchargé")?;
+    let sig = std::str::from_utf8(&sig).context("Signature illisible")?;
+    crate::signing::verify_update(latest.version.trim_start_matches('v'), &expected, sig).context("Signature de la mise à jour invalide : rien n'a été téléchargé")?;
     let root = std::env::temp_dir().join("NovyDeck-update");
     fs::create_dir_all(&root).context("Création du dossier temporaire impossible")?;
     // A unique private subdirectory avoids replaying an older installer's file.
@@ -220,7 +230,8 @@ pub fn launch_expecting(setup: &Path, expected_sha256: &str) -> Result<()> {
     fn release() -> serde_json::Value {
         serde_json::json!({"tag_name":"v0.8.14","html_url":"https://github.com/HatiFlash/NovyDeck/releases/tag/v0.8.14","draft":false,"prerelease":false,"assets":[
             {"name":"NovyDeck-0.8.14-Setup.exe","browser_download_url":"https://github.com/x/setup.exe","size":100},
-            {"name":"NovyDeck-0.8.14-Setup.exe.sha256","browser_download_url":"https://github.com/x/setup.sha256","size":80}]})
+            {"name":"NovyDeck-0.8.14-Setup.exe.sha256","browser_download_url":"https://github.com/x/setup.sha256","size":80},
+            {"name":"NovyDeck-0.8.14-Setup.exe.sig","browser_download_url":"https://github.com/x/setup.sig","size":88}]})
     }
     #[test] #[ignore="requires interactive Windows desktop; uses a dummy .cmd, never an installer"]
     fn lab_update_wait_opens_no_visible_console() {
@@ -253,6 +264,14 @@ pub fn launch_expecting(setup: &Path, expected_sha256: &str) -> Result<()> {
         value["draft"] = false.into(); value["prerelease"] = true.into(); assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).is_err());
         value["prerelease"] = false.into(); value["assets"].as_array_mut().unwrap().pop();
         assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+    #[test] fn signature_asset_is_required_and_bounded() {
+        let mut value = release();
+        assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).unwrap().sig_url.ends_with("setup.sig"));
+        value["assets"][2]["size"] = 513.into(); assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).is_err());
+        value["assets"][2]["size"] = 0.into(); assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).is_err());
+        value["assets"].as_array_mut().unwrap().pop();
+        assert!(parse_latest(&serde_json::to_vec(&value).unwrap()).unwrap_err().to_string().contains(".sig"));
     }
     #[test] fn numeric_comparisons() {
         for (a,b) in [("0.8.9","0.8.13"),("0.8.13","v0.8.14"),("0.8.14","0.9.0"),("0.9.0","1.0.0")] {
