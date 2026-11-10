@@ -9,8 +9,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Build native executables
@@ -44,9 +44,15 @@ jobs:
       - name: Windows installer (Inno Setup)
         shell: pwsh
         run: |
-          $known = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ }
-          if (-not (Get-Command iscc -ErrorAction SilentlyContinue) -and -not $known) { choco install innosetup -y --no-progress }
-          ./tools/Build-Installer.ps1 -Version $env:VERSION
+          # Version d'Inno Setup figée et vérifiée (audit S-10) : pas d'ISCC préinstallé ni de paquet choco flottant.
+          $setup = "$env:RUNNER_TEMP\innosetup-6.7.4.exe"
+          Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe -OutFile $setup
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') { throw "Empreinte Inno Setup inattendue : $hash" }
+          $dir = "$env:RUNNER_TEMP\InnoSetup674"
+          Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER',"/DIR=$dir" -Wait
+          if (-not (Test-Path "$dir\ISCC.exe")) { throw "Installation d'Inno Setup 6.7.4 en échec" }
+          ./tools/Build-Installer.ps1 -Version $env:VERSION -Iscc "$dir\ISCC.exe"
           Copy-Item "target/release-dist/NovyDeck-$env:VERSION-Setup.exe", "target/release-dist/NovyDeck-$env:VERSION-Setup.exe.sha256" dist/
       - name: Publish GitHub release
         shell: pwsh
