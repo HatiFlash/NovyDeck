@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.1"><img src="https://img.shields.io/badge/Release-v0.19.1-3478F6.svg" alt="Release v0.19.1"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.2"><img src="https://img.shields.io/badge/Release-v0.19.2-3478F6.svg" alt="Release v0.19.2"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,18 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.19.2
+
+### Hardening: plugins, secrets, downloads
+
+- **Plugins can no longer freeze the interface**: settings sent by plugins are saved at most every 500 ms (and on exit), each plugin is limited to 50 messages per second, and settings received while you are editing a key are applied afterwards instead of being lost.
+- **Secrets stay private**: the OBS password is now encrypted with Windows (DPAPI) — an old plain-text password is re-saved encrypted automatically; MCP answers hide plugin settings and any password, token or secret field; profile export leaves secrets out by default ("Export without secrets").
+- **Safer downloads**: plugin import limits count the bytes actually extracted, and the update installer's SHA-256 is checked again right before it starts.
+- **Clearer store badges**: "Antivirus: nothing detected" instead of "Scanned", and a warning for plugins that ship an unsigned native executable.
+- **Build and reporting**: GitHub actions pinned, Inno Setup version pinned and checked, dependency advisories checked in CI, and a [security policy](SECURITY.md) with private vulnerability reporting.
+
+See the [0.19.2 release notes](docs/RELEASE-0.19.2.md).
 
 ## What's new in 0.19.1
 

@@ -1450,6 +1450,7 @@
     "Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »).": "Home Assistant condition removed: use the Home Assistant plugin (“When the plugin state changes” block).",
     "Exporter sans secrets": "Export without secrets",
     "Retire le mot de passe OBS et les réglages des plugins du fichier exporté.": "Removes the OBS password and plugin settings from the exported file.",
-    "Export sans secrets : réglages de plugin et mot de passe OBS à refaire.": "Export without secrets: plugin settings and OBS password must be set up again."
+    "Export sans secrets : réglages de plugin et mot de passe OBS à refaire.": "Export without secrets: plugin settings and OBS password must be set up again.",
+    "Plugin {plugin} : plus de {limit} messages par seconde, messages en trop ignorés": "Plugin {plugin}: more than {limit} messages per second, extra messages ignored"
   }
 }
