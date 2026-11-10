@@ -61,4 +61,5 @@ jobs:
         run: |
           $notes = "docs/RELEASE-$env:VERSION.md"
           if (-not (Test-Path $notes)) { $notes = "README.md" }
-          gh release create "${{ github.ref_name }}" (Get-ChildItem dist -File).FullName --title "NovyDeck $env:VERSION" --notes-file $notes --verify-tag
+          gh release create "${{ github.ref_name }}" (Get-ChildItem dist -File).FullName --title "NovyDeck $env:VERSION" --notes-file $notes --verify-tag --draft
+          # S-01 : brouillon ; le mainteneur ajoute NovyDeck-$env:VERSION-Setup.exe.sig (Ed25519, clé hors GitHub) puis publie.
