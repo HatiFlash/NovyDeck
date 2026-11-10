@@ -633,17 +633,85 @@ pub struct Config {
     pub page: String,
     #[serde(default)]
     pub trail: Vec<String>,
+    /// Export « sans secrets » : mot de passe OBS et réglages de plugin retirés, à refaire après import.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secrets_stripped: bool,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ObsSettings {
-    #[serde(default = "obs_host")] pub host: String,
-    #[serde(default = "obs_port")] pub port: u16,
-    #[serde(default)] pub password: String,
+#[derive(Clone, Debug, PartialEq)]
+pub struct ObsSettings { pub host: String, pub port: u16, pub password: String }
+/// Forme sérialisée : le mot de passe est chiffré par DPAPI (`password_dpapi`). Un ancien `password` en clair est
+/// seulement lu (migration) ; il n'est jamais réécrit.
+#[derive(Serialize, Deserialize)]
+struct ObsWire {
+    #[serde(default = "obs_host")] host: String,
+    #[serde(default = "obs_port")] port: u16,
+    #[serde(default, skip_serializing_if = "String::is_empty")] password: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")] password_dpapi: String,
+}
+impl ObsSettings {
+    fn to_wire(&self) -> Result<ObsWire, String> {
+        let mut wire = ObsWire { host: self.host.clone(), port: self.port, password: String::new(), password_dpapi: String::new() };
+        if self.password.is_empty() { return Ok(wire); }
+        match crate::secrets::protect(&self.password) {
+            Ok(sealed) => wire.password_dpapi = sealed,
+            // Hors Windows (développement), pas de coffre : texte clair assumé. Sous Windows, l'échec de chiffrement fait échouer la sauvegarde.
+            #[cfg(not(windows))] Err(_) => wire.password = self.password.clone(),
+            #[cfg(windows)] Err(e) => return Err(e),
+        }
+        Ok(wire)
+    }
+    fn from_wire(wire: ObsWire) -> Self {
+        // Secret illisible (autre compte Windows) : mot de passe vide, hôte et port conservés.
+        let password = if !wire.password_dpapi.is_empty() { crate::secrets::unprotect(&wire.password_dpapi).unwrap_or_default() } else { wire.password };
+        Self { host: wire.host, port: wire.port, password }
+    }
+}
+impl Serialize for ObsSettings {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_wire().map_err(serde::ser::Error::custom)?.serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for ObsSettings {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> { ObsWire::deserialize(deserializer).map(Self::from_wire) }
 }
 fn obs_host() -> String { "127.0.0.1".into() }
 fn obs_port() -> u16 { 4455 }
 impl Default for ObsSettings {
     fn default() -> Self { Self { host: obs_host(), port: obs_port(), password: String::new() } }
+}
+/// S-07 : état « secrets » d'une configuration exportée.
+fn plugin_settings_cleared(value: &mut serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut count = 0;
+            if map.get("type").and_then(|t| t.as_str()) == Some("plugin_action") {
+                if let Some(settings) = map.get_mut("settings") {
+                    if settings.as_object().is_some_and(|o| !o.is_empty()) { count += 1; }
+                    *settings = serde_json::json!({});
+                }
+            }
+            count + map.values_mut().map(plugin_settings_cleared).sum::<usize>()
+        }
+        serde_json::Value::Array(items) => items.iter_mut().map(plugin_settings_cleared).sum(),
+        _ => 0,
+    }
+}
+impl Config {
+    /// Égalité structurelle sans passer par DPAPI (dont le chiffrement n'est pas déterministe) : le mot de passe est comparé en clair en mémoire.
+    pub fn same_as(&self, other: &Config) -> bool {
+        let plain = |c: &Config| { let mut copy = c.clone(); copy.obs.password.clear(); serde_json::to_value(&copy).ok() };
+        self.obs.password == other.obs.password && plain(self) == plain(other)
+    }
+    /// Copie sans secrets pour l'export : ni mot de passe OBS ni réglages de plugin (`secrets_stripped` le signale à l'import).
+    pub fn without_secrets(&self) -> Config {
+        let mut copy = self.clone();
+        copy.obs.password.clear();
+        let mut value = serde_json::to_value(&copy).expect("config sérialisable");
+        plugin_settings_cleared(&mut value);
+        let mut clean: Config = serde_json::from_value(value).expect("config relue");
+        clean.secrets_stripped = true;
+        clean
+    }
 }
 impl Default for Config {
     fn default() -> Self {
@@ -705,6 +773,7 @@ impl Default for Config {
             image_size: 126,
             page: String::new(),
             trail: vec![],
+            secrets_stripped: false,
         }
     }
 }
@@ -1810,5 +1879,44 @@ mod execution_options_tests {
         let mut bad = configured;
         bad.debounce_ms = 60_001;
         assert!(validate_key(&bad, &Config::default()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod secrets_tests {
+    use super::*;
+    fn with_secrets() -> Config {
+        let mut c = Config::default();
+        c.obs.password = "obs-secret".into();
+        c.profiles[0].keys[0].steps = vec![Step::Disabled { step: Box::new(Step::PluginAction { plugin: "p".into(), action: "a".into(), settings: serde_json::json!({"token":"zzz"}), label: "L".into() }) },
+            Step::PluginAction { plugin: "p".into(), action: "a".into(), settings: serde_json::json!({"k":1}), label: String::new() }];
+        c
+    }
+    #[test] fn without_secrets_strips_obs_password_and_plugin_settings() {
+        let clean = with_secrets().without_secrets();
+        assert!(clean.obs.password.is_empty() && clean.secrets_stripped);
+        let text = serde_json::to_string(&clean).unwrap();
+        assert!(!text.contains("obs-secret") && !text.contains("zzz") && !text.contains("\"k\":1"), "{text}");
+        assert!(text.contains("\"plugin\":\"p\"") && text.contains("secrets_stripped"));
+        assert_eq!(clean.obs.host, "127.0.0.1");
+        assert!(!serde_json::to_string(&Config::default()).unwrap().contains("secrets_stripped"));
+    }
+    #[cfg(windows)]
+    #[test] fn obs_password_is_saved_encrypted_and_legacy_clear_text_is_migrated() {
+        let c = with_secrets();
+        let text = serde_json::to_string(&c).unwrap();
+        assert!(!text.contains("obs-secret") && text.contains("password_dpapi"), "{text}");
+        assert_eq!(serde_json::from_str::<Config>(&text).unwrap().obs.password, "obs-secret");
+        // Ancien fichier : mot de passe en clair, lu puis réécrit chiffré.
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value["obs"] = serde_json::json!({"host":"h","port":1,"password":"legacy-pw"});
+        let loaded: Config = serde_json::from_value(value).unwrap();
+        assert_eq!((loaded.obs.host.as_str(), loaded.obs.password.as_str()), ("h", "legacy-pw"));
+        let resaved = serde_json::to_string(&loaded).unwrap();
+        assert!(!resaved.contains("legacy-pw") && resaved.contains("password_dpapi"), "{resaved}");
+        assert_eq!(serde_json::from_str::<Config>(&resaved).unwrap().obs.password, "legacy-pw");
+        // Secret illisible : mot de passe vide, hôte conservé.
+        let broken: Config = serde_json::from_value({let mut v = serde_json::to_value(Config::default()).unwrap(); v["obs"] = serde_json::json!({"host":"x","password_dpapi":"AAAA"}); v}).unwrap();
+        assert!(broken.obs.password.is_empty() && broken.obs.host == "x");
     }
 }

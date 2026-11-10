@@ -260,3 +260,44 @@ fn global_settings_truncated_file_is_reported_and_left_untouched_then_normal_wri
     let all:serde_json::Value=serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(all,json!({"a":{"y":1},"b":{"z":2}}));assert!(path.with_extension("json.bak").exists());
 }
+
+fn virtual_context(h: &mut Harness) -> String {
+    h.app.applied = h.app.config.clone();
+    let identity = crate::engine::identity(&h.app.config.profiles[h.app.config.active].name, &h.app.config.page, 0);
+    crate::plugin_runtime::virtual_context(&identity, &[0])
+}
+
+#[test]
+fn many_set_settings_write_the_disk_at_most_once_per_window() {
+    let (mut h,plugin,_) = setup();
+    let context = virtual_context(&mut h);
+    let base = h.app.plugin_saves;
+    for n in 0..1000 {
+        h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"payload":{"n":n}}));
+    }
+    assert_eq!(h.app.plugin_saves-base,1,"une seule écriture pour la rafale");
+    assert!(h.app.plugin_save_pending,"la fin de rafale reste en attente");
+    h.app.flush_plugin_save(Instant::now(),false);
+    assert_eq!(h.app.plugin_saves-base,1,"pas de seconde écriture avant 500 ms");
+    h.app.flush_plugin_save(Instant::now()+Duration::from_millis(600),false);
+    assert_eq!(h.app.plugin_saves-base,2);
+    let loaded = crate::store::load(&h.app.path).unwrap();
+    assert!(matches!(&loaded.keys()[0].steps[0],Step::PluginAction{settings,..} if settings["n"]==999));
+}
+
+#[test]
+fn set_settings_during_pending_edit_is_queued_then_applied() {
+    let (mut h,plugin,_) = setup();
+    let context = virtual_context(&mut h);
+    h.app.gate.dirty = true;
+    h.app.plugin_message(&plugin,&serde_json::json!({"event":"setSettings","context":context,"payload":{"queued":1}}));
+    assert_eq!(h.app.plugin_settings_deferred.len(),1);
+    assert!(h.app.logs.iter().any(|l| l.contains("setSettings mis en attente")));
+    assert!(!matches!(&h.app.config.keys()[0].steps[0],Step::PluginAction{settings,..} if settings["queued"]==1));
+    h.app.replay_plugin_settings();
+    assert_eq!(h.app.plugin_settings_deferred.len(),1,"toujours en attente tant que la modification n'est pas validée");
+    h.app.gate.dirty = false;
+    h.app.replay_plugin_settings();
+    assert!(h.app.plugin_settings_deferred.is_empty());
+    assert!(matches!(&h.app.config.keys()[0].steps[0],Step::PluginAction{settings,..} if settings["queued"]==1));
+}

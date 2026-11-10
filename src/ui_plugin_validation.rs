@@ -47,6 +47,7 @@ fn wait(app: &mut App, index: usize, title: &str, count: i64) -> Result<(), Stri
                 && f.flash.is_some() == (count == 4)
         }) && value == Some(count)
         {
+            app.flush_plugin_save(Instant::now(), true); // F-01 : sauvegarde regroupée, forcée avant relecture.
             let saved = store::load(&app.path).map_err(|e| format!("Relecture : {e}"))?;
             if saved.keys()[index].plugin.as_ref().unwrap().settings["count"] != count {
                 return Err("Réglages non sauvegardés par l'application".into());

@@ -61,7 +61,7 @@ fn meta(ui:&mut egui::Ui,text:String){let p=theme::palette(ui.ctx());theme::pill
 fn badge_pills(ui:&mut egui::Ui,b:community_plugins::Badges,compact:bool){
  let p=theme::palette(ui.ctx());
  if b.official{theme::pill(ui,tr("Officiel"),p.accent);}
- if b.scanned{theme::pill(ui,tr("Analysé"),p.success);}
+ if b.scanned{theme::pill(ui,community_plugins::scan_badge(),p.success);}
  if b.tested{theme::pill(ui,if compact{tr("Testé")}else{tr("Testé par NovyDeck")},p.success);}
  if b.warning{theme::pill(ui,tr("À vérifier"),p.warning);}
 }
@@ -234,7 +234,7 @@ impl App {
          theme::pill(ui,category_name(entry.category.as_deref().unwrap_or("")),p.accent);
          let mut labels=Vec::new();
          if badges.official{labels.push(tr("Officiel"));}
-         if badges.scanned{labels.push(tr("Analysé"));}
+         if badges.scanned{labels.push(community_plugins::scan_badge());}
          if badges.tested{labels.push(tr("Testé"));}
          if badges.warning{labels.push(tr("À vérifier"));}
          if !labels.is_empty(){ui.add(egui::Label::new(RichText::new(labels.join(" · ")).color(if badges.warning{p.warning}else{p.success})).truncate()).on_hover_text(labels.join(" · "));}

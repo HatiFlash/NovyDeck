@@ -109,9 +109,23 @@ pub fn success(id: Value, result: Value) -> Value {
 pub fn error(id: Value, code: i64, message: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
 }
+/// S-07 : masque les réglages de plugin (`settings`) et tout champ dont le nom contient password, token ou secret.
+pub const MASKED: &str = "<masqué>";
+pub fn redact_json(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(map.iter().map(|(key, v)| {
+            let lower = key.to_ascii_lowercase();
+            let sensitive = lower == "settings" || ["password", "token", "secret"].iter().any(|word| lower.contains(word));
+            (key.clone(), if sensitive { Value::String(MASKED.into()) } else { redact_json(v) })
+        }).collect()),
+        Value::Array(items) => Value::Array(items.iter().map(redact_json).collect()),
+        other => other.clone(),
+    }
+}
 pub fn tool_result(result: Result<Value, String>) -> Value {
     match result {
         Ok(v) => {
+            let v = redact_json(&v);
             json!({"content":[{"type":"text","text":v.to_string()}],"structuredContent":v,"isError":false})
         }
         Err(e) => json!({"content":[{"type":"text","text":e}],"isError":true}),
@@ -121,6 +135,24 @@ pub fn tool_result(result: Result<Value, String>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn redact_json_masks_plugin_settings_and_secret_named_fields() {
+        let input = json!({"profile":{"keys":[{"steps":[{"type":"plugin_action","plugin":"a","settings":{"apiKey":"x"}}]}]},
+            "obs":{"host":"h","Password":"p"},"Access_Token":"t","client_SECRET":{"a":1},"nested":[{"myPassword2":"z","ok":"visible"}]});
+        let out = redact_json(&input);
+        let text = out.to_string();
+        for leaked in ["apiKey", "\"x\"", "\"p\"", "\"t\"", "\"z\""] { assert!(!text.contains(leaked), "{leaked} fuite : {text}"); }
+        assert_eq!(out["profile"]["keys"][0]["steps"][0]["settings"], MASKED);
+        assert_eq!(out["obs"]["Password"], MASKED);
+        assert_eq!(out["Access_Token"], MASKED);
+        assert_eq!(out["client_SECRET"], MASKED);
+        assert_eq!(out["nested"][0]["myPassword2"], MASKED);
+        assert_eq!(out["nested"][0]["ok"], "visible");
+        assert_eq!(out["obs"]["host"], "h");
+        assert_eq!(out["profile"]["keys"][0]["steps"][0]["plugin"], "a");
+        let wrapped = tool_result(Ok(json!({"settings":{"k":"v"}})));
+        assert!(!wrapped.to_string().contains("\"k\""));
+    }
     #[test]
     fn device_key_schema_allows_xl_but_runtime_checks_active_model() {
         let list = tools();

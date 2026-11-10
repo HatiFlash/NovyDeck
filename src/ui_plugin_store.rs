@@ -144,6 +144,7 @@ impl App {
      });
     });
     ui.label(crate::i18n::trf("{count} action(s) · {type} · Windows", &[("count", &plugin.actions.len()), ("type", &plugin_type(&plugin.runtime))]));
+    if matches!(&plugin.runtime,crate::plugins::Runtime::Exe(_)){ui.colored_label(crate::theme::palette(ui.ctx()).warning,community_plugins::native_warning());}
     if ui.add(iconset::button(ui.ctx(),Ico::Install,crate::i18n::tr("Importer ce plugin"))).clicked(){self.plugin_import_request(Some(plugin.folder.clone()));}
     ui.collapsing(crate::i18n::trf("Détails et actions ({count})", &[("count", &(plugin.actions.len()))] ),|ui|{
      ui.add(egui::Label::new(crate::i18n::trf("Origine locale · Analyse : {analysis} · Compatibilité non vérifiée · Redistribution non évaluée", &[("analysis", &format!("{:?}", plugin_import::compatibility(plugin)))] )).wrap());
@@ -214,6 +215,7 @@ impl App {
    ui.add(egui::Label::new(crate::i18n::trf("SHA-256 attendu : {hash}", &[("hash", &(entry.sha256))] )).wrap());
    ui.label(crate::i18n::tr("Ce plugin exécute du code tiers avec vos droits utilisateur."));
    let badges=community_plugins::badges(&entry,&state.scans);
+   if community_plugins::native_unsigned(&entry,&state.scans){ui.colored_label(crate::theme::palette(ui.ctx()).warning,community_plugins::native_warning());}
    if badges.warning{
     let p=crate::theme::palette(ui.ctx());
     ui.colored_label(p.warning,if badges.failed{crate::i18n::tr("Analyse : problème détecté")}else{crate::i18n::tr("Analyse à examiner avant installation.")});

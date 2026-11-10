@@ -151,6 +151,7 @@ pub fn download_with_progress(latest: &Latest, verifying: impl FnOnce()) -> Resu
     })();
     if let Err(error) = result { let _ = fs::remove_file(&path); return Err(error); }
     let _ = dir.keep();
+    if let Some(expected) = hash.split_whitespace().next() { *VERIFIED.lock().unwrap_or_else(|e| e.into_inner()) = Some((path.clone(), expected.to_ascii_lowercase())); }
     Ok(path)
 }
 
@@ -164,9 +165,23 @@ pub fn installer_command(setup: &Path) -> (String, Vec<String>) {
 /// empêcherait cet héritage et laisserait `ping` ouvrir une console visible.
 fn launch_flags() -> u32 { 0x0800_0000 } // CREATE_NO_WINDOW
 
+/// S-14 : empreinte attendue du dernier installateur téléchargé et vérifié (chemin, SHA-256 en hexadécimal minuscule).
+static VERIFIED: std::sync::Mutex<Option<(PathBuf, String)>> = std::sync::Mutex::new(None);
 pub fn launch(setup: &Path) -> Result<()> {
-    use std::os::windows::process::CommandExt;
+    let expected = VERIFIED.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let expected = expected.filter(|(path, _)| path == setup).map(|(_, sha)| sha).context("Installateur non vérifié : rien n'a été lancé")?;
+    launch_expecting(setup, &expected)
+}
+/// S-14 : rouvre le fichier avec un partage en lecture seule (ni écriture ni suppression pendant le lancement), recalcule son SHA-256
+/// et refuse s'il diffère de l'empreinte attendue. Le handle reste ouvert jusqu'après le démarrage du processus ; l'installateur
+/// lui-même n'est exécuté par `cmd` qu'après l'attente de quelques secondes, fenêtre résiduelle non couverte.
+pub fn launch_expecting(setup: &Path, expected_sha256: &str) -> Result<()> {
+    use std::os::windows::{fs::OpenOptionsExt, process::CommandExt};
     anyhow::ensure!(setup.is_file(), "Installateur introuvable");
+    let mut guard = fs::OpenOptions::new().read(true).share_mode(1 /* FILE_SHARE_READ */).open(setup).context("Installateur illisible ou verrouillé")?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut guard, &mut hasher).context("Relecture de l'installateur impossible")?;
+    anyhow::ensure!(format!("{:x}", hasher.finalize()).eq_ignore_ascii_case(expected_sha256.trim()), "Installateur modifié après vérification : rien n'a été lancé");
     let path = setup.to_string_lossy();
     anyhow::ensure!(!path.chars().any(|c| matches!(c, '"' | '%' | '!' | '^' | '\r' | '\n')), "Chemin temporaire incompatible avec cmd.exe");
     let (program, args) = installer_command(setup);
@@ -175,6 +190,7 @@ pub fn launch(setup: &Path) -> Result<()> {
     for arg in &args { command.raw_arg(arg); }
     command.creation_flags(launch_flags())
         .spawn().context("Démarrage de l'installateur impossible")?;
+    drop(guard);
     Ok(())
 }
 
@@ -194,7 +210,7 @@ pub fn launch(setup: &Path) -> Result<()> {
         println!("LAB_DOWNLOADED {} {}", latest.version, std::fs::metadata(&downloaded).unwrap().len());
         // 2. Mise à jour silencieuse par la commande réelle avec l'installateur fourni (version locale).
         let Some(setup) = std::env::var_os("NOVYDECK_LAB_SETUP") else { return; };
-        super::launch(std::path::Path::new(&setup)).expect("lancement détaché");
+        let sha = format!("{:x}", <super::Sha256 as super::Digest>::digest(std::fs::read(&setup).unwrap())); super::launch_expecting(std::path::Path::new(&setup), &sha).expect("lancement détaché");
         println!("LAB_LAUNCHED");
     }
 }
@@ -222,7 +238,7 @@ pub fn launch(setup: &Path) -> Result<()> {
         let consoles=||{let mut n=0usize;unsafe{EnumWindows(Some(count),&mut n as *mut _ as LPARAM)};n};
         let dir=tempfile::tempdir().unwrap();let setup=dir.path().join("fake-setup.cmd");let marker=dir.path().join("started.txt");
         fs::write(&setup,format!("@echo off\r\necho started > \"{}\"\r\n",marker.display())).unwrap();
-        let before=consoles();launch(&setup).unwrap();let until=Instant::now()+Duration::from_secs(12);
+        let sha=format!("{:x}",Sha256::digest(fs::read(&setup).unwrap()));let before=consoles();launch_expecting(&setup,&sha).unwrap();let until=Instant::now()+Duration::from_secs(12);
         while Instant::now()<until && !marker.exists() {
             assert_eq!(consoles(),before,"visible console appeared during the update wait");
             thread::sleep(Duration::from_millis(30));
@@ -261,6 +277,21 @@ pub fn launch(setup: &Path) -> Result<()> {
         assert_eq!(program, "cmd.exe");
         assert!(args.last().unwrap().contains(r#""C:\Some Folder\setup.exe" /VERYSILENT"#));
         assert!(args.last().unwrap().contains("/relaunch=1"));
+    }
+    #[test] fn file_modified_after_verification_is_refused_and_unverified_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let setup = dir.path().join("fake-setup.cmd");
+        let marker = dir.path().join("started.txt");
+        fs::write(&setup, format!("@echo off\r\necho started > \"{}\"\r\n", marker.display())).unwrap();
+        let sha = format!("{:x}", Sha256::digest(fs::read(&setup).unwrap()));
+        assert!(launch(&setup).unwrap_err().to_string().contains("non vérifié"), "chemin jamais vérifié");
+        fs::write(&setup, b"@echo off\r\necho tampered\r\n").unwrap();
+        let error = launch_expecting(&setup, &sha).unwrap_err().to_string();
+        assert!(error.contains("modifié après vérification"), "{error}");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!marker.exists());
+        // Le garde en lecture seule est relâché après un refus : le fichier reste supprimable.
+        fs::remove_file(&setup).unwrap();
     }
     #[test] fn launch_hides_console_for_cmd_and_ping() {
         assert_eq!(launch_flags(), 0x0800_0000); // CREATE_NO_WINDOW

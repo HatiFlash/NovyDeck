@@ -116,7 +116,8 @@
     "Analyse : problème détecté": "Scan: issue detected",
     "Analyse du {date}": "Scanned on {date}",
     "Analyse à examiner avant installation.": "Scan findings to review before installing.",
-    "Analysé": "Scanned",
+    "Antivirus : rien détecté": "Antivirus: nothing detected",
+    "Exécutable natif non signé : il s'exécute avec vos droits": "Unsigned native executable: it runs with your user rights",
     "Animations GIF et vidéo sur les touches": "GIF and video animations on keys",
     "Annuler": "Cancel",
     "Annuler la demande IA": "Cancel AI request",
@@ -1446,6 +1447,9 @@
     "Effacer la recherche": "Clear search",
     "Plugin manquant": "Missing plugin",
     "Ce plugin n'est plus installé : le bloc est conservé, réinstalle-le pour le réutiliser.": "This plugin is no longer installed: the block is kept, reinstall it to use it again.",
-    "Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »).": "Home Assistant condition removed: use the Home Assistant plugin (“When the plugin state changes” block)."
+    "Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »).": "Home Assistant condition removed: use the Home Assistant plugin (“When the plugin state changes” block).",
+    "Exporter sans secrets": "Export without secrets",
+    "Retire le mot de passe OBS et les réglages des plugins du fichier exporté.": "Removes the OBS password and plugin settings from the exported file.",
+    "Export sans secrets : réglages de plugin et mot de passe OBS à refaire.": "Export without secrets: plugin settings and OBS password must be set up again."
   }
 }

@@ -4,6 +4,20 @@ use std::io::Write;
 use serde_json::{json,Value};
 use crate::plugins::{Plugin,Runtime};
 
+/// F-01 : plafond de messages d'une connexion plugin (fenêtre glissante d'une seconde). `check` renvoie
+/// (accepté, journaliser) ; au plus une ligne de journal toutes les 5 s et par plugin.
+pub struct RateWindow { stamps:std::collections::VecDeque<Instant>, last_log:Option<Instant> }
+impl RateWindow {
+ pub const LIMIT:usize=50;
+ pub fn new()->Self{Self{stamps:std::collections::VecDeque::new(),last_log:None}}
+ pub fn check(&mut self,now:Instant)->(bool,bool){
+  while self.stamps.front().is_some_and(|t|now.saturating_duration_since(*t)>=Duration::from_secs(1)){self.stamps.pop_front();}
+  if self.stamps.len()<Self::LIMIT {self.stamps.push_back(now);return (true,false);}
+  let log=self.last_log.is_none_or(|t|now.saturating_duration_since(t)>=Duration::from_secs(5));
+  if log {self.last_log=Some(now);}
+  (false,log)
+ }
+}
 /// Résultat mis en cache par version minimale : chaque sonde lance `node --version`.
 fn node_executable(required:u32)->Option<std::path::PathBuf>{
  static CACHE:std::sync::OnceLock<Mutex<HashMap<u32,Option<std::path::PathBuf>>>>=std::sync::OnceLock::new();
@@ -379,6 +393,15 @@ impl Drop for Host {fn drop(&mut self){self.stop.store(true,Ordering::Relaxed);
 }}
 #[cfg(windows)] use std::os::windows::process::CommandExt;
 #[cfg(test)] mod tests {use super::*;
+    #[test] fn rate_window_accepts_about_fifty_per_second_and_logs_once_per_five_seconds() {
+        let mut window=RateWindow::new();let base=Instant::now();
+        let (mut accepted,mut logs)=(0,0);
+        for i in 0..200u64 {let (ok,log)=window.check(base+Duration::from_millis(i*5));if ok{accepted+=1;}if log{logs+=1;}}
+        assert_eq!(accepted,RateWindow::LIMIT);assert_eq!(logs,1,"une seule ligne de journal dans les 5 s");
+        assert!(window.check(base+Duration::from_millis(1500)).0,"la fenêtre glissante se libère");
+        let mut later=0;for i in 0..200u64 {if window.check(base+Duration::from_secs(7)+Duration::from_millis(i*5)).1{later+=1;}}
+        assert_eq!(later,1,"nouvelle ligne de journal après 5 s");
+    }
     #[test] fn title_is_bounded_clean_and_translated() {
         crate::i18n::set_language("en");
         assert_eq!(inspector_title("Test", "Counter"), "Settings — Test · Counter");

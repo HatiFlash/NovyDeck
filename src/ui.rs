@@ -144,6 +144,7 @@ impl DeviceGrid {
     }
 }
 pub struct App {
+    export_without_secrets: bool,
     config: Config,
     applied: Config,
     pending: Option<(u64, Config)>,
@@ -284,6 +285,14 @@ pub struct App {
     plugin_trigger_log: HashMap<String, std::collections::VecDeque<Instant>>,
     plugin_trigger_refusals: HashMap<(String, &'static str), Instant>,
     plugin_trigger_running: HashMap<usize, Instant>,
+    /// F-01 : sauvegarde des réglages de plugin en attente (au plus une écriture par 500 ms), compteur d'écritures pour les tests.
+    plugin_save_pending: bool,
+    plugin_save_at: Option<Instant>,
+    plugin_saves: u32,
+    /// F-01 : plafond de 50 messages/s par connexion plugin.
+    plugin_rate: HashMap<String, crate::plugin_host::RateWindow>,
+    /// F-04 : setSettings reçus pendant une modification en cours ou sur une autre page (plugin, message, profil et page appliqués).
+    plugin_settings_deferred: Vec<(String, serde_json::Value, usize, String)>,
     /// F-06 c : touches (profil, page, numéro) portant encore une condition Home Assistant retirée ; notification unique.
     legacy_ha_keys: Vec<String>,
     trigger_kind: String,
@@ -481,6 +490,7 @@ impl App {
         let mut app = Self {
             applied: config.clone(),
             base_profile: config.active,
+            export_without_secrets: true,
             config,
             foreground: None,
             auto_active: false,
@@ -609,6 +619,11 @@ impl App {
             plugin_trigger_log: HashMap::new(),
             plugin_trigger_refusals: HashMap::new(),
             plugin_trigger_running: HashMap::new(),
+            plugin_save_pending: false,
+            plugin_save_at: None,
+            plugin_saves: 0,
+            plugin_rate: HashMap::new(),
+            plugin_settings_deferred: Vec::new(),
             legacy_ha_keys: Vec::new(),
             trigger_kind: "app_open".into(),
             trigger_value: "obs64.exe".into(),
@@ -829,6 +844,7 @@ impl App {
         }
         match store::save(&self.path, &self.config) {
             Ok(()) => {
+                self.plugin_save_pending = false;
                 self.gate.dirty = false;
                 self.refresh_hotkeys();
                 if self.wanted {
@@ -1408,7 +1424,8 @@ impl App {
             }
             let loaded = store::load(&path);
             Some(Box::new(move |app| match loaded {
-                Ok(c) => {
+                Ok(mut c) => {
+                    let stripped = std::mem::take(&mut c.secrets_stripped);
                     app.config = c;
                     app.base_profile = app.config.active;
                     app.auto_active = false;
@@ -1416,6 +1433,7 @@ impl App {
                     app.gate.invalid = false;
                     app.edited();
                     app.log(tr("Profils importés. Les touches restent en pause jusqu'à leur réactivation.").into());
+                    if stripped { app.log(tr("Export sans secrets : réglages de plugin et mot de passe OBS à refaire.").into()); }
                 }
                 Err(e) => {
                     if let Ok(reports) = crate::elgato::load_all(&path) {
@@ -1429,7 +1447,8 @@ impl App {
     }
     fn export(&mut self) {
         self.gate.enabled = false;
-        let config = self.config.clone();
+        // S-07 : « Exporter sans secrets » (coché par défaut) retire le mot de passe OBS et les réglages de plugin.
+        let config = if self.export_without_secrets { self.config.without_secrets() } else { self.config.clone() };
         self.start_dialog(move || {
             let path = rfd::FileDialog::new().set_file_name("deckforge-profils.json")
                 .add_filter("JSON", &["json"]).save_file()?;
@@ -1470,7 +1489,7 @@ impl App {
                 self.assistant_cache.insert(call.id.clone(), result.clone());
                 result
             };
-            let _ = call.reply.send(result);
+            let _ = call.reply.send(result.map(|v| crate::mcp_protocol::redact_json(&v)));
         }
     }
     fn assistant_call(
@@ -1554,7 +1573,7 @@ impl App {
                     .iter()
                     .find(|p| p.name == name)
                     .ok_or("Profil introuvable")?;
-                let value = serde_json::to_value(profile).unwrap();
+                let value = crate::mcp_protocol::redact_json(&serde_json::to_value(profile).unwrap());
                 if value.to_string().len() > crate::mcp_protocol::MAX_FRAME - 1024 {
                     return Err("Ce profil est trop volumineux pour le connecteur".into());
                 }
@@ -2132,6 +2151,7 @@ impl App {
                                 self.import();
                                 ui.close_menu();
                             }
+                            ui.checkbox(&mut self.export_without_secrets, tr("Exporter sans secrets")).on_hover_text(tr("Retire le mot de passe OBS et les réglages des plugins du fichier exporté."));
                             if ui.add(iconset::button(ctx, Ico::Save, tr("Exporter les profils…"))).clicked() {
                                 self.export();
                                 ui.close_menu();
@@ -2297,6 +2317,7 @@ impl App {
                                 self.import();
                                 ui.close_menu();
                             }
+                            ui.checkbox(&mut self.export_without_secrets, tr("Exporter sans secrets")).on_hover_text(tr("Retire le mot de passe OBS et les réglages des plugins du fichier exporté."));
                             if ui.add(iconset::button(ctx, Ico::Save, tr("Exporter les profils…"))).clicked() {
                                 self.export();
                                 ui.close_menu();
@@ -2481,7 +2502,7 @@ impl App {
         self.log(trf("Touche {key} mise à jour.{hint} Ctrl+Z pour annuler.", &[("key", &format!("{:02}", target + 1)), ("hint", &if audio_unset { tr(" Choisis maintenant les deux périphériques audio dans l'inspecteur.") } else { "" })]));
     }
     fn record_history(&mut self, before: Config, ctx: &egui::Context) {
-        if self.replaying || serde_json::to_value(&before).ok() == serde_json::to_value(&self.config).ok() { return; }
+        if self.replaying || before.same_as(&self.config) { return; }
         let field = ctx.memory(|m| m.focused());
         let grouped = field.is_some() && field == self.last_field && self.history_at.elapsed() < Duration::from_millis(800) && self.future.is_empty();
         if !grouped { self.history.push(before); if self.history.len() > 50 { self.history.remove(0); } }
@@ -5059,6 +5080,7 @@ impl eframe::App for App {
         if let Some(session)=&self.flicker {session.stop();}
         self.stop_http();
         self.plugins.take();
+        if self.plugin_save_pending && !self.gate.invalid { self.flush_plugin_save(Instant::now(), true); }
         if self.gate.dirty && !self.gate.invalid {
             if let Err(e) = store::save(&self.path, &self.config) {
                 let message = format!("Échec de sauvegarde à la fermeture : {e}\n");
@@ -5159,7 +5181,11 @@ impl App {
                 }
                 self.plugin_errors.insert(plugin.clone(),error.clone());self.log(format!("Plugin {plugin} : {error}"));
             },
-            crate::plugin_runtime::Reply::Message(plugin,message)=>self.plugin_message(&plugin,&message),
+            crate::plugin_runtime::Reply::Message(plugin,message)=>{
+                let (accepted,log)=self.plugin_rate.entry(plugin.clone()).or_insert_with(crate::plugin_host::RateWindow::new).check(Instant::now());
+                if log {self.log(trf("Plugin {plugin} : plus de {limit} messages par seconde, messages en trop ignorés",&[("plugin",&plugin),("limit",&crate::plugin_host::RateWindow::LIMIT)]));}
+                if accepted {self.plugin_message(&plugin,&message);}
+            },
         }}
     }
     /// `novydeckTrigger` (plugin → hôte) : exécute la touche portant le contexte du plugin émetteur.
@@ -5199,12 +5225,41 @@ impl App {
     }
     /// Journalise un refus de `novydeckTrigger` (au plus une ligne par contexte et par raison toutes les 5 s).
     fn trigger_refused(&mut self,plugin:&str,context:&str,reason:&'static str) {
+        let context:String=context.chars().take(60).collect();
+        self.throttled_log(&context,reason,format!("Plugin {plugin} : novydeckTrigger refusé ({reason}) — contexte {context}"));
+    }
+    /// Une ligne de journal au plus par contexte et par raison toutes les 5 s (anti-bruit partagé par F-04/F-06).
+    fn throttled_log(&mut self,context:&str,reason:&'static str,line:String) {
         let now=Instant::now();
         if self.plugin_trigger_refusals.get(&(context.to_owned(),reason)).is_some_and(|at|now.duration_since(*at)<Duration::from_secs(5)) {return;}
         if self.plugin_trigger_refusals.len()>=256 {self.plugin_trigger_refusals.retain(|_,at|now.duration_since(*at)<Duration::from_secs(5));}
         self.plugin_trigger_refusals.insert((context.to_owned(),reason),now);
-        let context:String=context.chars().take(60).collect();
-        self.log(format!("Plugin {plugin} : novydeckTrigger refusé ({reason}) — contexte {context}"));
+        self.log(line);
+    }
+    /// F-01 : écrit la configuration si une sauvegarde plugin est en attente et que 500 ms se sont écoulées (ou `force`).
+    /// Ne sauvegarde pas par-dessus une modification utilisateur non validée : `save()` s'en charge alors.
+    fn flush_plugin_save(&mut self,now:Instant,force:bool) {
+        if !self.plugin_save_pending || (self.gate.dirty && !force) || self.gate.invalid {return;}
+        if !force && self.plugin_save_at.is_some_and(|at|now.saturating_duration_since(at)<Duration::from_millis(500)) {return;}
+        self.plugin_save_pending=false;self.plugin_save_at=Some(now);self.plugin_saves+=1;
+        if let Err(e)=store::save_light(&self.path,&self.config){self.fail(trf("Réglages du plugin non sauvegardés : {error}", &[("error", &e)]));}
+    }
+    /// F-04 : met en file un setSettings reçu pendant une modification en cours ou sur une autre page ; rejoué par `replay_plugin_settings`.
+    fn defer_plugin_settings(&mut self,plugin:&str,message:&serde_json::Value,reason:&'static str) {
+        let context:String=message["context"].as_str().unwrap_or("").chars().take(60).collect();
+        let entry=(plugin.to_owned(),message.clone(),self.applied.active,self.applied.page.clone());
+        if let Some(slot)=self.plugin_settings_deferred.iter_mut().find(|(p,m,..)|p==plugin&&m["context"]==message["context"]) {*slot=entry;}
+        else if self.plugin_settings_deferred.len()<32 {self.plugin_settings_deferred.push(entry);}
+        else {return self.throttled_log(&context,"file pleine",format!("Plugin {plugin} : setSettings ignoré : file d'attente pleine"));}
+        self.throttled_log(&context,reason,format!("Plugin {plugin} : setSettings mis en attente ({reason}) — contexte {context}"));
+    }
+    /// F-04 : applique les setSettings en attente dès que la configuration est de nouveau cohérente avec l'état appliqué.
+    fn replay_plugin_settings(&mut self) {
+        if self.plugin_settings_deferred.is_empty() || self.gate.dirty || self.gate.invalid || self.config.active!=self.applied.active || self.config.page!=self.applied.page {return;}
+        for (plugin,message,active,page) in std::mem::take(&mut self.plugin_settings_deferred) {
+            if active==self.applied.active && page==self.applied.page {self.plugin_message(&plugin,&message);}
+            else {self.log(format!("Plugin {plugin} : setSettings ignoré : profil ou page changés entre-temps"));}
+        }
     }
     fn plugin_message(&mut self,plugin:&str,message:&serde_json::Value){
         if self.block_inspector_message(plugin,message) { return; }
@@ -5233,10 +5288,10 @@ impl App {
                     if self.config.active==self.applied.active && self.config.page==self.applied.page && !self.gate.dirty {
                         if let Some(crate::model::Step::PluginAction { settings, .. })=extras::step_mut(&mut self.config.keys_mut()[index].steps,&path) {
                             *settings=new.clone();
-                            if let Err(e)=store::save(&self.path,&self.config){self.fail(trf("Réglages du plugin non sauvegardés : {error}", &[("error", &e)]));}
-                            else if let Some(manager)=&self.plugins {manager.virtual_settings(context,new);}
+                            self.plugin_save_pending=true;self.flush_plugin_save(Instant::now(),false);
+                            if let Some(manager)=&self.plugins {manager.virtual_settings(context,new);}
                         }
-                    }
+                    } else {self.defer_plugin_settings(plugin,message,if self.gate.dirty {"modification en cours"} else {"page affichée différente"});}
                 }
             }
             return;
@@ -5271,9 +5326,9 @@ impl App {
                     if self.config.active==self.applied.active && self.config.page==self.applied.page && !self.gate.dirty {
                         if let Some(binding)=self.config.keys_mut()[v.index].plugin.as_mut(){binding.settings=json!(settings);}
                         if let Some(binding)=self.applied.keys_mut()[v.index].plugin.as_mut(){binding.settings=json!(settings);}
-                        if let Err(e)=store::save(&self.path,&self.config){self.fail(trf("Réglages du plugin non sauvegardés : {error}", &[("error", &e)]));}
-                        else if let Some(manager)=&mut self.plugins {manager.sync_settings(&self.applied,&v.context,pi.is_some());}
-                    }
+                        self.plugin_save_pending=true;self.flush_plugin_save(Instant::now(),false);
+                        if let Some(manager)=&mut self.plugins {manager.sync_settings(&self.applied,&v.context,pi.is_some());}
+                    } else {self.defer_plugin_settings(plugin,message,if self.gate.dirty {"modification en cours"} else {"page affichée différente"});}
                 }
             },
             "getSettings"=>{if let (Some(v),Some(manager))=(visible,&self.plugins){manager.send(plugin,app_settings_event(&v,&sdk_device,&v.settings,pi));}},
@@ -5295,6 +5350,8 @@ impl App {
         }
     }
     fn background_tick(&mut self) {
+        self.replay_plugin_settings();
+        self.flush_plugin_save(Instant::now(),false);
         crate::obs_monitor::update(&self.config.obs, false);
         let obs_state = crate::obs_monitor::snapshot();
         if obs_state != self.obs_state {

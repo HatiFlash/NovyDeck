@@ -147,6 +147,16 @@ pub fn set_plugin_settings(path: &Path, plugin: &str, settings: &serde_json::Val
 }
 
 pub fn save(path: &Path, c: &Config) -> Result<()> {
+    save_inner(path, c, true)
+}
+
+/// F-01 : sauvegarde regroupée des réglages de plugin. Même écriture atomique et même copie `.bak`,
+/// mais sans copie horodatée dans `backups/` (une par rafale serait de toute façon du bruit).
+pub fn save_light(path: &Path, c: &Config) -> Result<()> {
+    save_inner(path, c, false)
+}
+
+fn save_inner(path: &Path, c: &Config, rotate: bool) -> Result<()> {
     c.validate_structure()?;
     let parent = path.parent().context("Dossier de configuration invalide")?;
     fs::create_dir_all(parent)?;
@@ -165,7 +175,9 @@ pub fn save(path: &Path, c: &Config) -> Result<()> {
             backup
                 .persist(path.with_extension("json.bak"))
                 .map_err(|e| e.error)?;
-            let _ = rotate_backups(&parent.join("backups"), path, &existing_data);
+            if rotate {
+                let _ = rotate_backups(&parent.join("backups"), path, &existing_data);
+            }
         }
     }
     tmp.persist(path).map_err(|e| e.error)?;

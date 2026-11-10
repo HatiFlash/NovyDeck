@@ -2717,6 +2717,7 @@ fn plugin_action_two_virtual_contexts_execute_and_persist() {
         assert!(Instant::now() < deadline, "PluginAction settings timeout: {counts:?}, errors: {:?}, journal: {:?}, error: {:?}, running: {}", h.app.plugin_errors, h.app.workshop_journal.lines.iter().map(|l| &l.message).collect::<Vec<_>>(), h.app.workshop_journal.error, h.app.engine.running.load(std::sync::atomic::Ordering::SeqCst));
         std::thread::sleep(Duration::from_millis(10));
     }
+    h.app.flush_plugin_save(Instant::now(), true); // F-01 : sauvegarde regroupée, forcée avant relecture.
     let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();
     for (i, count) in [(0, 1), (2, 2)] {
         assert!(matches!(&saved.keys()[0].steps[i], Step::PluginAction { settings, .. } if settings["count"] == count));

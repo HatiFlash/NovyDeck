@@ -80,10 +80,12 @@ pub fn category(plugin:&Plugin)->Category {
  }
 }
 pub fn import_sources(dest:&Path)->Report{let mut report=Report::default();for root in sources(){for p in inventory(&root){match p.runtime {Runtime::Protected=>report.protected+=1,Runtime::Unsupported=>{if category(&p)==Category::BuiltIn {report.built_in+=1}else{report.skipped+=1}},_=>match import_folder(&p.folder,dest){Ok(true)=>report.copied+=1,Ok(false)=>report.existing+=1,Err(_)=>report.skipped+=1}}}}report}
-pub fn import_archive(archive:&Path,dest:&Path)->anyhow::Result<bool>{let mut file=fs::File::open(archive)?;anyhow::ensure!(file.metadata()?.len()<=LIMIT,"Archive trop volumineuse");let mut hasher=Sha256::new();io::copy(&mut file,&mut hasher)?;let hash=format!("{:x}",hasher.finalize());let mut zip=zip::ZipArchive::new(fs::File::open(archive)?)?;anyhow::ensure!(zip.len()<=FILE_LIMIT,"Archive trop fournie");let staging=tempfile::tempdir()?;let mut total=0u64;
+pub fn import_archive(archive:&Path,dest:&Path)->anyhow::Result<bool>{import_archive_limited(archive,dest,LIMIT)}
+/// S-13 : `limit` est injectable pour les tests ; le plafond total compte les octets réellement extraits, pas la taille déclarée.
+fn import_archive_limited(archive:&Path,dest:&Path,limit:u64)->anyhow::Result<bool>{let mut file=fs::File::open(archive)?;anyhow::ensure!(file.metadata()?.len()<=limit,"Archive trop volumineuse");let mut hasher=Sha256::new();io::copy(&mut file,&mut hasher)?;let hash=format!("{:x}",hasher.finalize());let mut zip=zip::ZipArchive::new(fs::File::open(archive)?)?;anyhow::ensure!(zip.len()<=FILE_LIMIT,"Archive trop fournie");let staging=tempfile::tempdir()?;let mut total=0u64;
  for i in 0..zip.len(){let entry=zip.by_index(i)?;// Les anciens outils Elgato (DistributionTool Windows) écrivent des séparateurs « \\ » : on les
   // normalise, puis on refuse toujours racine, lecteur (« : »), NUL et composants « .. ».
-  let raw=entry.name()?.replace('\\',"/");anyhow::ensure!(!raw.starts_with('/') && !raw.contains([':', '\0']),"Chemin absolu ou Windows refusé");let name=raw.split('/').filter(|s|!s.is_empty()).collect::<PathBuf>();anyhow::ensure!(name.components().next().is_some(),"Chemin vide dans l'archive");anyhow::ensure!(safe_relative(&name),"Chemin non confiné dans l'archive : {:?} ({:?})",name,name.components().collect::<Vec<_>>());anyhow::ensure!(!entry.is_symlink(),"Lien refusé");total=total.saturating_add(entry.size());anyhow::ensure!(total<=LIMIT,"Archive décompressée trop volumineuse");let path=staging.path().join(name);if entry.is_dir(){fs::create_dir_all(path)?;}else{fs::create_dir_all(path.parent().unwrap())?;let mut output=fs::File::create(path)?;let size=io::copy(&mut entry.take(LIMIT+1),&mut output)?;anyhow::ensure!(size<=LIMIT,"Fichier trop volumineux");}}
+  let raw=entry.name()?.replace('\\',"/");anyhow::ensure!(!raw.starts_with('/') && !raw.contains([':', '\0']),"Chemin absolu ou Windows refusé");let name=raw.split('/').filter(|s|!s.is_empty()).collect::<PathBuf>();anyhow::ensure!(name.components().next().is_some(),"Chemin vide dans l'archive");anyhow::ensure!(safe_relative(&name),"Chemin non confiné dans l'archive : {:?} ({:?})",name,name.components().collect::<Vec<_>>());anyhow::ensure!(!entry.is_symlink(),"Lien refusé");anyhow::ensure!(total.saturating_add(entry.size())<=limit,"Archive décompressée trop volumineuse");let path=staging.path().join(name);if entry.is_dir(){fs::create_dir_all(path)?;}else{fs::create_dir_all(path.parent().unwrap())?;let mut output=fs::File::create(path)?;let size=io::copy(&mut entry.take(limit-total+1),&mut output)?;total=total.saturating_add(size);anyhow::ensure!(total<=limit,"Archive décompressée trop volumineuse");}}
  let folders=fs::read_dir(staging.path())?.collect::<Result<Vec<_>,_>>()?;
  if folders.len()==1 && folders[0].file_type()?.is_dir(){return import_folder_with_hash(&folders[0].path(),dest,Some(&hash))}
  if staging.path().join("manifest.json").is_file(){let named=staging.path().join("archive.sdPlugin");fs::create_dir(&named)?;for item in fs::read_dir(staging.path())?{let item=item?;if item.path()!=named{fs::rename(item.path(),named.join(item.file_name()))?;}}return import_folder_with_hash(&named,dest,Some(&hash))}
@@ -112,6 +114,22 @@ pub fn action_name(plugin:&Plugin,action:&crate::plugins::Action)->String{for la
   let d=tempfile::tempdir().unwrap();let file=d.path().join("too-many.streamDeckPlugin");
   let mut z=zip::ZipWriter::new(fs::File::create(&file).unwrap());for i in 0..=FILE_LIMIT{z.start_file(format!("{i}"),zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"x").unwrap();}z.finish().unwrap();assert!(import_archive(&file,&d.path().join("installed")).unwrap_err().to_string().contains("fournie"));
   let huge=d.path().join("large.streamDeckPlugin");let f=fs::File::create(&huge).unwrap();f.set_len(LIMIT+1).unwrap();assert!(import_archive(&huge,&d.path().join("installed")).unwrap_err().to_string().contains("volumineuse"));
+ }
+ #[test] fn real_extracted_bytes_are_capped_even_if_declared_size_is_small(){use std::io::Write;
+  let d=tempfile::tempdir().unwrap();let file=d.path().join("bomb.streamDeckPlugin");
+  {let mut z=zip::ZipWriter::new(fs::File::create(&file).unwrap());z.start_file("p.sdPlugin/big.bin",zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated)).unwrap();z.write_all(&vec![0u8;4096]).unwrap();z.finish().unwrap();}
+  // Simule une taille déclarée mensongère : l'en-tête (local + central) annonce 10 octets au lieu de 4096.
+  let mut raw=fs::read(&file).unwrap();let real=4096u32.to_le_bytes();let fake=10u32.to_le_bytes();let mut patched=0;
+  for i in 0..raw.len()-4{if raw[i..i+4]==real{raw[i..i+4].copy_from_slice(&fake);patched+=1;}}assert!(patched>=2);fs::write(&file,&raw).unwrap();
+  let dest=d.path().join("installed");let err=import_archive_limited(&file,&dest,100).unwrap_err().to_string();
+  assert!(err.contains("trop volumineuse"),"{err}");
+  assert!(!dest.exists()||fs::read_dir(&dest).unwrap().next().is_none(),"rien ne reste en place");
+ }
+ #[test] fn archive_under_the_limit_still_imports_with_injected_limit(){use std::io::Write;
+  let d=tempfile::tempdir().unwrap();let file=d.path().join("ok.streamDeckPlugin");
+  {let mut z=zip::ZipWriter::new(fs::File::create(&file).unwrap());z.start_file("p.sdPlugin/manifest.json",zip::write::SimpleFileOptions::default()).unwrap();z.write_all(br#"{"UUID":"lim.ok","CodePath":"main.js"}"#).unwrap();z.start_file("p.sdPlugin/main.js",zip::write::SimpleFileOptions::default()).unwrap();z.write_all(b"x").unwrap();z.finish().unwrap();}
+  assert!(import_archive_limited(&file,&d.path().join("installed"),10_000).unwrap());
+  assert!(import_archive_limited(&file,&d.path().join("installed2"),20).is_err());
  }
  #[test] fn windows_separators_from_legacy_distribution_tool_import(){use std::io::Write;
   let d=tempfile::tempdir().unwrap();let file=d.path().join("legacy.streamDeckPlugin");

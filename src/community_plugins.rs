@@ -44,7 +44,7 @@ pub struct TestedBy { pub version: String, pub date: String }
 pub struct Action { pub name: String, #[serde(default)] pub name_fr: Option<String> }
 #[derive(Deserialize)] struct Registry { schema: u32, plugins: Vec<Entry> }
 #[derive(Clone, Debug, Deserialize)]
-pub struct Scan { pub id: String, pub version: String, pub sha256: String, pub date: String, pub defender: String, pub verdict: String }
+pub struct Scan { pub id: String, pub version: String, pub sha256: String, pub date: String, pub defender: String, pub verdict: String, #[serde(default)] pub native_unsigned: bool }
 #[derive(Deserialize)] struct ScanResults { plugins: Vec<Scan> }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Badges { pub official: bool, pub scanned: bool, pub tested: bool, pub warning: bool, pub failed: bool }
@@ -57,6 +57,13 @@ pub fn badges(entry: &Entry, scans: &[Scan]) -> Badges {
     let failed = matching.iter().any(|s| s.verdict == "failed");
     let warning = !scanned && (failed || matching.iter().any(|s| s.verdict == "review"));
     Badges { official, scanned, tested: entry.tested_by_novydeck.as_ref().is_some_and(|t| t.version == entry.version), warning, failed: warning && failed }
+}
+/// S-08 : le badge ne promet que ce que le scan établit (Defender n'a rien détecté), pas une absence de danger.
+pub fn scan_badge() -> &'static str { crate::i18n::tr("Antivirus : rien détecté") }
+pub fn native_warning() -> &'static str { crate::i18n::tr("Exécutable natif non signé : il s'exécute avec vos droits") }
+/// Vrai si l'archive exacte est signalée comme exécutable natif non signé par le résultat de scan.
+pub fn native_unsigned(entry: &Entry, scans: &[Scan]) -> bool {
+    scans.iter().any(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256 && s.native_unsigned)
 }
 pub fn scan_date<'a>(entry: &Entry, scans: &'a [Scan]) -> Option<&'a str> {
     scans.iter().find(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256 &&
@@ -226,6 +233,19 @@ pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
         let mut value = entry(); value["homepage"] = "http://example.org/".into(); assert!(parse(&registry(value)).is_err());
         let mut value = entry(); value["sha256"] = "A".repeat(64).into(); assert!(parse(&registry(value)).is_err());
     }
+    #[test] fn scan_badge_wording_native_flag_and_english_keys() {
+        assert_eq!(scan_badge(), "Antivirus : rien détecté");
+        crate::i18n::set_language("en");
+        assert_eq!(scan_badge(), "Antivirus: nothing detected");
+        assert_eq!(native_warning(), "Unsigned native executable: it runs with your user rights");
+        crate::i18n::set_language("fr");
+        assert_eq!(native_warning(), "Exécutable natif non signé : il s'exécute avec vos droits");
+        let plugin = parse(&registry(entry())).unwrap().remove(0);
+        let mut scan = Scan { id:plugin.id.clone(),version:plugin.version.clone(),sha256:plugin.sha256.clone(),date:"2026-10-23".into(),defender:"clean".into(),verdict:"passed".into(), native_unsigned:true };
+        assert!(native_unsigned(&plugin,&[scan.clone()]));
+        scan.sha256 = "c".repeat(64);
+        assert!(!native_unsigned(&plugin,&[scan]));
+    }
     #[test] fn badges_require_exact_identity_archive_and_version() {
         let mut value = entry();
         value["id"] = "com.novydeck.clock".into();
@@ -233,7 +253,7 @@ pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
         value["download"] = "https://github.com/HatiFlash/novydeck-plugins/releases/download/v1/clock.zip".into();
         value["tested_by_novydeck"] = serde_json::json!({"version":"1.2.0","date":"2026-10-23"});
         let mut plugin = parse(&registry(value)).unwrap().remove(0);
-        let mut scan = Scan { id:plugin.id.clone(),version:plugin.version.clone(),sha256:plugin.sha256.clone(),date:"2026-10-23".into(),defender:"clean".into(),verdict:"passed".into() };
+        let mut scan = Scan { id:plugin.id.clone(),version:plugin.version.clone(),sha256:plugin.sha256.clone(),date:"2026-10-23".into(),defender:"clean".into(),verdict:"passed".into(), native_unsigned:false };
         assert_eq!(badges(&plugin,&[scan.clone()]), Badges { official:true,scanned:true,tested:true,warning:false,failed:false });
         scan.sha256 = "b".repeat(64);
         assert!(!badges(&plugin,&[scan.clone()]).scanned);

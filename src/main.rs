@@ -56,6 +56,7 @@ mod app_update;
 mod i18n;
 mod hardware_report;
 mod recorder;
+mod secrets;
 mod soundboard;
 mod store;
 mod persistent_variables;
