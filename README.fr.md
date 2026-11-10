@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.0"><img src="https://img.shields.io/badge/Release-v0.19.0-3478F6.svg" alt="Version 0.19.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.1"><img src="https://img.shields.io/badge/Release-v0.19.1-3478F6.svg" alt="Version 0.19.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -22,7 +22,20 @@
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
 
+## Nouveautés 0.19.1
+
+### Home Assistant passe dans le plugin, plugins plus sûrs
+
+- **Home Assistant est désormais géré par le [plugin Home Assistant](https://github.com/HatiFlash/novydeck-plugins/tree/main/first-party/plugins/com.novydeck.homeassistant.sdPlugin) (1.1.1 ou plus récent)**. Son action **État automatique** suit une entité en direct (opérateur, valeur, « depuis N secondes », déclenchement au démarrage), met à jour l'image de la touche sans appui et exécute la touche lors des vrais changements. La connexion Home Assistant intégrée, le déclencheur « État Home Assistant » et la condition Home Assistant de la 0.19.0 sont retirés : tes préférences se chargent toujours, les anciens déclencheurs sont supprimés et les touches qui utilisent encore l'ancienne condition sont listées une fois dans une notification (pas de conversion automatique).
+- **Authentification des plugins** : un plugin natif ne peut s'enregistrer que si sa connexion vient d'un processus lancé par NovyDeck (contrôle du Job Windows) ; tout autre processus local est refusé et journalisé.
+- **Touches déclenchées par un plugin** : chaque `novydeckTrigger` refusé est inscrit au journal avec sa raison (contexte inconnu, pause, édition, limite de fréquence…), et les boucles macro ↔ plugin sont bloquées.
+- **Réglages globaux des plugins** : `plugin-settings.json` est écrit de façon atomique avec une copie `.bak` ; un fichier illisible est signalé et jamais écrasé.
+
+Voir les [notes de version 0.19.1](docs/RELEASE-0.19.1.md). Non testé avec un vrai serveur Home Assistant ni sur un deck physique.
+
 ## Nouveautés 0.19.0
+
+> Remplacé en 0.19.1 : ces fonctions sont désormais dans le plugin Home Assistant.
 
 ### Déclencheurs Home Assistant en temps réel
 

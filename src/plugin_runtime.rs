@@ -423,7 +423,7 @@ fn run(mut plugins:Vec<Plugin>,requests:Receiver<Request>,reply:Sender<Reply>){
             if name=="__hostError" {let _=reply.send(Reply::Error(plugin.clone(),value["reason"].as_str().unwrap_or("Message invalide").into()));continue;}
             // Commandes des molettes/écrans tactiles : sans objet pour une touche, ignorées sans erreur.
             if matches!(name.as_str(),"setFeedback"|"setFeedbackLayout"|"setTriggerDescription") {continue;}
-            if !matches!(name.as_str(),"registerPlugin"|"logMessage"|"setTitle"|"setImage"|"setState"|"novydeckStateUnknown"|"showOk"|"showAlert"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"|"openUrl") {
+            if !matches!(name.as_str(),"registerPlugin"|"logMessage"|"setTitle"|"setImage"|"setState"|"novydeckStateUnknown"|"showOk"|"showAlert"|"novydeckTrigger"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear"|"openUrl") {
                 let _=reply.send(Reply::Error(plugin.clone(),format!("Evenement plugin non pris en charge : {name}")));continue;
             }
             if let Some(id)=value["__pi"].as_str().map(str::to_owned){

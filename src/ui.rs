@@ -281,13 +281,16 @@ pub struct App {
     icon_pack: String,
     asset_tab: usize,
     trigger_recording: bool,
+    plugin_trigger_log: HashMap<String, std::collections::VecDeque<Instant>>,
+    plugin_trigger_refusals: HashMap<(String, &'static str), Instant>,
+    plugin_trigger_running: HashMap<usize, Instant>,
+    /// F-06 c : touches (profil, page, numéro) portant encore une condition Home Assistant retirée ; notification unique.
+    legacy_ha_keys: Vec<String>,
     trigger_kind: String,
     trigger_value: String,
     trigger_days: Vec<u8>,
     trigger_minutes: u32,
     trigger_input: bool,
-    ha_runtime: crate::home_assistant::Runtime,
-    ha_edit: extras::HaEditor,
     icon_target: Option<icon_ui::Target>,
     icon_selected: Option<PathBuf>,
     icon_notice: String,
@@ -603,13 +606,15 @@ impl App {
             icon_pack: String::new(),
             asset_tab: 0,
             trigger_recording: false,
+            plugin_trigger_log: HashMap::new(),
+            plugin_trigger_refusals: HashMap::new(),
+            plugin_trigger_running: HashMap::new(),
+            legacy_ha_keys: Vec::new(),
             trigger_kind: "app_open".into(),
             trigger_value: "obs64.exe".into(),
             trigger_days: vec![],
             trigger_minutes: 5,
             trigger_input: false,
-            ha_runtime: Default::default(),
-            ha_edit: Default::default(),
             icon_target: None,
             icon_selected: None,
             icon_notice: String::new(),
@@ -632,9 +637,12 @@ impl App {
             app.preferences.last_seen_version = env!("CARGO_PKG_VERSION").into();
             app.save_preferences();
         }
+        if app.startup_prompts && !app.path.with_file_name("legacy-ha-notice.seen").exists() {
+            app.legacy_ha_keys = crate::conditions::legacy_ha_keys(&app.config);
+            if !app.legacy_ha_keys.is_empty() { app.log(trf("{count} touche(s) utilisent encore une condition Home Assistant retirée : utilise le plugin Home Assistant.", &[("count", &app.legacy_ha_keys.len())])); }
+        }
         app.refresh_hotkeys();
         app.sync_state_display();
-        if !isolated && !ui_test && !smoke { app.configure_home_assistant(); }
         app
     }
     fn needs_whats_new(preferences: &Preferences, existed: bool, notes: &str) -> bool {
@@ -706,19 +714,11 @@ impl App {
         if key.plugin_state.is_some() {
             return self.plugin_states.apply(config, index, &key);
         }
-        // Option « Image de la touche selon le mode » : l'état Home Assistant, en mémoire, choisit la face.
-        if let (Some(display), Some(active)) = (key.state_display.as_ref(), self.ha_mode_for(config, index)) {
-            return display.apply(&key, active);
-        }
         match (key.state_display.clone(), self.state_values.get(index).copied().flatten()) {
             (Some(display), active) if display.toggle => display.apply(&key, active.unwrap_or(false)),
             (Some(display), Some(active)) => display.apply(&key, active),
             _ => key,
         }
-    }
-    fn ha_mode_for(&self, config: &Config, index: usize) -> Option<bool> {
-        let profile = config.profiles.get(config.active)?;
-        self.ha_runtime.mode(&(profile.name.clone(), config.page.clone(), index))
     }
     fn toggle_key_face(&mut self, index: usize) {
         if let Some(key) = self.applied.keys().get(index) {
@@ -792,7 +792,6 @@ impl App {
                 }
             }
         }
-        self.apply_ha_badges(&mut deployed);
         self.pending = Some((revision, deployed.clone()));
         self.sync_state_display();
         let command = if connect {
@@ -804,59 +803,6 @@ impl App {
             self.fail(tr("Le service USB s’est arrêté. Relance NovyDeck.").into());
             self.gate.disconnect();
         }
-    }
-    /// Superpose la pastille Home Assistant (compte à rebours, déclenché, déconnecté) sans toucher à l'image ni à une pastille existante.
-    fn apply_ha_badges(&self, deployed: &mut Config) {
-        if !self.preferences.home_assistant.key_badge || self.ha_runtime.displays.is_empty() { return; }
-        for p in &mut deployed.profiles {
-            let name = p.name.clone();
-            let pages = std::iter::once((String::new(), &mut p.keys)).chain(p.pages.iter_mut().map(|page| (page.id.clone(), &mut page.keys)));
-            for (page, keys) in pages {
-                for (index, key) in keys.iter_mut().enumerate() {
-                    if key.runtime_badge.as_deref().is_some_and(|b| !b.is_empty()) { continue; }
-                    let badge = self.ha_runtime.display(&(name.clone(), page.clone(), index)).and_then(crate::home_assistant::badge);
-                    if badge.is_some() { key.runtime_badge = badge; }
-                }
-            }
-        }
-    }
-    /// Avance les déclencheurs Home Assistant (cache local, aucun réseau) et exécute les touches dues.
-    fn ha_tick(&mut self) {
-        if !self.preferences.triggers.iter().any(|t| t.kind == "ha_state") && self.ha_runtime.displays.is_empty() { return; }
-        let now = Instant::now();
-        let connected = crate::home_assistant::global().status().connected();
-        let blocked = !self.gate.enabled || self.gate.invalid || self.gate.dirty || self.trigger_recording
-            || self.recording.is_some() || !self.engine.allows_global_press(now);
-        let previous_modes = self.ha_runtime.modes.clone();
-        let (targets, changed) = self.ha_runtime.tick(&self.preferences.triggers, now, connected, blocked, |entity, attribute| {
-            crate::home_assistant::cached_value(entity, attribute).flatten()
-        });
-        for (profile, page, index) in targets {
-            let Some(key) = self.config.profiles.iter().find(|p| p.name == profile)
-                .and_then(|p| p.keys_at(&page)).and_then(|keys| keys.get(index)) else { continue };
-            let mut key = key.clone();
-            key.runtime_id = Some(crate::engine::identity(&profile, &page, index));
-            self.log(trf("Home Assistant : touche {key} déclenchée", &[("key", &(index + 1))]));
-            let config = self.config.clone();
-            self.execute_key(key, false, false, &config);
-        }
-        // Seule la touche dont le mode change reçoit une nouvelle image (rien n'est écrit sur le disque).
-        if self.ha_runtime.modes != previous_modes {
-            let profile = self.applied.profiles.get(self.applied.active).map(|p| p.name.clone()).unwrap_or_default();
-            let page = self.applied.page.clone();
-            for index in 0..self.device_keys().min(15) {
-                let target = (profile.clone(), page.clone(), index);
-                if self.ha_runtime.modes.get(&target) != previous_modes.get(&target) { self.send_state_face(index); }
-            }
-        }
-        if changed && self.preferences.home_assistant.key_badge && self.wanted && !self.gate.dirty && !self.gate.invalid { self.upload(false); }
-    }
-    pub(super) fn configure_home_assistant(&mut self) {
-        let prefs = &self.preferences.home_assistant;
-        let settings = if prefs.configured() {
-            prefs.token.reveal().ok().map(|token| crate::home_assistant::Settings { url: prefs.url.trim().to_owned(), token })
-        } else { None };
-        crate::home_assistant::global().configure(settings);
     }
     fn connect(&mut self) {
         if self.gate.invalid {
@@ -1131,7 +1077,7 @@ impl App {
                         // A full HID apply overwrites every runtime face; replay even when
                         // there was no pending UI edit (USB reconnect / wake / profile refresh).
                         for index in 0..self.device_keys() {
-                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.ha_mode_for(&self.applied, index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
+                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
                                 self.send_state_face(index);
                             }
                         }
@@ -4394,6 +4340,20 @@ impl App {
                 _ => {}
             }
         }
+        if self.startup_prompts && !self.legacy_ha_keys.is_empty() {
+            let (mut open, mut close) = (true, false);
+            theme::fixed_window(tr("Conditions Home Assistant retirées"))
+                .open(&mut open).collapsible(false).resizable(false).default_width(420.0)
+                .show(ctx, |ui| {
+                    ui.label(tr("Ces touches utilisent encore l'ancienne condition Home Assistant de la 0.19.0, qui ne fonctionne plus. Remplace-la par le plugin Home Assistant (bloc « Quand l’état du plugin change »)."));
+                    for key in &self.legacy_ha_keys { ui.label(format!("• {key}")); }
+                    if ui.button(tr("Fermer")).clicked() { close = true; }
+                });
+            if !open || close {
+                self.legacy_ha_keys.clear();
+                if let Err(e) = std::fs::write(self.path.with_file_name("legacy-ha-notice.seen"), b"1") { self.log(format!("legacy-ha-notice.seen : {e}")); }
+            }
+        }
         if self.startup_prompts && self.whats_new {
             if update_ui::whats_new(ctx, &self.whats_new_notes) {
                 self.whats_new = false;
@@ -4945,7 +4905,6 @@ impl App {
         self.record_trigger(ctx);
         self.record_events(ctx);
         self.events();
-        self.ha_tick();
         self.plugin_events();
         self.housekeeping();
         self.assistant_events();
@@ -5203,9 +5162,54 @@ impl App {
             crate::plugin_runtime::Reply::Message(plugin,message)=>self.plugin_message(&plugin,&message),
         }}
     }
+    /// `novydeckTrigger` (plugin → hôte) : exécute la touche portant le contexte du plugin émetteur.
+    /// Refusé hors contexte du plugin, en pause globale, pendant un enregistrement, et au-delà de 4/s par contexte.
+    fn plugin_trigger(&mut self,plugin:&str,message:&serde_json::Value){
+        let context=message["context"].as_str().unwrap_or("");
+        let action=message["action"].as_str();
+        let index=if context.starts_with("novydeck-block-") {
+            let Some((index,path))=crate::plugin_runtime::virtual_step_path(&self.applied,context) else {return self.trigger_refused(plugin,context,"contexte inconnu")};
+            let Some(crate::model::Step::PluginAction { plugin: owner, action: step_action, .. })=extras::step_mut(&mut self.applied.keys_mut()[index].steps,&path) else {return self.trigger_refused(plugin,context,"contexte inconnu")};
+            if owner!=plugin || action.is_some_and(|a|a!=step_action.as_str()) {return self.trigger_refused(plugin,context,"plugin ou action différents");}
+            index
+        } else {
+            let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().get(context)).cloned() else {return self.trigger_refused(plugin,context,"contexte inconnu")};
+            if v.plugin!=plugin || action.is_some_and(|a|a!=v.action) {return self.trigger_refused(plugin,context,"plugin ou action différents");}
+            v.index
+        };
+        if !self.gate.enabled {return self.trigger_refused(plugin,context,"pause globale");}
+        if self.gate.invalid || self.gate.dirty {return self.trigger_refused(plugin,context,"édition en cours");}
+        if self.trigger_recording || self.recording.is_some() {return self.trigger_refused(plugin,context,"enregistrement en cours");}
+        if index>=self.applied.keys().len() || index>=self.device_keys() {return self.trigger_refused(plugin,context,"index hors limites");}
+        let now=Instant::now();
+        // Anti-boucle : une touche lancée par un novydeckTrigger ne peut pas être redéclenchée tant qu'elle s'exécute (ni 2 s après).
+        if let Some(at)=self.plugin_trigger_running.get(&index).copied() {
+            if now.duration_since(at)<Duration::from_secs(2) || self.engine.running.load(Ordering::SeqCst) {return self.trigger_refused(plugin,context,"boucle détectée");}
+            self.plugin_trigger_running.remove(&index);
+        }
+        let log=self.plugin_trigger_log.entry(context.to_owned()).or_default();
+        while log.front().is_some_and(|t|now.duration_since(*t)>=Duration::from_secs(1)) {log.pop_front();}
+        if log.len()>=4 {return self.trigger_refused(plugin,context,"limite de 4 par seconde dépassée");}
+        log.push_back(now);
+        self.plugin_trigger_running.insert(index,now);
+        let c=self.config.clone();
+        let mut key=c.keys()[index].clone();
+        key.runtime_id=Some(crate::engine::identity(&c.profiles[c.active].name,&c.page,index));
+        self.execute_key(key,false,false,&c);
+    }
+    /// Journalise un refus de `novydeckTrigger` (au plus une ligne par contexte et par raison toutes les 5 s).
+    fn trigger_refused(&mut self,plugin:&str,context:&str,reason:&'static str) {
+        let now=Instant::now();
+        if self.plugin_trigger_refusals.get(&(context.to_owned(),reason)).is_some_and(|at|now.duration_since(*at)<Duration::from_secs(5)) {return;}
+        if self.plugin_trigger_refusals.len()>=256 {self.plugin_trigger_refusals.retain(|_,at|now.duration_since(*at)<Duration::from_secs(5));}
+        self.plugin_trigger_refusals.insert((context.to_owned(),reason),now);
+        let context:String=context.chars().take(60).collect();
+        self.log(format!("Plugin {plugin} : novydeckTrigger refusé ({reason}) — contexte {context}"));
+    }
     fn plugin_message(&mut self,plugin:&str,message:&serde_json::Value){
         if self.block_inspector_message(plugin,message) { return; }
         let name=message["event"].as_str().unwrap_or("");
+        if name=="novydeckTrigger" { self.plugin_trigger(plugin,message); return; }
         let state_message = matches!(name,"setState"|"novydeckStateUnknown");
         if state_message {
             if let Some((index,_))=self.plugin_states.observe(&self.applied,plugin,message) { self.send_state_face(index); }
@@ -5273,8 +5277,16 @@ impl App {
                 }
             },
             "getSettings"=>{if let (Some(v),Some(manager))=(visible,&self.plugins){manager.send(plugin,app_settings_event(&v,&sdk_device,&v.settings,pi));}},
-            "setGlobalSettings"=>{let settings=&message["payload"];if settings.is_object(){let path=self.path.with_file_name("plugin-settings.json");let mut all=std::fs::read(&path).ok().and_then(|b|serde_json::from_slice::<serde_json::Value>(&b).ok()).filter(|v|v.is_object()).unwrap_or_else(||json!({}));all[plugin]=settings.clone();if let Err(e)=std::fs::write(path,serde_json::to_vec_pretty(&all).unwrap_or_default()){self.fail(trf("Réglages globaux non sauvegardés : {error}", &[("error", &e)]));}else if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings},"__pi":"*"}));if pi.is_some(){manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings}}));}}}},
-            "getGlobalSettings"=>{let all=std::fs::read(self.path.with_file_name("plugin-settings.json")).ok().and_then(|b|serde_json::from_slice::<serde_json::Value>(&b).ok()).unwrap_or_else(||json!({}));if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":all.get(plugin).cloned().unwrap_or_else(||json!({}))},"__pi":pi}));}},
+            "setGlobalSettings"=>{let settings=&message["payload"];if settings.is_object(){
+                match store::set_plugin_settings(&self.path.with_file_name("plugin-settings.json"),plugin,settings) {
+                    Err(e)=>self.fail(trf("Réglages globaux non sauvegardés : {error}", &[("error", &e)])),
+                    Ok(())=>if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings},"__pi":"*"}));if pi.is_some(){manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings}}));}},
+                }
+            }},
+            "getGlobalSettings"=>{
+                let all=store::read_json_object(&self.path.with_file_name("plugin-settings.json")).unwrap_or_else(|e|{self.fail(trf("Réglages globaux illisibles : {error}", &[("error", &e)]));json!({})});
+                if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":all.get(plugin).cloned().unwrap_or_else(||json!({}))},"__pi":pi}));}
+            },
             "openUrl"=>{if let Some(url)=message["payload"]["url"].as_str().filter(|u|u.starts_with("https://")||u.starts_with("http://")){
                 if let Some(effects)=&mut self.plugin_external_effects { effects.push(format!("openUrl: {url}")); }
                 else { let _=std::process::Command::new("rundll32.exe").arg("url.dll,FileProtocolHandler").arg(url).spawn(); }
@@ -5299,7 +5311,6 @@ impl App {
         let initial=self.plugins.as_ref().map(|m|m.visible().values().filter(|v| !self.plugin_faces.contains_key(&v.context)).map(|v|(v.context.clone(),v.index,v.state)).collect::<Vec<_>>()).unwrap_or_default();
         for (context,index,state) in initial { self.plugin_faces.insert(context,PluginFace{state,..Default::default()}); self.send_plugin_face(index); }
         self.events();
-        self.ha_tick();
         self.plugin_events();
         self.housekeeping();
         let due = self.long_press.due(Instant::now(), self.applied.long_press_ms);
@@ -5373,7 +5384,7 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
         ("app_muted", tr("Application muette")), ("app_volume_compare", tr("Volume d’application")),
         ("device_muted", tr("Périphérique muet")), ("device_volume_compare", tr("Volume du périphérique")),
         ("audio_device_present", tr("Périphérique audio actif")), ("default_output_is", tr("Sortie par défaut")),
-        ("variable_compare", tr("Variable")), ("home_assistant_state", tr("État Home Assistant")), ("not", tr("NON")), ("all", tr("Toutes (ET)")), ("any", tr("Au moins une (OU)"))
+        ("variable_compare", tr("Variable")), ("not", tr("NON")), ("all", tr("Toutes (ET)")), ("any", tr("Au moins une (OU)"))
     ];
     let mut selected = condition.kind().to_owned();
     egui::ComboBox::from_id_salt(("condition_kind", depth)).selected_text(variants.iter().find(|(id, _)| *id == condition.kind()).map(|(_, label)| *label).unwrap_or(condition.label())).show_ui(ui, |ui| {
@@ -5394,7 +5405,6 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
             "audio_device_present" => C::AudioDevicePresent { name_contains: "Casque".into(), input: false },
             "default_output_is" => C::DefaultOutputIs { name_contains: "Casque".into() },
             "variable_compare" => C::VariableCompare { name: "mode".into(), op: "equals".into(), value: String::new() },
-            "home_assistant_state" => C::HomeAssistantState { entity: String::new(), attribute: String::new(), op: "equals".into(), value: String::new() },
             "not" => C::Not { condition: Box::new(C::default()) },
             "all" => C::All { conditions: vec![C::default()] },
             "any" => C::Any { conditions: vec![C::default()] },
@@ -5448,16 +5458,7 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
             });
             ui.label(tr("Valeur")); changed |= ui.text_edit_singleline(value).changed();
         }
-        C::HomeAssistantState { entity, attribute, op, value } => {
-            ui.label(tr("Entité Home Assistant")); changed |= ui.text_edit_singleline(entity).changed();
-            ui.label(tr("Attribut (optionnel)")); changed |= ui.text_edit_singleline(attribute).changed();
-            egui::ComboBox::from_id_salt("ha_condition_operator").selected_text(match op.as_str() { "equals" => tr("Égal"), "not_equals" => tr("Différent"), "above" => ">", _ => "<" }).show_ui(ui, |ui| {
-                for (id, label) in [("equals", tr("Égal")), ("not_equals", tr("Différent")), ("above", ">"), ("below", "<")] {
-                    changed |= ui.selectable_value(op, id.into(), label).changed();
-                }
-            });
-            ui.label(tr("Valeur")); changed |= ui.text_edit_singleline(value).changed();
-        }
+        C::HomeAssistantState { .. } => { ui.colored_label(egui::Color32::from_rgb(220, 150, 40), tr("Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »).")); }
         C::Not { condition } => { ui.indent("not_condition", |ui| { changed |= edit_condition(ui, condition, audio, depth + 1); }); }
         C::All { conditions } | C::Any { conditions } => {
             let mut remove = None;

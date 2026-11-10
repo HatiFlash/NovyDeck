@@ -28,13 +28,13 @@ pub struct Trigger {
     #[serde(default)] pub days: Vec<u8>, // 0 = dimanche, 6 = samedi ; vide = chaque jour
     #[serde(default)] pub minutes: u32,
     #[serde(default)] pub input: bool,
-    /// Règle du type `ha_state` ; absent des anciens fichiers.
-    #[serde(default, skip_serializing_if = "Option::is_none")] pub ha: Option<crate::home_assistant::Rule>,
+    /// Règle `ha_state` de la 0.19.0 (retirée) : lue pour la compatibilité, jamais réécrite.
+    #[serde(default, rename = "ha", skip_serializing)] pub legacy_ha: Option<serde_json::Value>,
 }
 fn hotkey_kind() -> String { "hotkey".into() }
 impl Trigger {
     pub fn hotkey(profile: String, page: String, key: usize, keys: String) -> Self {
-        Self { profile, page, key, keys, kind: hotkey_kind(), value: String::new(), days: vec![], minutes: 0, input: false, ha: None }
+        Self { profile, page, key, keys, kind: hotkey_kind(), value: String::new(), days: vec![], minutes: 0, input: false, legacy_ha: None }
     }
     pub fn validate(&self) -> Result<()> {
         anyhow::ensure!(self.key < 15 && !self.profile.trim().is_empty() && self.profile.len() <= 128 && self.page.len() <= 128, "Destination du déclencheur invalide");
@@ -47,7 +47,6 @@ impl Trigger {
                 anyhow::ensure!(bytes.len() == 5 && bytes[2] == b':' && [0, 1, 3, 4].iter().all(|&i| bytes[i].is_ascii_digit()) && self.value[0..2].parse::<u8>().unwrap() < 24 && self.value[3..5].parse::<u8>().unwrap() < 60 && self.days.len() <= 7 && self.days.iter().all(|d| *d <= 6) && { let mut d = self.days.clone(); d.sort(); d.dedup(); d.len() == self.days.len() }, "Heure ou jours invalides (HH:MM, dimanche = 0)");
             }
             "timer" => anyhow::ensure!((1..=1440).contains(&self.minutes), "Minuteur : 1 à 1440 minutes"),
-            "ha_state" => self.ha.as_ref().context("Règle Home Assistant manquante")?.validate(self.key)?,
             _ => anyhow::bail!("Type de déclencheur inconnu"),
         }
         Ok(())
@@ -58,7 +57,6 @@ impl Trigger {
             "audio_connect" => format!("branchement audio {}", self.value), "audio_disconnect" => format!("débranchement audio {}", self.value),
             "clock" => format!("{} (jours : {})", self.value, if self.days.is_empty() { "tous".into() } else { self.days.iter().map(u8::to_string).collect::<Vec<_>>().join(",") }),
             "timer" => format!("toutes les {} minutes", self.minutes),
-            "ha_state" => self.ha.as_ref().map(|r| format!("Home Assistant {}{}{} {} « {} »{}", r.entity, if r.attribute.is_empty() { "" } else { "." }, r.attribute, r.op, r.value, if r.hold_seconds > 0 { format!(" depuis {} s", r.hold_seconds) } else { String::new() })).unwrap_or_default(),
             _ => format!("raccourci {}", self.keys),
         }
     }

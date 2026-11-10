@@ -635,9 +635,13 @@ pub struct Preferences {
     /// Blocs épinglés de la bibliothèque de l'Atelier (`bloc:<n°>` ou `plugin:<uuid>|<action>`), dans l'ordre d'épinglage.
     #[serde(default)]
     pub workshop_favorites: Vec<String>,
-    /// Connexion Home Assistant de l'application ; jeton chiffré DPAPI, jamais exporté.
-    #[serde(default, skip_serializing_if = "crate::home_assistant::Prefs::is_default")]
-    pub home_assistant: crate::home_assistant::Prefs,
+    /// Réglage Home Assistant de NovyDeck 0.19.0 (retiré en 0.19.1, désormais dans le plugin) :
+    /// accepté à la lecture pour que les anciennes préférences se chargent, jamais réécrit.
+    #[serde(default, rename = "home_assistant", skip_serializing)]
+    pub legacy_home_assistant: Option<serde_json::Value>,
+    /// Nombre de déclencheurs `ha_state` de la 0.19.0 supprimés au chargement (information du journal).
+    #[serde(skip)]
+    pub removed_ha_triggers: usize,
 }
 fn default_chat_mode() -> String { "auto".into() }
 fn default_true() -> bool { true }
@@ -684,7 +688,8 @@ impl Default for Preferences {
             update_check: None,
             last_seen_version: String::new(),
             workshop_favorites: vec![],
-            home_assistant: Default::default(),
+            legacy_home_assistant: None,
+            removed_ha_triggers: 0,
         }
     }
 }
@@ -695,7 +700,12 @@ impl Preferences {
         }
         let data = std::fs::read(path)?;
         ensure!(data.len() <= 8_000_000, "Préférences trop volumineuses");
-        let p: Self = serde_json::from_slice(&data)?;
+        let mut p: Self = serde_json::from_slice(&data)?;
+        // 0.19.0 : les déclencheurs `ha_state` et la connexion Home Assistant ont migré vers le plugin.
+        let before = p.triggers.len();
+        p.triggers.retain(|t| t.kind != "ha_state");
+        p.removed_ha_triggers = before - p.triggers.len();
+        p.legacy_home_assistant = None;
         ensure!(
             p.library.schema == 1 && p.library.binds.len() <= 128 && p.triggers.len() <= 256 && p.triggers.iter().all(|t| t.validate().is_ok()),
             "Bibliothèque invalide"
@@ -718,6 +728,25 @@ impl Preferences {
 
 #[cfg(test)]
 mod tests {    #[test]
+    fn legacy_0190_home_assistant_preferences_load_without_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut value = serde_json::to_value(Preferences::default()).unwrap();
+        value["home_assistant"] = serde_json::json!({"url":"http://homeassistant.local:8123","token":"dpapi:AQAAANCMnd8B","verify_tls":true});
+        value["triggers"] = serde_json::json!([
+            {"profile":"Défaut","page":"Page 1","key":2,"keys":"","kind":"ha_state","ha":{"entity":"light.salon","attribute":"","op":"equals","value":"on","hold_seconds":3,"fire_on_start":true,"return_key":4}},
+            {"profile":"Défaut","page":"Page 1","key":1,"keys":"CTRL+F1","kind":"hotkey"}
+        ]);
+        let path = dir.path().join("preferences.json");
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let p = Preferences::load(&path).unwrap();
+        assert_eq!(p.triggers.len(), 1);
+        assert_eq!(p.triggers[0].kind, "hotkey");
+        assert_eq!(p.removed_ha_triggers, 1);
+        assert!(!serde_json::to_string(&p).unwrap().contains("home_assistant"));
+        let cond: crate::conditions::Condition = serde_json::from_str(r#"{"kind":"home_assistant_state","entity":"light.salon","op":"equals","value":"on"}"#).unwrap();
+        assert!(cond.summary().contains("retirée"));
+    }
+
     fn connected_ai_is_opt_in_and_roundtrips_preferences() {
         let mut value = serde_json::to_value(Preferences::default()).unwrap();
         value.as_object_mut().unwrap().remove("allow_connected_ai");

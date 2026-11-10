@@ -24,6 +24,45 @@ pub enum Condition {
     All { #[serde(default)] conditions: Vec<Condition> },
     Any { #[serde(default)] conditions: Vec<Condition> },
 }
+/// Condition de la 0.19.0 : conservée pour que les profils se chargent, mais inutilisable.
+pub const LEGACY_HA_CONDITION: &str = "Condition Home Assistant retirée, utilise le plugin Home Assistant";
+impl Condition {
+    /// Vrai si la condition (ou une sous-condition) est l'ancienne condition Home Assistant de la 0.19.0.
+    pub fn has_legacy_ha(&self) -> bool {
+        match self {
+            Self::HomeAssistantState { .. } => true,
+            Self::Not { condition } => condition.has_legacy_ha(),
+            Self::All { conditions } | Self::Any { conditions } => conditions.iter().any(Self::has_legacy_ha),
+            _ => false,
+        }
+    }
+}
+fn steps_have_legacy_ha(steps: &[crate::model::Step]) -> bool {
+    use crate::model::Step;
+    steps.iter().any(|step| match step {
+        Step::WaitUntil { condition, .. } => condition.has_legacy_ha(),
+        Step::IfCondition { condition, then_steps, else_steps } => condition.has_legacy_ha() || steps_have_legacy_ha(then_steps) || steps_have_legacy_ha(else_steps),
+        Step::IfWindow { then_steps, else_steps, .. } | Step::IfVariable { then_steps, else_steps, .. } => steps_have_legacy_ha(then_steps) || steps_have_legacy_ha(else_steps),
+        Step::Repeat { steps, .. } => steps_have_legacy_ha(steps),
+        Step::Toggle { a, b } => steps_have_legacy_ha(a) || steps_have_legacy_ha(b),
+        _ => false,
+    })
+}
+/// Migration 0.19.1 : liste « profil, page, touche N » des touches qui contiennent encore une condition Home Assistant (aucune conversion automatique).
+pub fn legacy_ha_keys(config: &crate::model::Config) -> Vec<String> {
+    let mut found = Vec::new();
+    for profile in &config.profiles {
+        let pages = std::iter::once(("", &profile.keys)).chain(profile.pages.iter().map(|p| (p.name.as_str(), &p.keys)));
+        for (page, keys) in pages {
+            for (index, key) in keys.iter().enumerate() {
+                if steps_have_legacy_ha(&key.steps) || steps_have_legacy_ha(&key.long_steps) || key.state_display.as_ref().is_some_and(|d| d.condition.has_legacy_ha()) {
+                    found.push(if page.is_empty() { format!("{} › touche {}", profile.name, index + 1) } else { format!("{} › {} › touche {}", profile.name, page, index + 1) });
+                }
+            }
+        }
+    }
+    found
+}
 fn default_exe() -> String { "explorer.exe".into() }
 fn default_title() -> String { "Casque".into() }
 fn default_name() -> String { "mode".into() }
@@ -64,10 +103,10 @@ impl Condition {
         match self { Self::ForegroundApp { .. } => "foreground_app", Self::AppRunning { .. } => "app_running", Self::WindowOpen { .. } => "window_open", Self::AppAudioPlaying { .. } => "app_audio_playing", Self::AppMuted { .. } => "app_muted", Self::AppVolumeCompare { .. } => "app_volume_compare", Self::DeviceMuted { .. } => "device_muted", Self::DeviceVolumeCompare { .. } => "device_volume_compare", Self::AudioDevicePresent { .. } => "audio_device_present", Self::DefaultOutputIs { .. } => "default_output_is", Self::VariableCompare { .. } => "variable_compare", Self::HomeAssistantState { .. } => "home_assistant_state", Self::Not { .. } => "not", Self::All { .. } => "all", Self::Any { .. } => "any" }
     }
     pub fn label(&self) -> &'static str {
-        match self { Self::ForegroundApp { .. } => "Application au premier plan", Self::AppRunning { .. } => "Application ouverte (même en arrière-plan)", Self::WindowOpen { .. } => "Fenêtre ouverte", Self::AppAudioPlaying { .. } => "Session audio active", Self::AppMuted { .. } => "Application muette", Self::AppVolumeCompare { .. } => "Volume d'application", Self::DeviceMuted { .. } => "Périphérique muet", Self::DeviceVolumeCompare { .. } => "Volume du périphérique", Self::AudioDevicePresent { .. } => "Périphérique audio actif", Self::DefaultOutputIs { .. } => "Sortie audio par défaut", Self::VariableCompare { .. } => "Comparer une variable", Self::HomeAssistantState { .. } => "État Home Assistant", Self::Not { .. } => "NON", Self::All { .. } => "Toutes (ET)", Self::Any { .. } => "Au moins une (OU)" }
+        match self { Self::ForegroundApp { .. } => "Application au premier plan", Self::AppRunning { .. } => "Application ouverte (même en arrière-plan)", Self::WindowOpen { .. } => "Fenêtre ouverte", Self::AppAudioPlaying { .. } => "Session audio active", Self::AppMuted { .. } => "Application muette", Self::AppVolumeCompare { .. } => "Volume d'application", Self::DeviceMuted { .. } => "Périphérique muet", Self::DeviceVolumeCompare { .. } => "Volume du périphérique", Self::AudioDevicePresent { .. } => "Périphérique audio actif", Self::DefaultOutputIs { .. } => "Sortie audio par défaut", Self::VariableCompare { .. } => "Comparer une variable", Self::HomeAssistantState { .. } => "Condition Home Assistant retirée", Self::Not { .. } => "NON", Self::All { .. } => "Toutes (ET)", Self::Any { .. } => "Au moins une (OU)" }
     }
     pub fn summary(&self) -> String {
-        match self { Self::ForegroundApp { exe } => format!("{exe} au premier plan"), Self::AppRunning { exe } => format!("{exe} ouvert (arrière-plan inclus)"), Self::WindowOpen { title } => format!("fenêtre contenant « {title} » ouverte"), Self::AppAudioPlaying { exe } => format!("session audio de {exe} active"), Self::AppMuted { exe } => format!("{exe} muet"), Self::AppVolumeCompare { exe, op, value } => format!("volume de {exe} {} {value} %", if op == "above" { ">" } else { "<" }), Self::DeviceMuted { input, .. } => format!("{} muet", if *input { "microphone" } else { "sortie audio" }), Self::DeviceVolumeCompare { input, op, value, .. } => format!("volume {} {} {value} %", if *input { "microphone" } else { "sortie audio" }, if op == "above" { ">" } else { "<" }), Self::AudioDevicePresent { name_contains, input } => format!("{} actif contenant « {name_contains} »", if *input { "microphone" } else { "périphérique de sortie" }), Self::DefaultOutputIs { name_contains } => format!("sortie par défaut contenant « {name_contains} »"), Self::VariableCompare { name, op, value } => format!("variable {name} {op} « {value} »"), Self::HomeAssistantState { entity, attribute, op, value } => format!("{entity}{}{} {op} « {value} »", if attribute.is_empty() { "" } else { "." }, attribute), Self::Not { condition } => format!("NON ({})", condition.summary()), Self::All { conditions } => format!("toutes les {} conditions", conditions.len()), Self::Any { conditions } => format!("une des {} conditions", conditions.len()) }
+        match self { Self::ForegroundApp { exe } => format!("{exe} au premier plan"), Self::AppRunning { exe } => format!("{exe} ouvert (arrière-plan inclus)"), Self::WindowOpen { title } => format!("fenêtre contenant « {title} » ouverte"), Self::AppAudioPlaying { exe } => format!("session audio de {exe} active"), Self::AppMuted { exe } => format!("{exe} muet"), Self::AppVolumeCompare { exe, op, value } => format!("volume de {exe} {} {value} %", if op == "above" { ">" } else { "<" }), Self::DeviceMuted { input, .. } => format!("{} muet", if *input { "microphone" } else { "sortie audio" }), Self::DeviceVolumeCompare { input, op, value, .. } => format!("volume {} {} {value} %", if *input { "microphone" } else { "sortie audio" }, if op == "above" { ">" } else { "<" }), Self::AudioDevicePresent { name_contains, input } => format!("{} actif contenant « {name_contains} »", if *input { "microphone" } else { "périphérique de sortie" }), Self::DefaultOutputIs { name_contains } => format!("sortie par défaut contenant « {name_contains} »"), Self::VariableCompare { name, op, value } => format!("variable {name} {op} « {value} »"), Self::HomeAssistantState { entity, attribute, op, value } => format!("{entity}{}{} {op} « {value} » (retirée : utilise le plugin Home Assistant)", if attribute.is_empty() { "" } else { "." }, attribute), Self::Not { condition } => format!("NON ({})", condition.summary()), Self::All { conditions } => format!("toutes les {} conditions", conditions.len()), Self::Any { conditions } => format!("une des {} conditions", conditions.len()) }
     }
     pub fn validate(&self) -> Result<()> { self.validate_at(0) }
     fn validate_at(&self, depth: usize) -> Result<()> {
@@ -81,7 +120,7 @@ impl Condition {
             Self::WindowOpen { title } => anyhow::ensure!(valid_text(title, 256), "Titre de fenêtre invalide"),
             Self::AudioDevicePresent { name_contains, .. } | Self::DefaultOutputIs { name_contains } => anyhow::ensure!(valid_text(name_contains, 256), "Nom de périphérique invalide"),
             Self::VariableCompare { name, op, value } => anyhow::ensure!(!name.is_empty() && name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && value.len() <= 4096 && ["equals", "not_equals", "contains", "greater", "less"].contains(&op.as_str()), "Comparaison de variable invalide"),
-            Self::HomeAssistantState { entity, attribute, op, value } => crate::home_assistant::validate_comparison(entity, attribute, op, value)?,
+            Self::HomeAssistantState { .. } => bail!(LEGACY_HA_CONDITION),
             Self::Not { condition } => condition.validate_at(depth + 1)?,
             Self::All { conditions } | Self::Any { conditions } => {
                 anyhow::ensure!(!conditions.is_empty() && conditions.len() <= 32, "Entre 1 et 32 conditions requises");
@@ -96,11 +135,7 @@ impl Condition {
             Self::AppRunning { exe } => Ok(running_processes()?.iter().any(|(_, name)| name.eq_ignore_ascii_case(exe))),
             Self::WindowOpen { title } => Ok(crate::engine::find_window(title).is_some()),
             Self::VariableCompare { name, op, value } => Ok(compare_variable(vars.get(name).map(String::as_str).unwrap_or(""), op, value)),
-            // Cache uniquement : aucun appel réseau, erreur explicite si Home Assistant est déconnecté.
-            Self::HomeAssistantState { entity, attribute, op, value } => {
-                let actual = crate::home_assistant::cached_value(entity, attribute).context("Home Assistant non connecté")?;
-                Ok(crate::home_assistant::compare(actual.as_deref(), op, value))
-            },
+            Self::HomeAssistantState { .. } => bail!(LEGACY_HA_CONDITION),
             Self::Not { condition } => Ok(decide_not(condition.evaluate(vars)?)),
             Self::All { conditions } => { let mut values = Vec::new(); for c in conditions { values.push(c.evaluate(vars)?); if !decide_all(&values) { return Ok(false); } } Ok(decide_all(&values)) },
             Self::Any { conditions } => { let mut values = Vec::new(); for c in conditions { values.push(c.evaluate(vars)?); if decide_any(&values) { return Ok(true); } } Ok(decide_any(&values)) },

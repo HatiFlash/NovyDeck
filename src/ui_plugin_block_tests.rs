@@ -243,3 +243,20 @@ fn googlehome_block_properties_english_capture() {
     assert!(text_position(&output.shapes, &crate::i18n::trf("Groupe : {count} appareils", &[("count", &2)])).is_some());
     h.png(size, output, &PathBuf::from(dir).join("googlehome-block-properties-en.png"));
 }
+
+#[test]
+fn global_settings_truncated_file_is_reported_and_left_untouched_then_normal_write_keeps_backup() {
+    use serde_json::json;
+    let mut h=Harness::new();
+    let path=h.app.path.with_file_name("plugin-settings.json");
+    std::fs::write(&path,b"{\"a\": {\"x\"").unwrap();
+    h.app.plugin_message("a",&json!({"event":"setGlobalSettings","payload":{"y":1}}));
+    assert_eq!(std::fs::read(&path).unwrap(),b"{\"a\": {\"x\"","fichier tronqué intact");
+    assert!(h.app.error && h.app.logs.iter().any(|l|l.contains("Réglages globaux non sauvegardés")));
+    h.app.plugin_message("a",&json!({"event":"getGlobalSettings"}));
+    assert!(h.app.logs.iter().any(|l|l.contains("Réglages globaux illisibles")));
+    std::fs::write(&path,b"{\"b\":{\"z\":2}}").unwrap();
+    h.app.plugin_message("a",&json!({"event":"setGlobalSettings","payload":{"y":1}}));
+    let all:serde_json::Value=serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(all,json!({"a":{"y":1},"b":{"z":2}}));assert!(path.with_extension("json.bak").exists());
+}

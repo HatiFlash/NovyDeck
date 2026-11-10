@@ -3,205 +3,6 @@ use super::*;
 mod library;
 use library::matches_palette;
 
-/// État d'édition de la section Home Assistant (jamais sérialisé ; le jeton saisi reste en mémoire le temps de la saisie).
-pub(super) struct HaEditor {
-    url: String,
-    token: String,
-    loaded: bool,
-    notice: String,
-    test: Option<std::sync::Arc<std::sync::Mutex<Option<Result<usize, String>>>>>,
-    confirm_plugin: bool,
-    filter: String,
-    entity: String,
-    attribute: String,
-    op: String,
-    value: String,
-    hold: u32,
-    return_on: bool,
-    return_key: usize,
-    fire_on_start: bool,
-    show_mode: bool,
-    display_other: bool,
-    display_key: usize,
-    entities: (u64, Vec<(String, String)>),
-}
-impl Default for HaEditor {
-    fn default() -> Self {
-        Self { url: String::new(), token: String::new(), loaded: false, notice: String::new(), test: None, confirm_plugin: false,
-            filter: String::new(), entity: String::new(), attribute: String::new(), op: "equals".into(), value: String::new(), hold: 0,
-            return_on: false, return_key: 0, fire_on_start: false, show_mode: false, display_other: false, display_key: 0, entities: (u64::MAX, vec![]) }
-    }
-}
-impl HaEditor {
-    /// Remet à zéro le formulaire du déclencheur (la connexion en cours d'édition est conservée).
-    fn reset_rule(&mut self) {
-        let fresh = Self::default();
-        self.filter = fresh.filter; self.entity = fresh.entity; self.attribute = fresh.attribute; self.op = fresh.op; self.value = fresh.value;
-        self.hold = fresh.hold; self.return_on = fresh.return_on; self.return_key = fresh.return_key; self.fire_on_start = fresh.fire_on_start;
-        self.show_mode = fresh.show_mode; self.display_other = fresh.display_other; self.display_key = fresh.display_key;
-    }
-    fn rule(&self) -> crate::home_assistant::Rule {
-        crate::home_assistant::Rule { entity: self.entity.trim().to_owned(), attribute: self.attribute.trim().to_owned(), op: self.op.clone(),
-            value: self.value.trim().to_owned(), hold_seconds: self.hold, return_key: self.return_on.then_some(self.return_key), fire_on_start: self.fire_on_start,
-            show_mode: self.show_mode, display_key: (self.show_mode && self.display_other).then_some(self.display_key) }
-    }
-}
-fn ha_status_text(status: &crate::home_assistant::Status, entities: usize) -> String {
-    use crate::home_assistant::Status as S;
-    match status {
-        S::Disabled => tr("Home Assistant : non configuré").into(),
-        S::Connecting => tr("Home Assistant : connexion…").into(),
-        S::Connected => trf("Home Assistant : connecté ({count} entités)", &[("count", &entities)]),
-        S::Reconnecting { attempt, error } => trf("Home Assistant : reconnexion (tentative {attempt}) — {error}", &[("attempt", attempt), ("error", error)]),
-        S::AuthFailed(error) => trf("Home Assistant : jeton refusé — {error}", &[("error", error)]),
-    }
-}
-/// Protège et enregistre l'adresse et le jeton ; un jeton vide conserve celui déjà enregistré.
-fn ha_save(editor: &mut HaEditor, prefs: &mut crate::catalog::Preferences) -> Result<(), String> {
-    crate::home_assistant::websocket_url(&editor.url).map_err(|e| e.to_string())?;
-    let mut next = prefs.home_assistant.clone();
-    next.url = editor.url.trim().to_owned();
-    if !editor.token.trim().is_empty() {
-        next.token = crate::home_assistant::ProtectedToken::protect(&crate::home_assistant::Secret::new(editor.token.as_str())).map_err(|e| e.to_string())?;
-    }
-    if next.token.is_empty() { return Err(tr("Saisis un jeton d’accès longue durée.").into()); }
-    prefs.home_assistant = next;
-    editor.token.clear();
-    Ok(())
-}
-/// Section « Home Assistant » des réglages ; renvoie (préférences modifiées, reconfigurer le moniteur).
-fn ha_connection_ui(ui: &mut egui::Ui, ctx: &egui::Context, editor: &mut HaEditor, prefs: &mut crate::catalog::Preferences, config: &Config) -> (bool, bool) {
-    let (mut changed, mut reconfigure) = (false, false);
-    if !editor.loaded { editor.url = prefs.home_assistant.url.clone(); editor.loaded = true; }
-    ui.label(RichText::new(tr("Home Assistant")).strong());
-    let monitor = crate::home_assistant::global();
-    let status = monitor.status();
-    ui.label(ha_status_text(&status, monitor.read(|s| s.entities.len())));
-    ui.horizontal(|ui| { ui.label(tr("Adresse")); ui.add(egui::TextEdit::singleline(&mut editor.url).hint_text("http://homeassistant.local:8123")); });
-    let hint = if prefs.home_assistant.token.is_empty() { tr("Jeton d’accès longue durée") } else { tr("Jeton enregistré (laisser vide pour le conserver)") };
-    ui.add(egui::TextEdit::singleline(&mut editor.token).password(true).hint_text(hint));
-    ui.horizontal(|ui| {
-        if ui.add(crate::theme::secondary_button(tr("Enregistrer"))).clicked() {
-            match ha_save(editor, prefs) {
-                Ok(()) => { editor.notice = tr("Connexion Home Assistant enregistrée.").into(); changed = true; reconfigure = true; }
-                Err(e) => editor.notice = e,
-            }
-        }
-        let testing = editor.test.is_some();
-        if ui.add_enabled(!testing, egui::Button::new(tr("Tester la connexion"))).clicked() {
-            let token = if editor.token.trim().is_empty() { prefs.home_assistant.token.reveal().ok() } else { Some(crate::home_assistant::Secret::new(editor.token.as_str())) };
-            match (crate::home_assistant::websocket_url(&editor.url), token) {
-                (Ok(url), Some(token)) if !token.is_empty() => {
-                    let slot = std::sync::Arc::new(std::sync::Mutex::new(None));
-                    let out = slot.clone();
-                    let wake = ctx.clone();
-                    std::thread::spawn(move || {
-                        let result = crate::home_assistant::test_connection(&url, &token, std::time::Duration::from_secs(8)).map_err(|e| e.to_string());
-                        *out.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
-                        wake.request_repaint();
-                    });
-                    editor.test = Some(slot);
-                    editor.notice = tr("Test en cours…").into();
-                }
-                (Err(e), _) => editor.notice = e.to_string(),
-                _ => editor.notice = tr("Saisis un jeton d’accès longue durée.").into(),
-            }
-        }
-    });
-    if let Some(slot) = &editor.test {
-        let done = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
-        match done {
-            Some(Ok(count)) => { editor.notice = trf("Connexion réussie : {count} entités.", &[("count", &count)]); editor.test = None; }
-            Some(Err(e)) => { editor.notice = trf("Échec du test : {error}", &[("error", &e)]); editor.test = None; }
-            None => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
-        }
-    }
-    if !editor.confirm_plugin {
-        if ui.button(tr("Réutiliser la configuration du plugin Home Assistant")).clicked() { editor.confirm_plugin = true; }
-    } else {
-        ui.colored_label(accent(), tr("Copier l’adresse et le jeton du plugin Home Assistant dans NovyDeck ? Le plugin n’est pas modifié."));
-        ui.horizontal(|ui| {
-            if ui.add(crate::theme::secondary_button(tr("Copier"))).clicked() {
-                editor.confirm_plugin = false;
-                let imported = crate::home_assistant::plugin_url(config).ok_or_else(|| tr("Aucune adresse trouvée dans les touches du plugin Home Assistant.").to_owned())
-                    .and_then(|url| crate::home_assistant::plugin_token().map(|token| (url, token)).map_err(|e| e.to_string()));
-                match imported {
-                    Ok((url, token)) => {
-                        editor.url = url;
-                        editor.token = token.expose().to_owned();
-                        match ha_save(editor, prefs) {
-                            Ok(()) => { editor.notice = tr("Configuration du plugin copiée.").into(); changed = true; reconfigure = true; }
-                            Err(e) => editor.notice = e,
-                        }
-                        editor.token.clear();
-                    }
-                    Err(e) => editor.notice = e,
-                }
-            }
-            if ui.button(tr("Annuler")).clicked() { editor.confirm_plugin = false; }
-        });
-    }
-    changed |= ui.checkbox(&mut prefs.home_assistant.key_badge, tr("Afficher l’état sur la touche (compte à rebours, déclenché, déconnecté)")).changed();
-    if !editor.notice.is_empty() { ui.label(RichText::new(editor.notice.as_str()).small()); }
-    (changed, reconfigure)
-}
-/// Formulaire du déclencheur « État Home Assistant ».
-fn ha_trigger_form(ui: &mut egui::Ui, editor: &mut HaEditor, config: &Config, target_key: usize) {
-    let monitor = crate::home_assistant::global();
-    let generation = monitor.generation();
-    if editor.entities.0 != generation { editor.entities = (generation, monitor.entity_list()); }
-    ui.horizontal(|ui| { ui.label(tr("Filtrer les entités")); ui.text_edit_singleline(&mut editor.filter); });
-    let filter = editor.filter.trim().to_lowercase();
-    let shown = if editor.entity.is_empty() { tr("Choisir une entité").to_owned() } else { editor.entity.clone() };
-    egui::ComboBox::from_id_salt("ha_entity").selected_text(shown).width(320.0).show_ui(ui, |ui| {
-        egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
-            let matching = editor.entities.1.iter().filter(|(id, name)| filter.is_empty() || id.to_lowercase().contains(&filter) || name.to_lowercase().contains(&filter));
-            for (id, name) in matching.take(300) {
-                let label = if name.is_empty() { id.clone() } else { format!("{name} ({id})") };
-                ui.selectable_value(&mut editor.entity, id.clone(), label);
-            }
-        });
-    });
-    ui.horizontal(|ui| { ui.label(tr("Entité")); ui.text_edit_singleline(&mut editor.entity); });
-    ui.horizontal(|ui| { ui.label(tr("Attribut (optionnel)")); ui.text_edit_singleline(&mut editor.attribute); });
-    ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("ha_op").selected_text(match editor.op.as_str() { "equals" => tr("Égal"), "not_equals" => tr("Différent"), "above" => ">", _ => "<" }).show_ui(ui, |ui| {
-            ui.selectable_value(&mut editor.op, "equals".into(), tr("Égal"));
-            ui.selectable_value(&mut editor.op, "not_equals".into(), tr("Différent"));
-            ui.selectable_value(&mut editor.op, "above".into(), ">");
-            ui.selectable_value(&mut editor.op, "below".into(), "<");
-        });
-        ui.text_edit_singleline(&mut editor.value);
-    });
-    ui.horizontal(|ui| { ui.label(tr("Depuis (secondes, 0 = immédiat)")); ui.add(egui::DragValue::new(&mut editor.hold).range(0..=86_400)); });
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut editor.return_on, tr("Touche de retour (quand la condition redevient fausse)"));
-        if editor.return_on { let mut shown = editor.return_key + 1; ui.add(egui::DragValue::new(&mut shown).range(1..=15)); editor.return_key = shown - 1; }
-    });
-    ui.checkbox(&mut editor.fire_on_start, tr("Déclencher aussi au démarrage si la condition est déjà vraie"));
-    ui.checkbox(&mut editor.show_mode, tr("Image de la touche selon le mode"));
-    if editor.show_mode {
-        ui.horizontal(|ui| {
-            ui.checkbox(&mut editor.display_other, tr("Afficher sur une autre touche"));
-            if editor.display_other { let mut shown = editor.display_key + 1; ui.add(egui::DragValue::new(&mut shown).range(1..=15)); editor.display_key = shown - 1; }
-        });
-        ui.label(RichText::new(tr("Image « actif » quand le mode est actif, image « inactif » sinon. La pause globale bloque les actions, mais l'image continue de suivre l'état réel.")).small());
-        let shown_key = if editor.display_other { editor.display_key } else { target_key };
-        if !config.keys().get(shown_key).and_then(|key| key.state_display.as_ref()).is_some_and(|display| display.on.image.as_deref().is_some_and(|image| !image.is_empty())) {
-            ui.colored_label(Color32::LIGHT_RED, tr("Ajoute une image pour l'état actif dans l'éditeur de la touche"));
-        }
-    }
-}
-fn ha_display_text(display: Option<crate::home_assistant::Display>) -> String {
-    use crate::home_assistant::Display as D;
-    match display {
-        None | Some(D::Idle) => tr("en attente").into(),
-        Some(D::Disconnected) => tr("Home Assistant déconnecté").into(),
-        Some(D::Countdown(n)) => trf("compte à rebours : {seconds} s", &[("seconds", &n)]),
-        Some(D::Fired) => tr("déclenché").into(),
-    }
-}
-
 // These two presets send hotkeys; Discord does not report its real mute state.
 pub(super) fn discord_shortcut(key: &Key) -> Option<&str> {
     let expected = match key.label.as_str() {
@@ -2114,7 +1915,6 @@ impl App {
         let mut startup = None;
         let mut hotkeys = false;
         let mut capture = false;
-        let mut reconfigure_ha = false;
         crate::theme::fixed_window(crate::i18n::tr("Windows et raccourcis")).open(&mut open).default_width(510.0).show(ctx,|ui|{
             let mut enabled=self.preferences.start_with_windows;
             if ui.checkbox(&mut enabled,crate::i18n::tr("Lancer NovyDeck au démarrage de Windows")).changed(){startup=Some(enabled);}
@@ -2143,22 +1943,18 @@ impl App {
             ui.label(RichText::new(crate::i18n::tr("Exemple : CTRL+ALT+F9. Vide le champ pour désactiver. Windows signale les combinaisons déjà utilisées dans le journal.")).small());
             if hotkeys {if let Some(i)=index {if text.is_empty(){self.preferences.triggers.remove(i);}else{self.preferences.triggers[i].keys=text;}}else if !text.is_empty()&&self.preferences.triggers.len()<256{self.preferences.triggers.push(crate::desktop::Trigger::hotkey(name.clone(),page.clone(),key,text));}changed=true;}
             ui.separator();
-            let (ha_changed, ha_reconf) = ha_connection_ui(ui, ctx, &mut self.ha_edit, &mut self.preferences, &self.config);
-            changed |= ha_changed; reconfigure_ha |= ha_reconf;
-            ui.separator();
             ui.label(RichText::new(crate::i18n::tr("Déclencheurs automatiques")).strong());
             ui.label(crate::i18n::tr("Surveillance toutes les secondes, sans action au démarrage. La pause globale bloque également ces déclencheurs."));
             egui::ComboBox::from_id_salt("automatic_trigger_kind").selected_text(match self.trigger_kind.as_str() {
                 "app_open" => crate::i18n::tr("Ouverture d’application"), "app_close" => crate::i18n::tr("Fermeture d’application"),
                 "clock" => crate::i18n::tr("Heure fixe"), "timer" => crate::i18n::tr("Minuteur"),
-                "audio_connect" => crate::i18n::tr("Branchement audio"), "ha_state" => crate::i18n::tr("État Home Assistant"), _ => crate::i18n::tr("Débranchement audio"),
+                "audio_connect" => crate::i18n::tr("Branchement audio"), _ => crate::i18n::tr("Débranchement audio"),
             }).show_ui(ui, |ui| {
-                for (kind, label) in [("app_open", "Ouverture d’application"), ("app_close", "Fermeture d’application"), ("clock", "Heure fixe"), ("timer", "Minuteur"), ("audio_connect", "Branchement audio"), ("audio_disconnect", "Débranchement audio"), ("ha_state", "État Home Assistant")] {
-                    ui.selectable_value(&mut self.trigger_kind, kind.into(), match kind { "app_open" => crate::i18n::tr("Ouverture d’application"), "app_close" => crate::i18n::tr("Fermeture d’application"), "clock" => crate::i18n::tr("Heure fixe"), "timer" => crate::i18n::tr("Minuteur"), "audio_connect" => crate::i18n::tr("Branchement audio"), "ha_state" => crate::i18n::tr("État Home Assistant"), _ => crate::i18n::tr("Débranchement audio") });
+                for (kind, label) in [("app_open", "Ouverture d’application"), ("app_close", "Fermeture d’application"), ("clock", "Heure fixe"), ("timer", "Minuteur"), ("audio_connect", "Branchement audio"), ("audio_disconnect", "Débranchement audio")] {
+                    ui.selectable_value(&mut self.trigger_kind, kind.into(), match kind { "app_open" => crate::i18n::tr("Ouverture d’application"), "app_close" => crate::i18n::tr("Fermeture d’application"), "clock" => crate::i18n::tr("Heure fixe"), "timer" => crate::i18n::tr("Minuteur"), "audio_connect" => crate::i18n::tr("Branchement audio"), _ => crate::i18n::tr("Débranchement audio") });
                 }
             });
             match self.trigger_kind.as_str() {
-                "ha_state" => ha_trigger_form(ui, &mut self.ha_edit, &self.config, key),
                 "timer" => { ui.horizontal(|ui| { ui.label(crate::i18n::tr("Toutes les (minutes)")); ui.add(egui::DragValue::new(&mut self.trigger_minutes).range(1..=1440)); }); },
                 "clock" => {
                     ui.horizontal(|ui| { ui.label(crate::i18n::tr("Heure HH:MM")); ui.text_edit_singleline(&mut self.trigger_value); });
@@ -2178,20 +1974,15 @@ impl App {
                 }
             }
             if ui.add(crate::theme::secondary_button(crate::i18n::trf("Ajouter → touche {key} (profil et page actuels)", &[("key", &(format!("{:02}",key+1)))] ))).clicked() {
-                let trigger = crate::desktop::Trigger { profile: name.clone(), page: page.clone(), key, keys: String::new(), kind: self.trigger_kind.clone(), value: self.trigger_value.clone(), days: self.trigger_days.clone(), minutes: self.trigger_minutes, input: self.trigger_input, ha: (self.trigger_kind == "ha_state").then(|| self.ha_edit.rule()) };
+                let trigger = crate::desktop::Trigger { profile: name.clone(), page: page.clone(), key, keys: String::new(), kind: self.trigger_kind.clone(), value: self.trigger_value.clone(), days: self.trigger_days.clone(), minutes: self.trigger_minutes, input: self.trigger_input, legacy_ha: None };
                 if let Err(e) = trigger.validate() { self.fail(crate::i18n::trf("Déclencheur : {e}", &[("e", &(e))] )); }
                 else if self.preferences.triggers.len() >= 256 { self.fail(crate::i18n::tr("256 déclencheurs maximum").into()); }
-                else { self.preferences.triggers.push(trigger); changed = true; if self.trigger_kind == "ha_state" { self.ha_edit.reset_rule(); } }
+                else { self.preferences.triggers.push(trigger); changed = true; }
             }
             let mut remove = None;
             for (i, trigger) in self.preferences.triggers.iter().enumerate().filter(|(_, t)| t.kind != "hotkey") {
                 ui.horizontal(|ui| {
-                    let mut text = format!("{} → {} / {} / touche {:02}", trigger.description(), trigger.profile, if trigger.page.is_empty() { crate::i18n::tr("Accueil") } else { &trigger.page }, trigger.key + 1);
-                    if let Some(rule) = trigger.ha.as_ref().filter(|_| trigger.kind == "ha_state") {
-                        if rule.show_mode { text.push_str(&format!(" · {}", crate::i18n::tr("image selon le mode"))); }
-                        if let Some(back) = rule.return_key { text.push_str(&crate::i18n::trf(" · retour touche {key}", &[("key", &format!("{:02}", back + 1))])); }
-                        text.push_str(&format!(" · {}", ha_display_text(self.ha_runtime.display(&(trigger.profile.clone(), trigger.page.clone(), trigger.key)))));
-                    }
+                    let text = format!("{} → {} / {} / touche {:02}", trigger.description(), trigger.profile, if trigger.page.is_empty() { crate::i18n::tr("Accueil") } else { &trigger.page }, trigger.key + 1);
                     ui.label(text);
                     if ui.add(crate::theme::danger_button(crate::i18n::tr("Supprimer"))).clicked() { remove = Some(i); }
                 });
@@ -2220,7 +2011,6 @@ impl App {
             }
         }
         if changed { self.save(); if self.save_preferences() { self.refresh_hotkeys(); } }
-        if reconfigure_ha { self.configure_home_assistant(); }
     }
     pub(super) fn record_trigger(&mut self, ctx: &egui::Context) {
         if !self.trigger_recording || !ctx.input(|i| i.focused) {

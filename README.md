@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.0"><img src="https://img.shields.io/badge/Release-v0.19.0-3478F6.svg" alt="Release v0.19.0"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.1"><img src="https://img.shields.io/badge/Release-v0.19.1-3478F6.svg" alt="Release v0.19.1"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -22,7 +22,20 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
+## What's new in 0.19.1
+
+### Home Assistant moves to the plugin, safer plugins
+
+- **Home Assistant is now handled by the [Home Assistant plugin](https://github.com/HatiFlash/novydeck-plugins/tree/main/first-party/plugins/com.novydeck.homeassistant.sdPlugin) (1.1.1 or later)**. Its **Automatic state** action follows an entity live (operator, value, "for N seconds", trigger at startup), updates the key image without pressing it and runs the key on real changes. The built-in Home Assistant connection, the "Home Assistant state" trigger and the Home Assistant condition of 0.19.0 are removed: your preferences still load, the old triggers are dropped and keys that still use the old condition are listed once in a notice (no automatic conversion).
+- **Plugin authentication**: a native plugin can only register if its connection comes from a process NovyDeck launched itself (Windows Job check); any other local process is refused and logged.
+- **Plugin-triggered keys**: every refused `novydeckTrigger` is logged with its reason (unknown context, pause, editing, rate limit…), and macro ↔ plugin loops are blocked.
+- **Plugin global settings**: `plugin-settings.json` is written atomically with a `.bak` copy; an unreadable file is reported and never overwritten.
+
+See the [0.19.1 release notes](docs/RELEASE-0.19.1.md). Not tested against a live Home Assistant server or a physical deck.
+
 ## What's new in 0.19.0
+
+> Replaced in 0.19.1: these features now live in the Home Assistant plugin.
 
 ### Real-time Home Assistant triggers
 

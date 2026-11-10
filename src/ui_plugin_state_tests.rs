@@ -162,3 +162,83 @@ fn state_source_picker_and_three_faces_are_visible_in_both_languages_at_hidpi() 
         if let Some(out)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output,&PathBuf::from(out).join(format!("plugin-state-editor-{lang}.png")));}
     }
 }
+
+fn trigger_setup() -> (Harness,String) {
+    let mut h=Harness::new();
+    h.app.config.keys_mut()[0].steps=vec![Step::PluginAction{plugin:OWNER.into(),action:ACTION.into(),settings:json!({}),label:"P".into()}];
+    h.app.applied=h.app.config.clone();h.app.gate.enabled=true;h.app.gate.invalid=false;h.app.gate.dirty=false;
+    let identity=crate::engine::identity(&h.app.config.profiles[h.app.config.active].name,&h.app.config.page,0);
+    let context=crate::plugin_runtime::virtual_context(&identity,&[0]);
+    (h,context)
+}
+fn trigger_count(h:&Harness,context:&str)->usize {h.app.plugin_trigger_log.get(context).map_or(0,|l|l.len())}
+#[test]
+fn plugin_trigger_accepts_own_context_and_limits_bursts() {
+    let (mut h,context)=trigger_setup();
+    let msg=json!({"event":"novydeckTrigger","context":context,"action":ACTION});
+    for _ in 0..10 {h.app.plugin_message(OWNER,&msg);h.app.plugin_trigger_running.clear();}
+    assert_eq!(trigger_count(&h,&context),4,"anti-rafale : 4 par seconde et par contexte");
+}
+#[test]
+fn plugin_trigger_refuses_foreign_context_plugin_or_action() {
+    let (mut h,context)=trigger_setup();
+    h.app.plugin_message("autre.plugin",&json!({"event":"novydeckTrigger","context":context,"action":ACTION}));
+    h.app.plugin_message(OWNER,&json!({"event":"novydeckTrigger","context":"novydeck-block-00-9","action":ACTION}));
+    h.app.plugin_message(OWNER,&json!({"event":"novydeckTrigger","context":"inconnu"}));
+    h.app.plugin_message(OWNER,&json!({"event":"novydeckTrigger","context":context,"action":"test.a.autre"}));
+    assert!(h.app.plugin_trigger_log.is_empty());
+}
+#[test]
+fn plugin_trigger_ignored_when_paused_or_recording() {
+    let (mut h,context)=trigger_setup();
+    let msg=json!({"event":"novydeckTrigger","context":context,"action":ACTION});
+    h.app.gate.enabled=false;h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),0,"pause globale");
+    h.app.gate.enabled=true;h.app.trigger_recording=true;h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),0,"enregistrement");
+    h.app.trigger_recording=false;h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),1);
+}
+
+fn log_has(h:&Harness,needle:&str)->usize {h.app.logs.iter().filter(|l|l.contains(needle)).count()}
+#[test]
+fn plugin_trigger_refusals_are_logged_once_per_reason_and_window() {
+    let (mut h,context)=trigger_setup();
+    let bad=json!({"event":"novydeckTrigger","context":"inconnu"});
+    for _ in 0..5 {h.app.plugin_message(OWNER,&bad);}
+    assert_eq!(log_has(&h,"contexte inconnu"),1,"une ligne par contexte et par raison");
+    h.app.plugin_message("autre.plugin",&json!({"event":"novydeckTrigger","context":context,"action":ACTION}));
+    assert_eq!(log_has(&h,"plugin ou action différents"),1);
+    let msg=json!({"event":"novydeckTrigger","context":context,"action":ACTION});
+    h.app.gate.enabled=false;h.app.plugin_message(OWNER,&msg);assert_eq!(log_has(&h,"pause globale"),1);
+    h.app.gate.enabled=true;h.app.trigger_recording=true;h.app.plugin_message(OWNER,&msg);assert_eq!(log_has(&h,"enregistrement en cours"),1);
+    h.app.trigger_recording=false;h.app.gate.dirty=true;h.app.plugin_message(OWNER,&msg);assert_eq!(log_has(&h,"édition en cours"),1);
+    h.app.gate.dirty=false;
+    let rule=(context.clone(),"pause globale");h.app.plugin_trigger_refusals.insert(rule.clone(),Instant::now()-Duration::from_secs(6));
+    h.app.gate.enabled=false;h.app.plugin_message(OWNER,&msg);assert_eq!(log_has(&h,"pause globale"),2,"à nouveau journalisé après 5 s");
+}
+#[test]
+fn plugin_trigger_loop_is_refused_logged_and_released() {
+    let (mut h,context)=trigger_setup();
+    let msg=json!({"event":"novydeckTrigger","context":context,"action":ACTION});
+    h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),1);assert!(h.app.plugin_trigger_running.contains_key(&0));
+    h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),1,"re-déclenchement refusé");assert_eq!(log_has(&h,"boucle détectée"),1);
+    h.app.plugin_trigger_running.insert(0,Instant::now()-Duration::from_secs(3));
+    for _ in 0..100 {if !h.app.engine.running.load(std::sync::atomic::Ordering::SeqCst) {break;}std::thread::sleep(Duration::from_millis(20));}
+    h.app.plugin_message(OWNER,&msg);
+    assert_eq!(trigger_count(&h,&context),2,"autorisé après la fenêtre de 2 s et la fin de l'exécution");
+}
+#[test]
+fn legacy_home_assistant_conditions_are_listed_by_profile_page_and_key() {
+    use crate::conditions::Condition;
+    let ha=||Condition::HomeAssistantState{entity:"light.x".into(),attribute:String::new(),op:"equals".into(),value:"on".into()};
+    let mut c=Config::default();
+    c.keys_mut()[1].steps=vec![Step::IfCondition{condition:Condition::Not{condition:Box::new(ha())},then_steps:vec![],else_steps:vec![]}];
+    c.keys_mut()[3].state_display=Some(StateDisplay{condition:Condition::All{conditions:vec![ha()]},..Default::default()});
+    let name=c.profiles[c.active].name.clone();
+    let list=crate::conditions::legacy_ha_keys(&c);
+    assert_eq!(list,vec![format!("{name} › touche 2"),format!("{name} › touche 4")]);
+    assert!(crate::conditions::legacy_ha_keys(&Config::default()).is_empty());
+}

@@ -109,6 +109,43 @@ fn rotate_backups(backup_dir: &Path, path: &Path, content: &[u8]) -> Result<()> 
     Ok(())
 }
 
+/// F-02 : lit un fichier JSON dont la racine est un objet. Absent → `{}` ; illisible ou non-objet → erreur (jamais écrasé en silence).
+pub fn read_json_object(path: &Path) -> Result<serde_json::Value> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(serde_json::json!({})),
+        Err(e) => return Err(e).with_context(|| format!("{} illisible", path.display())),
+    };
+    let value: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| format!("{} n'est pas un JSON valide", path.display()))?;
+    anyhow::ensure!(value.is_object(), "{} ne contient pas un objet JSON", path.display());
+    Ok(value)
+}
+
+/// F-02 : écriture atomique (fichier temporaire du même dossier, sync, copie `.bak` de l'ancien contenu, rename).
+pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<()> {
+    let parent = path.parent().context("Dossier invalide")?;
+    fs::create_dir_all(parent)?;
+    let bytes = serde_json::to_vec_pretty(value)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)?;
+    tmp.write_all(&bytes)?;
+    tmp.as_file().sync_all()?;
+    if let Ok(old) = fs::read(path) {
+        let mut backup = tempfile::NamedTempFile::new_in(parent)?;
+        backup.write_all(&old)?;
+        backup.as_file().sync_all()?;
+        backup.persist(path.with_extension("json.bak")).map_err(|e| e.error)?;
+    }
+    tmp.persist(path).map_err(|e| e.error)?;
+    Ok(())
+}
+
+/// F-02 : fusionne les réglages globaux d'un plugin dans `plugin-settings.json` sans jamais écraser un fichier illisible.
+pub fn set_plugin_settings(path: &Path, plugin: &str, settings: &serde_json::Value) -> Result<()> {
+    let mut all = read_json_object(path)?;
+    all[plugin] = settings.clone();
+    write_json_atomic(path, &all)
+}
+
 pub fn save(path: &Path, c: &Config) -> Result<()> {
     c.validate_structure()?;
     let parent = path.parent().context("Dossier de configuration invalide")?;
@@ -238,5 +275,24 @@ mod tests {
         assert!(!backups.is_empty());
         let restored = restore_backup(&path, &backups[0]).unwrap();
         assert_eq!(load(&path).unwrap().brightness, restored.brightness);
+    }
+
+    #[test]
+    fn plugin_settings_merge_atomically_and_never_overwrite_unreadable_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin-settings.json");
+        set_plugin_settings(&path, "a", &serde_json::json!({"x": 1})).unwrap();
+        assert!(!path.with_extension("json.bak").exists(), "pas d'ancien contenu à sauvegarder");
+        set_plugin_settings(&path, "b", &serde_json::json!({"y": 2})).unwrap();
+        let all = read_json_object(&path).unwrap();
+        assert_eq!(all, serde_json::json!({"a": {"x": 1}, "b": {"y": 2}}));
+        assert_eq!(read_json_object(&path.with_extension("json.bak")).unwrap(), serde_json::json!({"a": {"x": 1}}));
+        let truncated = b"{\"a\": {\"x\": 1".to_vec();
+        fs::write(&path, &truncated).unwrap();
+        assert!(set_plugin_settings(&path, "c", &serde_json::json!({})).is_err());
+        assert_eq!(fs::read(&path).unwrap(), truncated, "fichier tronqué intact");
+        fs::write(&path, b"[1,2]").unwrap();
+        assert!(read_json_object(&path).is_err() && set_plugin_settings(&path, "c", &serde_json::json!({})).is_err());
+        assert_eq!(read_json_object(&dir.path().join("absent.json")).unwrap(), serde_json::json!({}));
     }
 }

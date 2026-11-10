@@ -66,7 +66,7 @@ impl Trace {fn open(uuid:&str)->Option<Self>{
  Some(Self{file,entries:0})
 }}
 fn supported_command(message:&Value)->bool {
- matches!(message.get("event").and_then(Value::as_str),Some("registerPlugin"|"registerPropertyInspector"|"logMessage"|"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"openUrl"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"))
+ matches!(message.get("event").and_then(Value::as_str),Some("registerPlugin"|"registerPropertyInspector"|"logMessage"|"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"novydeckTrigger"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"openUrl"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"))
 }
 pub fn unsupported_events(uuid:&str)->Vec<String>{
  if std::env::var("DECKFORGE_PLUGIN_TRACE_UUID").ok().as_deref()!=Some(uuid){return Vec::new();}
@@ -88,7 +88,7 @@ fn trace_message(trace:&mut Option<Trace>,direction:&str,message:&Value,unsuppor
 fn event_label(name:&str)->String{
  // Never persist arbitrary plugin-controlled text: an "event" field may contain a secret.
  // Recognized protocol identifiers are fixed vocabulary; unknown values stay anonymous.
- if matches!(name,"registerPlugin"|"registerPropertyInspector"|"logMessage"|"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"openUrl"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"keyDown"|"keyUp"|"willAppear"|"willDisappear"|"didReceiveSettings"|"didReceiveGlobalSettings"|"titleParametersDidChange"|"deviceDidConnect"|"deviceDidDisconnect"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear") {name.to_owned()} else {"<unknown>".into()}
+ if matches!(name,"registerPlugin"|"registerPropertyInspector"|"logMessage"|"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"novydeckTrigger"|"setSettings"|"getSettings"|"setGlobalSettings"|"getGlobalSettings"|"openUrl"|"sendToPlugin"|"sendToPropertyInspector"|"switchToProfile"|"keyDown"|"keyUp"|"willAppear"|"willDisappear"|"didReceiveSettings"|"didReceiveGlobalSettings"|"titleParametersDidChange"|"deviceDidConnect"|"deviceDidDisconnect"|"propertyInspectorDidAppear"|"propertyInspectorDidDisappear") {name.to_owned()} else {"<unknown>".into()}
 }
 fn trace_stage(trace:&mut Option<Trace>,stage:&str){
  let Some(trace)=trace.as_mut() else{return};if trace.entries>=128{return;}
@@ -103,7 +103,7 @@ fn trace_ws_error(trace:&mut Option<Trace>,stage:&str,error:&tungstenite::Error)
  let Some(trace)=trace.as_mut() else{return};if trace.entries>=128{return;}
  let record=json!({"stage":stage,"category":ws_error_kind(error)});let _=writeln!(trace.file,"{record}");trace.entries+=1;
 }
-struct Pending {ws:tungstenite::WebSocket<std::net::TcpStream>,browser:bool,first:bool,accepted:Instant,warned:bool}
+struct Pending {ws:tungstenite::WebSocket<std::net::TcpStream>,browser:bool,first:bool,accepted:Instant,warned:bool,peer:Result<(),String>}
 #[cfg(windows)] struct Job(windows_sys::Win32::Foundation::HANDLE);
 #[cfg(windows)] impl Job {
  fn new()->std::io::Result<Self>{use windows_sys::Win32::System::JobObjects::*;
@@ -121,6 +121,45 @@ struct Pending {ws:tungstenite::WebSocket<std::net::TcpStream>,browser:bool,firs
  fn close(&mut self){if !self.0.is_null(){unsafe {windows_sys::Win32::Foundation::CloseHandle(self.0)};self.0=std::ptr::null_mut();}}
 }
 #[cfg(windows)] impl Drop for Job {fn drop(&mut self){self.close();}}
+/// S-06 : décision pure. Un client natif n'est le plugin que si le propriétaire de sa connexion TCP appartient au Job du plugin ; pair introuvable = refus (fail-closed).
+fn peer_allowed(peer_pid:Option<u32>,in_job:impl Fn(u32)->bool)->Result<(),String>{
+ match peer_pid {Some(pid) if in_job(pid)=>Ok(()),Some(pid)=>Err(format!("processus étranger (pid {pid})")),None=>Err("processus propriétaire de la connexion introuvable".into())}
+}
+/// Windows : PID propriétaire de l'extrémité distante d'une connexion acceptée (table TCP étendue, IPv4 ou IPv6 selon le pair).
+#[cfg(windows)] fn peer_pid(peer:std::net::SocketAddr,ours:u16)->Result<Option<u32>,String>{
+ use windows_sys::Win32::NetworkManagement::IpHelper::{GetExtendedTcpTable,TCP_TABLE_OWNER_PID_ALL,MIB_TCPTABLE_OWNER_PID,MIB_TCP6TABLE_OWNER_PID};
+ let family:u32=if peer.is_ipv6(){23}else{2};
+ let (mut size,mut buf)=(0u32,Vec::<u64>::new());
+ for _ in 0..8 {
+  let code=unsafe{GetExtendedTcpTable(if buf.is_empty(){std::ptr::null_mut()}else{buf.as_mut_ptr().cast()},&mut size,0,family,TCP_TABLE_OWNER_PID_ALL,0)};
+  match code {
+   0=>{
+    let found=unsafe{match peer {
+     std::net::SocketAddr::V4(peer)=>{let table=&*(buf.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);let rows=std::slice::from_raw_parts(table.table.as_ptr(),table.dwNumEntries as usize);
+      rows.iter().find(|r|u16::from_be(r.dwLocalPort as u16)==peer.port() && u16::from_be(r.dwRemotePort as u16)==ours && std::net::Ipv4Addr::from(r.dwLocalAddr.to_ne_bytes())==*peer.ip()).map(|r|r.dwOwningPid)},
+     std::net::SocketAddr::V6(peer)=>{let table=&*(buf.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);let rows=std::slice::from_raw_parts(table.table.as_ptr(),table.dwNumEntries as usize);
+      rows.iter().find(|r|u16::from_be(r.dwLocalPort as u16)==peer.port() && u16::from_be(r.dwRemotePort as u16)==ours && std::net::Ipv6Addr::from(r.ucLocalAddr)==*peer.ip()).map(|r|r.dwOwningPid)},
+    }};
+    return Ok(found);
+   },
+   122=>{buf=vec![0u64;(size as usize).div_ceil(8)+64];size=(buf.len()*8) as u32;},
+   e=>return Err(format!("lecture de la table TCP impossible (code {e})")),
+  }
+ }
+ Err("lecture de la table TCP impossible (table instable)".into())
+}
+#[cfg(windows)] fn process_in_job(pid:u32,job:windows_sys::Win32::Foundation::HANDLE)->bool{
+ use windows_sys::Win32::System::{Threading::{OpenProcess,PROCESS_QUERY_LIMITED_INFORMATION},JobObjects::IsProcessInJob};
+ unsafe{let handle=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,0,pid);if handle.is_null(){return false;}
+  let mut inside=0;let ok=IsProcessInJob(handle,job,&mut inside);windows_sys::Win32::Foundation::CloseHandle(handle);ok!=0 && inside!=0}
+}
+/// Windows : le pair doit appartenir au Job du plugin. Hors Windows (ou sans Job, ex. tests) le comportement historique est conservé : premier client natif sans Origin.
+#[cfg(windows)] fn native_peer_check(stream:&std::net::TcpStream,job:Option<usize>)->Result<(),String>{
+ let Some(job)=job else{return Ok(())};
+ let peer=stream.peer_addr().map_err(|e|format!("adresse du pair illisible ({e})"))?;let ours=stream.local_addr().map_err(|e|format!("adresse locale illisible ({e})"))?.port();
+ peer_allowed(peer_pid(peer,ours)?,|pid|process_in_job(pid,job as windows_sys::Win32::Foundation::HANDLE))
+}
+#[cfg(not(windows))] fn native_peer_check(_stream:&std::net::TcpStream,_job:Option<usize>)->Result<(),String>{Ok(())}
 fn random_session_id()->anyhow::Result<String>{let mut random=[0u8;16];getrandom::fill(&mut random)?;Ok(random.iter().map(|b|format!("{b:02x}")).collect())}
 fn session_url(server:u16,uuid:&str,path:&str,id:&str)->String{
  let encoded=path.replace('\\',"/").split('/').map(|part|part.replace(' ',"%20")).collect::<Vec<_>>().join("/");
@@ -186,7 +225,9 @@ impl Host {
   let registry=http.as_ref().map(|server|server.inspectors.clone());
   let trace=Trace::open(&plugin.uuid);
   let origin=http.as_ref().map(|s|format!("http://127.0.0.1:{}",s.port));
-  let worker=thread::spawn(move||socket_loop_traced(listener,commands,messages,stopped,registry,trace,origin));
+  #[cfg(windows)] let peer_job=Some(job.0 as usize);
+  #[cfg(not(windows))] let peer_job:Option<usize>=None;
+  let worker=thread::spawn(move||socket_loop_guarded(listener,commands,messages,stopped,registry,trace,origin,peer_job));
   Ok(Self{#[cfg(windows)] job,incoming,outgoing,feedback,ws_port:port,http_port:http.as_ref().map(|h|h.port),inspectors:http.as_ref().map(|h|h.inspectors.clone()),folder:plugin.folder.clone(),uuid:plugin.uuid.clone(),child,worker:Some(worker),stop,inspector_children:Mutex::new(Vec::new()),#[cfg(test)] simulated_inspectors:AtomicBool::new(false),_http:http})
  }
  pub fn open_inspector(&self,path:&str,action_info:Value)->anyhow::Result<String> {
@@ -252,7 +293,9 @@ fn socket_loop(listener:TcpListener,commands:Receiver<Value>,messages:Sender<Val
 fn browser_origin_allowed(origin:Option<&str>,expected:Option<&str>)->bool{
     match origin {None=>true,Some(value)=>expected==Some(value)}
 }
-fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sender<Value>,stop:Arc<AtomicBool>,registry:Option<crate::plugin_http::Inspectors>,mut trace:Option<Trace>,expected_origin:Option<String>){
+fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sender<Value>,stop:Arc<AtomicBool>,registry:Option<crate::plugin_http::Inspectors>,trace:Option<Trace>,expected_origin:Option<String>){socket_loop_guarded(listener,commands,messages,stop,registry,trace,expected_origin,None)}
+/// `job` = handle brut du Job du plugin (Windows) : sert à authentifier le pair natif de registerPlugin (S-06).
+fn socket_loop_guarded(listener:TcpListener,commands:Receiver<Value>,messages:Sender<Value>,stop:Arc<AtomicBool>,registry:Option<crate::plugin_http::Inspectors>,mut trace:Option<Trace>,expected_origin:Option<String>,job:Option<usize>){
     // Browser Origin is mandatory and exact; native/Node clients have no Origin.
     let _=listener.set_nonblocking(true);
     let mut plugin:Option<tungstenite::WebSocket<std::net::TcpStream>>=None;
@@ -261,7 +304,7 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
     let mut queued:std::collections::VecDeque<(Instant,Value)>=std::collections::VecDeque::new();
     let mut inspectors:HashMap<String,tungstenite::WebSocket<std::net::TcpStream>>=HashMap::new();
     while !stop.load(Ordering::Relaxed){
-        match listener.accept(){Ok((stream,_))=>{if pending.len()>=16 {drop(stream);continue;}tcp_count+=1;trace_stage(&mut trace,"tcp_accept");let _=stream.set_nonblocking(false); // Windows : le socket accepté hérite du mode non bloquant de l'écouteur.
+        match listener.accept(){Ok((stream,_))=>{if pending.len()>=16 {drop(stream);continue;}tcp_count+=1;trace_stage(&mut trace,"tcp_accept");let peer=native_peer_check(&stream,job);let _=stream.set_nonblocking(false); // Windows : le socket accepté hérite du mode non bloquant de l'écouteur.
             let _=stream.set_read_timeout(Some(Duration::from_secs(2)));let _=stream.set_write_timeout(Some(Duration::from_secs(1)));
             let mut browser=false;
             let mut ws_cfg=tungstenite::protocol::WebSocketConfig::default();
@@ -273,7 +316,7 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
                     return Err(tungstenite::http::Response::builder().status(403).body(Some("Forbidden".into())).unwrap());
                 }
                 Ok(response)
-            },Some(ws_cfg)){Ok(ws)=>{handshake_count+=1;trace_stage(&mut trace,"handshake_ok");let _=ws.get_ref().set_read_timeout(Some(Duration::from_millis(50)));pending.push(Pending{ws,browser,first:true,accepted:Instant::now(),warned:false});},Err(tungstenite::HandshakeError::Failure(e))=>trace_ws_error(&mut trace,"handshake_error",&e),Err(tungstenite::HandshakeError::Interrupted(_))=>trace_stage(&mut trace,"handshake_interrupted")}},Err(e) if e.kind()==std::io::ErrorKind::WouldBlock=>{},Err(_)=>break}
+            },Some(ws_cfg)){Ok(ws)=>{handshake_count+=1;trace_stage(&mut trace,"handshake_ok");let _=ws.get_ref().set_read_timeout(Some(Duration::from_millis(50)));pending.push(Pending{ws,browser,first:true,accepted:Instant::now(),warned:false,peer});},Err(tungstenite::HandshakeError::Failure(e))=>trace_ws_error(&mut trace,"handshake_error",&e),Err(tungstenite::HandshakeError::Interrupted(_))=>trace_stage(&mut trace,"handshake_interrupted")}},Err(e) if e.kind()==std::io::ErrorKind::WouldBlock=>{},Err(_)=>break}
         for i in (0..pending.len()).rev(){
             let mut removed=false;
             match pending[i].ws.read(){
@@ -290,6 +333,9 @@ fn socket_loop_traced(listener:TcpListener,commands:Receiver<Value>,messages:Sen
                             if let Some(r)=&registry{r.lock().unwrap().remove(value["uuid"].as_str().unwrap());}
                             register_count+=1;trace_stage(&mut trace,"register_html_runtime");plugin=Some(pending.swap_remove(i).ws);removed=true;
                             let mut value=value;if let Some(o)=value.as_object_mut(){o.remove("uuid");}let _=messages.send(value);},
+                        Some("registerPlugin") if plugin.is_none() && !pending[i].browser && pending[i].peer.is_err()=>{
+                            let reason=pending[i].peer.clone().unwrap_err();trace_stage(&mut trace,"register_refused_foreign_peer");
+                            let _=messages.send(json!({"event":"__hostError","reason":format!("registerPlugin refusé : {reason}")}));pending.swap_remove(i);removed=true;},
                         Some("registerPlugin") if plugin.is_none() && !pending[i].browser=>{register_count+=1;trace_stage(&mut trace,"register_plugin");trace_message(&mut trace,"plugin->host",&value,false);plugin=Some(pending.swap_remove(i).ws);removed=true;let _=messages.send(value);},
                         Some("registerPropertyInspector")=>{if let Some(id)=value["uuid"].as_str().filter(|id|!inspectors.contains_key(*id) && registry.as_ref().is_some_and(|r|r.lock().unwrap().contains_key(*id))){let id=id.to_owned();inspectors.insert(id.clone(),pending.swap_remove(i).ws);removed=true;let _=messages.send(json!({"event":"propertyInspectorDidAppear","__pi":id}));}},
                         _=>{}
@@ -493,6 +539,31 @@ impl Drop for Host {fn drop(&mut self){self.stop.store(true,Ordering::Relaxed);
   let handle=unsafe{OpenProcess(PROCESS_SYNCHRONIZE,0,pid)};assert!(!handle.is_null());
   drop(job);assert_eq!(unsafe{WaitForSingleObject(handle,5000)},WAIT_OBJECT_0);
   unsafe{CloseHandle(handle)};let _=parent.wait();
+ }
+ #[test] fn peer_allowed_accepts_only_job_members_and_fails_closed(){
+  assert_eq!(peer_allowed(Some(10),|p|p==10),Ok(()));
+  assert!(peer_allowed(Some(11),|p|p==10).unwrap_err().contains("processus étranger (pid 11)"));
+  assert!(peer_allowed(None,|_|true).unwrap_err().contains("introuvable"));
+ }
+ #[cfg(windows)] #[test] fn foreign_process_cannot_register_plugin_but_job_member_can(){
+  let listener=TcpListener::bind("127.0.0.1:0").unwrap();let port=listener.local_addr().unwrap().port();
+  let (_tx,commands)=mpsc::channel::<Value>();let (messages,rx)=mpsc::channel();let stop=Arc::new(AtomicBool::new(false));let flag=stop.clone();
+  let job=Job::new().unwrap();let handle=job.0 as usize;
+  let worker=thread::spawn(move||socket_loop_guarded(listener,commands,messages,flag,None,None,None,Some(handle)));
+  // Ce processus de test est hors du Job : il passe en premier et doit être refusé puis déconnecté.
+  let (mut foreign,_)=tungstenite::connect(format!("ws://127.0.0.1:{port}")).unwrap();
+  if let tungstenite::stream::MaybeTlsStream::Plain(stream)=foreign.get_mut(){stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();}
+  foreign.send(tungstenite::Message::Text(json!({"event":"registerPlugin","uuid":"intrus"}).to_string().into())).unwrap();
+  let refused=rx.recv_timeout(Duration::from_secs(3)).unwrap();
+  assert_eq!(refused["event"],"__hostError");assert!(refused["reason"].as_str().unwrap().contains("registerPlugin refusé : processus étranger (pid "),"{refused}");
+  assert!(loop{match foreign.read(){Ok(tungstenite::Message::Close(_))|Err(_)=>break true,Ok(_)=>continue}},"connexion étrangère non fermée");
+  // Un vrai client du Job (PowerShell lancé puis assigné) est ensuite accepté.
+  let script=format!("$c=New-Object Net.WebSockets.ClientWebSocket;$c.ConnectAsync('ws://127.0.0.1:{port}',[Threading.CancellationToken]::None).Wait();$b=[Text.Encoding]::UTF8.GetBytes('{{\"event\":\"registerPlugin\",\"uuid\":\"vrai\"}}');$c.SendAsync([ArraySegment[byte]]::new($b),'Text',$true,[Threading.CancellationToken]::None).Wait();Start-Sleep -Seconds 5");
+  let mut child=Command::new("powershell").args(["-NoProfile","-Command",&script]).creation_flags(0x08000000).spawn().unwrap();
+  job.assign(&child).unwrap();
+  let accepted=loop{let m=rx.recv_timeout(Duration::from_secs(30)).expect("plugin du Job non accepté");if m["event"]=="registerPlugin"{break m;}assert_ne!(m["event"],"__hostError","{m}");};
+  assert_eq!(accepted["uuid"],"vrai");
+  let _=child.kill();let _=child.wait();stop.store(true,Ordering::Relaxed);worker.join().unwrap();drop(job);
  }
  #[test] fn slow_handshake_client_still_registers(){
   // Régression : la poignée de main WebSocket arrivant après accept() était abandonnée (WouldBlock).
