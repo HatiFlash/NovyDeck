@@ -1,8 +1,8 @@
 mod mcp_http;
-#[path = "../token_equal.rs"]
-mod token_equal;
 #[path = "../mcp_protocol.rs"]
 mod mcp_protocol;
+#[path = "../token_equal.rs"]
+mod token_equal;
 use serde_json::{json, Value};
 use std::{
     io::{self, BufRead, BufReader, Read, Write},

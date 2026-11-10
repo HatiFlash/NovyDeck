@@ -34,9 +34,18 @@ pub(super) fn clauses(text: &str) -> Vec<String> {
         }
         let comma = ch == ','
             && !matches!((i.checked_sub(1).and_then(|j| chars.get(j)), chars.get(i + 1)), (Some((_, a)), Some((_, b))) if a.is_ascii_digit() && b.is_ascii_digit());
-        let word = [" puis ", " ensuite ", " et ", " après ", " apres ", " then ", " and then ", " and "]
-            .iter()
-            .find(|w| text[at..].to_lowercase().starts_with(*w));
+        let word = [
+            " puis ",
+            " ensuite ",
+            " et ",
+            " après ",
+            " apres ",
+            " then ",
+            " and then ",
+            " and ",
+        ]
+        .iter()
+        .find(|w| text[at..].to_lowercase().starts_with(*w));
         if comma || word.is_some() {
             let part = text[start..at].trim();
             if !part.is_empty() {
@@ -90,7 +99,12 @@ pub(super) fn percent(text: &str) -> Option<u8> {
 
 pub(super) fn duration(text: &str) -> Option<u64> {
     let mut lower = text.to_lowercase().replace(',', ".").replace('-', " ");
-    for phrase in ["une demi seconde", "demi seconde", "half a second", "half second"] {
+    for phrase in [
+        "une demi seconde",
+        "demi seconde",
+        "half a second",
+        "half second",
+    ] {
         lower = lower.replace(phrase, "500 ms");
     }
     let number = |w: &str| -> Option<&'static str> {
@@ -106,7 +120,10 @@ pub(super) fn duration(text: &str) -> Option<u64> {
             _ => return None,
         })
     };
-    let words: Vec<_> = lower.split_whitespace().map(|w| number(w).unwrap_or(w)).collect();
+    let words: Vec<_> = lower
+        .split_whitespace()
+        .map(|w| number(w).unwrap_or(w))
+        .collect();
     for pair in words.windows(2) {
         let Ok(value) = pair[0].parse::<f64>() else {
             continue;

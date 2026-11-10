@@ -22,7 +22,11 @@ fn main() {
         .unwrap_or_else(|| "inconnu".into());
     println!("cargo:rustc-env=DECKFORGE_GIT_HASH={hash}");
     // UTC calendar date, without a dependency or an external date command.
-    let days = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() / 86_400;
+    let days = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        / 86_400;
     let z = days as i64 + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -32,7 +36,9 @@ fn main() {
     let mp = (5 * doy + 2) / 153;
     let day = doy - (153 * mp + 2) / 5 + 1;
     let month = mp + if mp < 10 { 3 } else { -9 };
-    if month <= 2 { year += 1; }
+    if month <= 2 {
+        year += 1;
+    }
     println!("cargo:rustc-env=DECKFORGE_BUILD_DATE={year:04}-{month:02}-{day:02}");
 }
 
@@ -53,7 +59,10 @@ fn embed_icon() {
         res.set_icon("res/novydeck.ico")
             .set_manifest_file("res/windows/novydeck.manifest")
             .set("ProductName", "NovyDeck")
-            .set("FileDescription", "NovyDeck - contrôleur de macros pour FIFINE AmpliGame D6")
+            .set(
+                "FileDescription",
+                "NovyDeck - contrôleur de macros pour FIFINE AmpliGame D6",
+            )
             .set("CompanyName", "HatiFlash")
             .set("LegalCopyright", "© 2026 HatiFlash - licence MIT")
             .set("InternalName", "NovyDeck")
@@ -79,7 +88,12 @@ fn embed_release_notes() {
 fn embed_translations() {
     println!("cargo:rerun-if-changed=res/i18n");
     let mut files: Vec<_> = std::fs::read_dir("res/i18n")
-        .map(|dir| dir.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect())
+        .map(|dir| {
+            dir.filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "json"))
+                .collect()
+        })
         .unwrap_or_default();
     files.sort();
     let mut out = String::from("pub static FILES: &[(&str, &str)] = &[\n");

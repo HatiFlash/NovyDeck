@@ -21,22 +21,39 @@ fn decode_icon(bytes: &[u8]) -> egui::IconData {
     match image::load_from_memory(bytes) {
         Ok(image) => {
             let rgba = image.to_rgba8();
-            egui::IconData { width: rgba.width(), height: rgba.height(), rgba: rgba.into_raw() }
+            egui::IconData {
+                width: rgba.width(),
+                height: rgba.height(),
+                rgba: rgba.into_raw(),
+            }
         }
-        Err(_) => egui::IconData { rgba: vec![0; 32 * 32 * 4], width: 32, height: 32 },
+        Err(_) => egui::IconData {
+            rgba: vec![0; 32 * 32 * 4],
+            width: 32,
+            height: 32,
+        },
     }
 }
 /// 32 × 32 logo (notification-area icon expects exactly this size).
-pub fn app_icon() -> egui::IconData { decode_icon(include_bytes!("../res/branding/novydeck-32.png")) }
+pub fn app_icon() -> egui::IconData {
+    decode_icon(include_bytes!("../res/branding/novydeck-32.png"))
+}
 /// Larger logo for the window and taskbar.
-pub fn window_icon() -> egui::IconData { decode_icon(include_bytes!("../res/branding/novydeck-64.png")) }
+pub fn window_icon() -> egui::IconData {
+    decode_icon(include_bytes!("../res/branding/novydeck-64.png"))
+}
 /// Header logo, uploaded once and kept by egui.
 /// Logo net en grand (intro du démarrage), décodé une seule fois.
 pub fn intro_logo_texture(ctx: &egui::Context) -> egui::TextureHandle {
     let id = egui::Id::new("deckforge_intro_logo_texture");
-    if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) { return texture; }
+    if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+        return texture;
+    }
     let icon = decode_icon(include_bytes!("../res/branding/novydeck-256.png"));
-    let image = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [icon.width as usize, icon.height as usize],
+        &icon.rgba,
+    );
     let texture = ctx.load_texture("deckforge-intro-logo", image, egui::TextureOptions::LINEAR);
     ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
     texture
@@ -44,9 +61,14 @@ pub fn intro_logo_texture(ctx: &egui::Context) -> egui::TextureHandle {
 
 pub fn logo_texture(ctx: &egui::Context) -> egui::TextureHandle {
     let id = egui::Id::new("deckforge_logo_texture");
-    if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) { return texture; }
+    if let Some(texture) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+        return texture;
+    }
     let icon = window_icon();
-    let image = egui::ColorImage::from_rgba_unmultiplied([icon.width as usize, icon.height as usize], &icon.rgba);
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [icon.width as usize, icon.height as usize],
+        &icon.rgba,
+    );
     let texture = ctx.load_texture("deckforge-logo", image, egui::TextureOptions::LINEAR);
     ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
     texture
@@ -102,29 +124,56 @@ pub fn rounded_gradient(
 pub fn rounded_image(p: &egui::Painter, texture: egui::TextureId, r: egui::Rect, radius: f32) {
     let radius = radius.clamp(0.0, r.width().min(r.height()) * 0.5);
     let feather = 1.0 / p.ctx().pixels_per_point();
-    let uv = |pos: egui::Pos2| egui::pos2((pos.x - r.left()) / r.width(), (pos.y - r.top()) / r.height());
+    let uv = |pos: egui::Pos2| {
+        egui::pos2(
+            (pos.x - r.left()) / r.width(),
+            (pos.y - r.top()) / r.height(),
+        )
+    };
     let segments = ((radius * p.ctx().pixels_per_point()).sqrt().ceil() as usize).clamp(2, 12);
     let mut mesh = egui::Mesh::with_texture(texture);
     let inner = r.shrink(feather * 0.5);
     let corner_radius = (radius - feather * 0.5).max(0.0);
-    mesh.vertices.push(egui::epaint::Vertex { pos: r.center(), uv: uv(r.center()), color: Color32::WHITE });
+    mesh.vertices.push(egui::epaint::Vertex {
+        pos: r.center(),
+        uv: uv(r.center()),
+        color: Color32::WHITE,
+    });
     let mut ring = Vec::new();
     for (center, start) in [
-        (inner.left_top() + Vec2::splat(corner_radius), std::f32::consts::PI),
-        (inner.right_top() + Vec2::new(-corner_radius, corner_radius), std::f32::consts::PI * 1.5),
+        (
+            inner.left_top() + Vec2::splat(corner_radius),
+            std::f32::consts::PI,
+        ),
+        (
+            inner.right_top() + Vec2::new(-corner_radius, corner_radius),
+            std::f32::consts::PI * 1.5,
+        ),
         (inner.right_bottom() - Vec2::splat(corner_radius), 0.0),
-        (inner.left_bottom() + Vec2::new(corner_radius, -corner_radius), std::f32::consts::FRAC_PI_2),
+        (
+            inner.left_bottom() + Vec2::new(corner_radius, -corner_radius),
+            std::f32::consts::FRAC_PI_2,
+        ),
     ] {
         for i in 0..=segments {
-            let dir = Vec2::angled(start + i as f32 * std::f32::consts::FRAC_PI_2 / segments as f32);
+            let dir =
+                Vec2::angled(start + i as f32 * std::f32::consts::FRAC_PI_2 / segments as f32);
             ring.push((center + dir * corner_radius, dir));
         }
     }
     let n = ring.len() as u32;
     for &(pos, dir) in &ring {
-        mesh.vertices.push(egui::epaint::Vertex { pos, uv: uv(pos), color: Color32::WHITE });
+        mesh.vertices.push(egui::epaint::Vertex {
+            pos,
+            uv: uv(pos),
+            color: Color32::WHITE,
+        });
         let outer = pos + dir * feather;
-        mesh.vertices.push(egui::epaint::Vertex { pos: outer, uv: uv(outer), color: Color32::TRANSPARENT });
+        mesh.vertices.push(egui::epaint::Vertex {
+            pos: outer,
+            uv: uv(outer),
+            color: Color32::TRANSPARENT,
+        });
     }
     for i in 0..n {
         let j = (i + 1) % n;
@@ -138,7 +187,11 @@ pub fn rounded_image(p: &egui::Painter, texture: egui::TextureId, r: egui::Rect,
 
 pub fn device_shell(p: &egui::Painter, r: egui::Rect) {
     let palette = palette(p.ctx());
-    p.rect_filled(r.translate(Vec2::new(0.0, 10.0)).expand(8.0), 28.0, Color32::from_black_alpha(18));
+    p.rect_filled(
+        r.translate(Vec2::new(0.0, 10.0)).expand(8.0),
+        28.0,
+        Color32::from_black_alpha(18),
+    );
     p.rect_filled(
         r.translate(Vec2::new(0.0, 6.0)).expand(2.0),
         26.0,
@@ -315,13 +368,23 @@ static DARK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(
 pub fn set_theme(scheme: &str, accent: &str) {
     use std::sync::atomic::Ordering::Relaxed;
     if let Some(i) = SCHEMES.iter().position(|s| s.0 == scheme) {
-        if SCHEMES[i].2 { DARK_SCHEME.store(i, Relaxed) } else { LIGHT_SCHEME.store(i, Relaxed) }
+        if SCHEMES[i].2 {
+            DARK_SCHEME.store(i, Relaxed)
+        } else {
+            LIGHT_SCHEME.store(i, Relaxed)
+        }
     }
-    ACCENT.store(ACCENTS.iter().position(|a| a.0 == accent).unwrap_or(0), Relaxed);
+    ACCENT.store(
+        ACCENTS.iter().position(|a| a.0 == accent).unwrap_or(0),
+        Relaxed,
+    );
 }
 /// Couleur d'accent courante.
 pub fn accent() -> Color32 {
-    ACCENTS[ACCENT.load(std::sync::atomic::Ordering::Relaxed).min(ACCENTS.len() - 1)].2
+    ACCENTS[ACCENT
+        .load(std::sync::atomic::Ordering::Relaxed)
+        .min(ACCENTS.len() - 1)]
+    .2
 }
 fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
@@ -330,18 +393,76 @@ fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 /// Palette pure d'un style et d'un accent (testable sans contexte egui).
 pub fn palette_for(scheme: &str, accent: Color32) -> Palette {
     let rgb = Color32::from_rgb;
-    let (bg, surface, card, sunken, overlay, hairline, border, ink, muted, secondary, dark) = match scheme {
-        "graphite" => (rgb(12, 13, 16), rgb(18, 20, 24), rgb(25, 28, 33), rgb(10, 11, 14), rgb(32, 36, 42), rgb(35, 38, 45), rgb(66, 70, 78), rgb(243, 244, 246), rgb(174, 179, 187), rgb(203, 207, 214), true),
-        "clair" => (rgb(245, 246, 248), rgb(255, 255, 255), rgb(240, 242, 245), rgb(235, 237, 241), rgb(255, 255, 255), rgb(228, 231, 236), rgb(192, 199, 208), rgb(14, 17, 22), rgb(86, 93, 103), rgb(67, 74, 85), false),
-        "sable" => (rgb(247, 244, 239), rgb(255, 253, 249), rgb(242, 237, 229), rgb(238, 233, 225), rgb(255, 253, 249), rgb(227, 220, 210), rgb(198, 186, 172), rgb(33, 29, 24), rgb(99, 88, 76), rgb(77, 68, 58), false),
-        _ => (rgb(11, 15, 23), rgb(17, 23, 35), rgb(24, 32, 46), rgb(9, 14, 22), rgb(30, 39, 55), rgb(34, 43, 58), rgb(69, 82, 102), rgb(239, 243, 249), rgb(169, 180, 197), rgb(199, 209, 223), true),
-    };
+    let (bg, surface, card, sunken, overlay, hairline, border, ink, muted, secondary, dark) =
+        match scheme {
+            "graphite" => (
+                rgb(12, 13, 16),
+                rgb(18, 20, 24),
+                rgb(25, 28, 33),
+                rgb(10, 11, 14),
+                rgb(32, 36, 42),
+                rgb(35, 38, 45),
+                rgb(66, 70, 78),
+                rgb(243, 244, 246),
+                rgb(174, 179, 187),
+                rgb(203, 207, 214),
+                true,
+            ),
+            "clair" => (
+                rgb(245, 246, 248),
+                rgb(255, 255, 255),
+                rgb(240, 242, 245),
+                rgb(235, 237, 241),
+                rgb(255, 255, 255),
+                rgb(228, 231, 236),
+                rgb(192, 199, 208),
+                rgb(14, 17, 22),
+                rgb(86, 93, 103),
+                rgb(67, 74, 85),
+                false,
+            ),
+            "sable" => (
+                rgb(247, 244, 239),
+                rgb(255, 253, 249),
+                rgb(242, 237, 229),
+                rgb(238, 233, 225),
+                rgb(255, 253, 249),
+                rgb(227, 220, 210),
+                rgb(198, 186, 172),
+                rgb(33, 29, 24),
+                rgb(99, 88, 76),
+                rgb(77, 68, 58),
+                false,
+            ),
+            _ => (
+                rgb(11, 15, 23),
+                rgb(17, 23, 35),
+                rgb(24, 32, 46),
+                rgb(9, 14, 22),
+                rgb(30, 39, 55),
+                rgb(34, 43, 58),
+                rgb(69, 82, 102),
+                rgb(239, 243, 249),
+                rgb(169, 180, 197),
+                rgb(199, 209, 223),
+                true,
+            ),
+        };
     // Orange and emerald accents need a darker treatment on pale surfaces.
-    let accent = if dark { accent } else if accent == ACCENTS[2].2 { rgb(5, 120, 92) }
-        else if accent == ACCENTS[3].2 { rgb(168, 72, 10) } else { accent };
+    let accent = if dark {
+        accent
+    } else if accent == ACCENTS[2].2 {
+        rgb(5, 120, 92)
+    } else if accent == ACCENTS[3].2 {
+        rgb(168, 72, 10)
+    } else {
+        accent
+    };
     let on_accent = if dark && (accent == ACCENTS[2].2 || accent == ACCENTS[3].2) {
         rgb(11, 15, 23)
-    } else { Color32::WHITE };
+    } else {
+        Color32::WHITE
+    };
     let success = if dark { GREEN } else { rgb(5, 119, 83) };
     let warning = if dark { WARNING } else { rgb(158, 82, 5) };
     let danger = if dark { DANGER } else { rgb(190, 28, 64) };
@@ -355,9 +476,17 @@ pub fn palette_for(scheme: &str, accent: Color32) -> Palette {
         tile: card,
         sidebar: surface,
         card,
-        hover: if dark { mix(card, Color32::WHITE, 0.07) } else { mix(card, ink, 0.04) },
+        hover: if dark {
+            mix(card, Color32::WHITE, 0.07)
+        } else {
+            mix(card, ink, 0.04)
+        },
         accent,
-        accent_hover: if dark { mix(accent, Color32::WHITE, 0.18) } else { mix(accent, Color32::BLACK, 0.12) },
+        accent_hover: if dark {
+            mix(accent, Color32::WHITE, 0.18)
+        } else {
+            mix(accent, Color32::BLACK, 0.12)
+        },
         purple: if dark { PURPLE } else { rgb(124, 58, 237) },
         cyan: if dark { CYAN } else { rgb(8, 115, 148) },
         success,
@@ -383,10 +512,19 @@ pub fn palette_for(scheme: &str, accent: Color32) -> Palette {
 }
 pub fn current_scheme(dark: bool) -> &'static str {
     use std::sync::atomic::Ordering::Relaxed;
-    SCHEMES[if dark { DARK_SCHEME.load(Relaxed) } else { LIGHT_SCHEME.load(Relaxed) }.min(SCHEMES.len() - 1)].0
+    SCHEMES[if dark {
+        DARK_SCHEME.load(Relaxed)
+    } else {
+        LIGHT_SCHEME.load(Relaxed)
+    }
+    .min(SCHEMES.len() - 1)]
+    .0
 }
 fn current_palette() -> Palette {
-    palette_for(current_scheme(DARK.load(std::sync::atomic::Ordering::Relaxed)), accent())
+    palette_for(
+        current_scheme(DARK.load(std::sync::atomic::Ordering::Relaxed)),
+        accent(),
+    )
 }
 
 pub fn palette(ctx: &egui::Context) -> Palette {
@@ -396,7 +534,10 @@ pub fn palette(ctx: &egui::Context) -> Palette {
 pub fn install(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     let strong = egui::FontFamily::Name("strong".into());
-    fonts.families.insert(strong.clone(), fonts.families[&egui::FontFamily::Proportional].clone());
+    fonts.families.insert(
+        strong.clone(),
+        fonts.families[&egui::FontFamily::Proportional].clone(),
+    );
     let windir = std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into());
     if let Ok(bytes) = std::fs::read(std::path::PathBuf::from(&windir).join("Fonts/segoeui.ttf")) {
         fonts
@@ -407,11 +548,22 @@ pub fn install(ctx: &egui::Context) {
             .get_mut(&egui::FontFamily::Proportional)
             .unwrap()
             .insert(0, "system-ui".into());
-        fonts.families.get_mut(&strong).unwrap().push("system-ui".into());
+        fonts
+            .families
+            .get_mut(&strong)
+            .unwrap()
+            .push("system-ui".into());
     }
     if let Ok(bytes) = std::fs::read(std::path::PathBuf::from(&windir).join("Fonts/seguisb.ttf")) {
-        fonts.font_data.insert("system-strong".into(), egui::FontData::from_owned(bytes).into());
-        fonts.families.get_mut(&strong).unwrap().insert(0, "system-strong".into());
+        fonts.font_data.insert(
+            "system-strong".into(),
+            egui::FontData::from_owned(bytes).into(),
+        );
+        fonts
+            .families
+            .get_mut(&strong)
+            .unwrap()
+            .insert(0, "system-strong".into());
     }
     ctx.set_fonts(fonts);
     apply(ctx, true);
@@ -439,7 +591,12 @@ pub fn apply(ctx: &egui::Context, dark: bool) {
     style.visuals.selection.stroke = Stroke::new(2.0, Color32::WHITE);
     style.visuals.window_corner_radius = egui::CornerRadius::same(RADIUS_LG);
     style.visuals.window_stroke = Stroke::new(1.0_f32, p.hairline);
-    style.visuals.window_shadow = egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(if dark { 102 } else { 28 }) };
+    style.visuals.window_shadow = egui::epaint::Shadow {
+        offset: [0, 8],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_black_alpha(if dark { 102 } else { 28 }),
+    };
     style.visuals.popup_shadow = style.visuals.window_shadow;
     style.visuals.menu_corner_radius = egui::CornerRadius::same(RADIUS_MD);
     style.visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::same(RADIUS_MD);
@@ -500,29 +657,52 @@ pub fn checkbox(ui: &mut egui::Ui, checked: &mut bool, label: &str) -> egui::Res
     let height = ui.spacing().interact_size.y.max(galley.size().y);
     let size = Vec2::new(icon + ui.spacing().icon_spacing + galley.size().x, height);
     let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
-    if response.clicked() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Space))) {
+    if response.clicked() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Space)))
+    {
         *checked = !*checked;
         response.mark_changed();
     }
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *checked, label));
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *checked, label)
+    });
     if ui.is_rect_visible(rect) {
         let box_rect = egui::Rect::from_center_size(
-            egui::pos2(rect.min.x + icon * 0.5, rect.center().y), Vec2::splat(icon),
+            egui::pos2(rect.min.x + icon * 0.5, rect.center().y),
+            Vec2::splat(icon),
         );
-        let border = if response.hovered() || response.has_focus() { p.accent } else { p.text_tertiary };
+        let border = if response.hovered() || response.has_focus() {
+            p.accent
+        } else {
+            p.text_tertiary
+        };
         let fill = if *checked { p.accent } else { p.surface };
         ui.painter().rect_filled(box_rect, 4.0, fill);
-        ui.painter().rect_stroke(box_rect, 4.0, Stroke::new(1.5, border), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(
+            box_rect,
+            4.0,
+            Stroke::new(1.5, border),
+            egui::StrokeKind::Inside,
+        );
         if *checked {
             let at = |x: f32, y: f32| box_rect.min + Vec2::new(icon * x, icon * y);
             let tick = Stroke::new(2.0, p.on_accent);
-            ui.painter().line_segment([at(0.22, 0.52), at(0.43, 0.72)], tick);
-            ui.painter().line_segment([at(0.43, 0.72), at(0.79, 0.30)], tick);
+            ui.painter()
+                .line_segment([at(0.22, 0.52), at(0.43, 0.72)], tick);
+            ui.painter()
+                .line_segment([at(0.43, 0.72), at(0.79, 0.30)], tick);
         }
         if response.has_focus() {
-            ui.painter().rect_stroke(box_rect.expand(2.0), 5.0, Stroke::new(1.0, p.accent_ring), egui::StrokeKind::Outside);
+            ui.painter().rect_stroke(
+                box_rect.expand(2.0),
+                5.0,
+                Stroke::new(1.0, p.accent_ring),
+                egui::StrokeKind::Outside,
+            );
         }
-        let text_pos = egui::pos2(box_rect.max.x + ui.spacing().icon_spacing, rect.center().y - galley.size().y * 0.5);
+        let text_pos = egui::pos2(
+            box_rect.max.x + ui.spacing().icon_spacing,
+            rect.center().y - galley.size().y * 0.5,
+        );
         ui.painter().galley(text_pos, galley, p.text_primary);
     }
     response
@@ -537,7 +717,10 @@ pub fn primary(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {
 }
 
 pub fn ghost_button(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {
-    egui::Button::new(text).fill(current_palette().raised).stroke(Stroke::NONE).corner_radius(RADIUS_SM)
+    egui::Button::new(text)
+        .fill(current_palette().raised)
+        .stroke(Stroke::NONE)
+        .corner_radius(RADIUS_SM)
 }
 
 pub fn icon_button(ui: &mut egui::Ui, icon: crate::iconset::Ico, label: &str) -> egui::Response {
@@ -545,7 +728,11 @@ pub fn icon_button(ui: &mut egui::Ui, icon: crate::iconset::Ico, label: &str) ->
     let button = match image {
         Some(image) => egui::Button::image_and_text(image, ""),
         None => ghost_button(label),
-    }.fill(Color32::TRANSPARENT).stroke(Stroke::NONE).corner_radius(RADIUS_SM).min_size(Vec2::splat(28.0));
+    }
+    .fill(Color32::TRANSPARENT)
+    .stroke(Stroke::NONE)
+    .corner_radius(RADIUS_SM)
+    .min_size(Vec2::splat(28.0));
     ui.add(button).on_hover_text(label)
 }
 
@@ -556,80 +743,167 @@ pub fn strong(size: f32) -> egui::FontId {
 pub fn overline(ui: &mut egui::Ui, text: &str) {
     let p = palette(ui.ctx());
     let mut job = egui::text::LayoutJob::default();
-    job.append(&text.to_uppercase(), 0.0, egui::TextFormat {
-        font_id: strong(11.0), color: p.text_tertiary, extra_letter_spacing: 0.6, ..Default::default()
-    });
+    job.append(
+        &text.to_uppercase(),
+        0.0,
+        egui::TextFormat {
+            font_id: strong(11.0),
+            color: p.text_tertiary,
+            extra_letter_spacing: 0.6,
+            ..Default::default()
+        },
+    );
     ui.label(job);
 }
 
-pub fn list_row(ui: &mut egui::Ui, height: f32, selected: bool, sense: egui::Sense) -> (egui::Rect, egui::Response) {
+pub fn list_row(
+    ui: &mut egui::Ui,
+    height: f32,
+    selected: bool,
+    sense: egui::Sense,
+) -> (egui::Rect, egui::Response) {
     let p = palette(ui.ctx());
     let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), sense);
-    let t = ui.ctx().animate_bool_with_time(response.id, response.hovered(), ui.style().animation_time.min(0.12));
+    let t = ui.ctx().animate_bool_with_time(
+        response.id,
+        response.hovered(),
+        ui.style().animation_time.min(0.12),
+    );
     if selected || t > 0.0 {
-        ui.painter().rect_filled(rect, 8.0, if selected { p.accent_soft } else { mix(p.surface, p.hover, t) });
+        ui.painter().rect_filled(
+            rect,
+            8.0,
+            if selected {
+                p.accent_soft
+            } else {
+                mix(p.surface, p.hover, t)
+            },
+        );
     }
     if selected {
-        ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())), 1.0, p.accent);
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())),
+            1.0,
+            p.accent,
+        );
     }
     (rect, response)
 }
 
-pub fn segmented(ui: &mut egui::Ui, selected: bool, text: impl Into<egui::WidgetText>) -> egui::Response {
+pub fn segmented(
+    ui: &mut egui::Ui,
+    selected: bool,
+    text: impl Into<egui::WidgetText>,
+) -> egui::Response {
     let p = palette(ui.ctx());
-    ui.add(egui::Button::new(text).selected(selected)
-        .fill(if selected { p.raised } else { p.sunken })
-        .stroke(Stroke::NONE).corner_radius(7))
+    ui.add(
+        egui::Button::new(text)
+            .selected(selected)
+            .fill(if selected { p.raised } else { p.sunken })
+            .stroke(Stroke::NONE)
+            .corner_radius(7),
+    )
 }
 
 /// Bouton flèche de pagination : chevron dessiné (net à toutes les échelles), fond au survol.
 pub fn chevron_button(ui: &mut egui::Ui, left: bool, enabled: bool) -> egui::Response {
     let p = palette(ui.ctx());
-    let sense = if enabled { egui::Sense::click() } else { egui::Sense::hover() };
+    let sense = if enabled {
+        egui::Sense::click()
+    } else {
+        egui::Sense::hover()
+    };
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(24.0), sense);
-    let hover = ui.ctx().animate_bool_with_time(response.id, enabled && response.hovered(), ui.style().animation_time.min(0.1));
+    let hover = ui.ctx().animate_bool_with_time(
+        response.id,
+        enabled && response.hovered(),
+        ui.style().animation_time.min(0.1),
+    );
     if hover > 0.0 {
-        ui.painter().rect_filled(rect, 7.0, p.raised.gamma_multiply(hover));
+        ui.painter()
+            .rect_filled(rect, 7.0, p.raised.gamma_multiply(hover));
     }
-    let color = if !enabled { p.muted.gamma_multiply(0.45) } else if response.hovered() { p.ink } else { p.text_secondary };
+    let color = if !enabled {
+        p.muted.gamma_multiply(0.45)
+    } else if response.hovered() {
+        p.ink
+    } else {
+        p.text_secondary
+    };
     let c = rect.center();
     let (dx, dy) = (3.0, 5.0);
-    let (tip, back) = if left { (c.x - dx, c.x + dx) } else { (c.x + dx, c.x - dx) };
+    let (tip, back) = if left {
+        (c.x - dx, c.x + dx)
+    } else {
+        (c.x + dx, c.x - dx)
+    };
     ui.painter().add(egui::Shape::line(
-        vec![egui::pos2(back, c.y - dy), egui::pos2(tip, c.y), egui::pos2(back, c.y + dy)],
+        vec![
+            egui::pos2(back, c.y - dy),
+            egui::pos2(tip, c.y),
+            egui::pos2(back, c.y + dy),
+        ],
         Stroke::new(1.6_f32, color),
     ));
-    let label = if left { crate::i18n::tr("Page précédente") } else { crate::i18n::tr("Page suivante") };
+    let label = if left {
+        crate::i18n::tr("Page précédente")
+    } else {
+        crate::i18n::tr("Page suivante")
+    };
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     response
 }
 
-pub fn underline_tabs(ui: &mut egui::Ui, selected: bool, text: impl Into<egui::WidgetText>) -> egui::Response {
+pub fn underline_tabs(
+    ui: &mut egui::Ui,
+    selected: bool,
+    text: impl Into<egui::WidgetText>,
+) -> egui::Response {
     let p = palette(ui.ctx());
     let response = ui.add(ghost_button(text).fill(Color32::TRANSPARENT));
     if selected {
-        ui.painter().line_segment([response.rect.left_bottom(), response.rect.right_bottom()], Stroke::new(2.0, p.accent));
+        ui.painter().line_segment(
+            [response.rect.left_bottom(), response.rect.right_bottom()],
+            Stroke::new(2.0, p.accent),
+        );
     }
     response
 }
 
 pub fn search_field(ui: &mut egui::Ui, value: &mut String, placeholder: &str) -> egui::Response {
     let p = palette(ui.ctx());
-    egui::Frame::new().fill(p.sunken).stroke(Stroke::new(1.0, p.hairline))
-        .corner_radius(RADIUS_SM).inner_margin(egui::Margin::symmetric(8, 5))
+    egui::Frame::new()
+        .fill(p.sunken)
+        .stroke(Stroke::new(1.0, p.hairline))
+        .corner_radius(RADIUS_SM)
+        .inner_margin(egui::Margin::symmetric(8, 5))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), egui::Sense::hover());
                 let center = rect.center() - Vec2::new(1.5, 1.5);
-                ui.painter().circle_stroke(center, 4.5, Stroke::new(1.5, p.text_tertiary));
-                ui.painter().line_segment([center + Vec2::new(3.2, 3.2), center + Vec2::new(6.5, 6.5)], Stroke::new(1.5, p.text_tertiary));
-                ui.add(egui::TextEdit::singleline(value).frame(false).desired_width(f32::INFINITY).hint_text(placeholder))
-            }).inner
-        }).inner
+                ui.painter()
+                    .circle_stroke(center, 4.5, Stroke::new(1.5, p.text_tertiary));
+                ui.painter().line_segment(
+                    [center + Vec2::new(3.2, 3.2), center + Vec2::new(6.5, 6.5)],
+                    Stroke::new(1.5, p.text_tertiary),
+                );
+                ui.add(
+                    egui::TextEdit::singleline(value)
+                        .frame(false)
+                        .desired_width(f32::INFINITY)
+                        .hint_text(placeholder),
+                )
+            })
+            .inner
+        })
+        .inner
 }
 
 pub fn card(p: Palette) -> egui::Frame {
-    egui::Frame::new().fill(p.raised).corner_radius(RADIUS_MD).inner_margin(egui::Margin::same(12))
+    egui::Frame::new()
+        .fill(p.raised)
+        .corner_radius(RADIUS_MD)
+        .inner_margin(egui::Margin::same(12))
 }
 
 #[allow(dead_code)] // used by the upcoming layout refresh
@@ -706,7 +980,11 @@ pub fn toggle(ui: &mut egui::Ui, value: &mut bool) -> egui::Response {
     }
     let p = palette(ui.ctx());
     let t = ui.ctx().animate_bool(response.id, *value);
-    let off_bg = if response.hovered() { p.hover } else { p.border };
+    let off_bg = if response.hovered() {
+        p.hover
+    } else {
+        p.border
+    };
     let on_bg = if response.hovered() {
         p.accent_hover
     } else {
@@ -1067,10 +1345,24 @@ mod theme_tests {
             include_bytes!("../res/branding/novydeck-256.png").as_slice(),
         ] {
             let image = image::load_from_memory(bytes).unwrap().to_rgba8();
-            for (x, y) in [(0, 0), (image.width() - 1, 0), (0, image.height() - 1), (image.width() - 1, image.height() - 1)] {
-                assert_eq!(image.get_pixel(x, y).0[3], 0, "logo corner must be transparent");
+            for (x, y) in [
+                (0, 0),
+                (image.width() - 1, 0),
+                (0, image.height() - 1),
+                (image.width() - 1, image.height() - 1),
+            ] {
+                assert_eq!(
+                    image.get_pixel(x, y).0[3],
+                    0,
+                    "logo corner must be transparent"
+                );
             }
-            assert!(image.pixels().any(|pixel| pixel.0[3] > 0 && pixel.0[3] < 255), "logo must retain semi-transparent pixels");
+            assert!(
+                image
+                    .pixels()
+                    .any(|pixel| pixel.0[3] > 0 && pixel.0[3] < 255),
+                "logo must retain semi-transparent pixels"
+            );
         }
         let icon = super::window_icon();
         assert_eq!(icon.rgba[3], 0, "window icon corner must be transparent");
@@ -1079,7 +1371,14 @@ mod theme_tests {
     #[test]
     fn every_scheme_and_accent_keeps_readable_text_and_buttons() {
         fn lum(c: super::Color32) -> f32 {
-            let f = |v: u8| { let v = v as f32 / 255.0; if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) } };
+            let f = |v: u8| {
+                let v = v as f32 / 255.0;
+                if v <= 0.03928 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
             0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
         }
         fn contrast(a: super::Color32, b: super::Color32) -> f32 {
@@ -1091,12 +1390,27 @@ mod theme_tests {
                 let p = super::palette_for(scheme, accent);
                 assert!(contrast(p.ink, p.bg) >= 7.0, "{scheme}: texte/fond");
                 for surface in [p.surface, p.raised] {
-                    for (role, color) in [("primary", p.text_primary), ("secondary", p.text_secondary), ("tertiary", p.text_tertiary)] {
-                        assert!(contrast(color, surface) >= 4.5, "{scheme}/{accent:?}: {role} contraste {:?}", surface);
+                    for (role, color) in [
+                        ("primary", p.text_primary),
+                        ("secondary", p.text_secondary),
+                        ("tertiary", p.text_tertiary),
+                    ] {
+                        assert!(
+                            contrast(color, surface) >= 4.5,
+                            "{scheme}/{accent:?}: {role} contraste {:?}",
+                            surface
+                        );
                     }
-                    assert!(contrast(p.accent, surface) >= 3.0, "{scheme}/{accent:?}: accent sur surface {:?}", surface);
+                    assert!(
+                        contrast(p.accent, surface) >= 3.0,
+                        "{scheme}/{accent:?}: accent sur surface {:?}",
+                        surface
+                    );
                 }
-                assert!(contrast(p.on_accent, p.accent) >= 3.0, "{scheme}/{accent:?}: bouton principal");
+                assert!(
+                    contrast(p.on_accent, p.accent) >= 3.0,
+                    "{scheme}/{accent:?}: bouton principal"
+                );
             }
         }
     }

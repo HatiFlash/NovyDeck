@@ -10,20 +10,28 @@ use std::hash::Hash;
 /// Windows accessibility setting, read once at startup (headless tests keep animations enabled).
 pub fn system_animations() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if cfg!(test) { return true; } // CI runners disable Windows animations; tests drive the preference.
+    if cfg!(test) {
+        return true;
+    } // CI runners disable Windows animations; tests drive the preference.
     *ENABLED.get_or_init(|| {
         #[cfg(windows)]
         {
             let mut enabled: i32 = 1;
             // A failed query must not silently turn off the user's saved preference.
-            let ok = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::SystemParametersInfoW(
-                windows_sys::Win32::UI::WindowsAndMessaging::SPI_GETCLIENTAREAANIMATION,
-                0, &mut enabled as *mut i32 as *mut _, 0,
-            ) };
+            let ok = unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::SystemParametersInfoW(
+                    windows_sys::Win32::UI::WindowsAndMessaging::SPI_GETCLIENTAREAANIMATION,
+                    0,
+                    &mut enabled as *mut i32 as *mut _,
+                    0,
+                )
+            };
             ok == 0 || enabled != 0
         }
         #[cfg(not(windows))]
-        { true }
+        {
+            true
+        }
     })
 }
 
@@ -45,10 +53,17 @@ fn now(ctx: &egui::Context) -> f64 {
 
 /// Avancement 0 → 1 depuis le dernier changement de `key` pour `id`.
 /// Premier affichage : pas d'animation (1.0).
-pub fn progress(ctx: &egui::Context, id: egui::Id, key: impl Hash, seconds: f64, enabled: bool) -> f32 {
+pub fn progress(
+    ctx: &egui::Context,
+    id: egui::Id,
+    key: impl Hash,
+    seconds: f64,
+    enabled: bool,
+) -> f32 {
     let key = egui::Id::new(key).value();
     let time = now(ctx);
-    let (last, start) = ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || (key, f64::NEG_INFINITY)));
+    let (last, start) =
+        ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(id, || (key, f64::NEG_INFINITY)));
     let start = if last != key {
         ctx.data_mut(|d| d.insert_temp(id, (key, time)));
         time
@@ -68,26 +83,46 @@ pub fn progress(ctx: &egui::Context, id: egui::Id, key: impl Hash, seconds: f64,
 
 /// Fondu du contenu quand `key` change, de transparent à opaque.
 pub fn fade(ui: &mut egui::Ui, id: &str, key: impl Hash, _from: f32, enabled: bool) {
-    let t = progress(ui.ctx(), egui::Id::new(("motion_fade", id)), key, FADE, enabled);
-    if t < 1.0 { ui.set_opacity(t); }
+    let t = progress(
+        ui.ctx(),
+        egui::Id::new(("motion_fade", id)),
+        key,
+        FADE,
+        enabled,
+    );
+    if t < 1.0 {
+        ui.set_opacity(t);
+    }
 }
 
 /// Position de l'indicateur : mémorise le rectangle précédent, sans déplacer les hit-tests.
-pub fn indicator(ctx: &egui::Context, id: egui::Id, target: egui::Rect, enabled: bool) -> egui::Rect {
+pub fn indicator(
+    ctx: &egui::Context,
+    id: egui::Id,
+    target: egui::Rect,
+    enabled: bool,
+) -> egui::Rect {
     let time = now(ctx);
     let (from, to, start) = ctx.data_mut(|d| {
         let state = d.get_temp_mut_or_insert_with(id, || (target, target, time - FADE));
         if state.1 != target {
             let t = ease_out(((time - state.2) / FADE) as f32);
-            state.0 = egui::Rect::from_min_max(state.0.min.lerp(state.1.min, t), state.0.max.lerp(state.1.max, t));
+            state.0 = egui::Rect::from_min_max(
+                state.0.min.lerp(state.1.min, t),
+                state.0.max.lerp(state.1.max, t),
+            );
             state.1 = target;
             state.2 = time;
         }
         *state
     });
-    if !enabled { return target; }
+    if !enabled {
+        return target;
+    }
     let t = ease_out(((time - start) / FADE) as f32);
-    if t < 1.0 { ctx.request_repaint(); }
+    if t < 1.0 {
+        ctx.request_repaint();
+    }
     egui::Rect::from_min_max(from.min.lerp(to.min, t), from.max.lerp(to.max, t))
 }
 
@@ -103,22 +138,40 @@ pub struct Slide {
 pub fn begin_slide(ui: &egui::Ui, id: &str, index: i32, enabled: bool) -> Slide {
     let ctx = ui.ctx();
     let direction = ctx.data_mut(|d| {
-        let slot = d.get_temp_mut_or_insert_with(egui::Id::new(("slide_index", id)), || (index, 1.0_f32));
+        let slot =
+            d.get_temp_mut_or_insert_with(egui::Id::new(("slide_index", id)), || (index, 1.0_f32));
         if slot.0 != index {
             slot.1 = if index > slot.0 { 1.0 } else { -1.0 };
             slot.0 = index;
         }
         slot.1
     });
-    let t = progress(ctx, egui::Id::new(("slide_progress", id)), index, FADE, enabled);
+    let t = progress(
+        ctx,
+        egui::Id::new(("slide_progress", id)),
+        index,
+        FADE,
+        enabled,
+    );
     let layer = ui.layer_id();
     let first = ctx.graphics_mut(|g| g.entry(layer).next_idx().0);
-    Slide { first, layer, clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()), offset: direction * 72.0 * (1.0 - t) }
+    Slide {
+        first,
+        layer,
+        clip: ui.clip_rect().intersect(ui.available_rect_before_wrap()),
+        offset: direction * 72.0 * (1.0 - t),
+    }
 }
 
 /// Draw-only displacement for workshop cards; layout and hit-tests retain their original rects.
 /// The target can change repeatedly while a slot is being hovered: restart from the painted position.
-pub fn workshop_card(ctx: &egui::Context, id: egui::Id, target: egui::Pos2, inserted: bool, enabled: bool) -> (egui::Vec2, f32) {
+pub fn workshop_card(
+    ctx: &egui::Context,
+    id: egui::Id,
+    target: egui::Pos2,
+    inserted: bool,
+    enabled: bool,
+) -> (egui::Vec2, f32) {
     let now = ctx.input(|i| i.time);
     let previous = ctx.data(|d| d.get_temp::<(egui::Pos2, egui::Pos2, f64, f64)>(id));
     if !enabled {
@@ -135,7 +188,9 @@ pub fn workshop_card(ctx: &egui::Context, id: egui::Id, target: egui::Pos2, inse
     };
     let t = ((now - start) / 0.22).clamp(0.0, 1.0) as f32;
     let offset = origin.lerp(destination, ease_out(t)) - target;
-    let pop = if born < 0.0 { 1.0 } else {
+    let pop = if born < 0.0 {
+        1.0
+    } else {
         let u = ((now - born) / 0.22).clamp(0.0, 1.0) as f32;
         1.0 + 0.10 * (1.0 - u).powi(2) * (u * std::f32::consts::PI * 2.0).sin()
             - 0.12 * (1.0 - ease_out((u * 2.0).min(1.0)))
@@ -148,7 +203,9 @@ pub fn workshop_card(ctx: &egui::Context, id: egui::Id, target: egui::Pos2, inse
 }
 
 pub fn end_slide(ui: &egui::Ui, slide: Slide) {
-    if slide.offset.abs() < 0.01 { return; }
+    if slide.offset.abs() < 0.01 {
+        return;
+    }
     let ctx = ui.ctx();
     ctx.graphics_mut(|g| {
         let paint = g.entry(slide.layer);
@@ -164,10 +221,16 @@ pub fn end_slide(ui: &egui::Ui, slide: Slide) {
 
 /// Impulsion amortie sur la face peinte seulement (les rectangles interactifs restent fixes).
 pub fn bounce(t: f32) -> f32 {
-    if t >= 1.0 { return 1.0; }
-    if t < 0.38 { 1.0 - 0.08 * ease_out(t / 0.38) }
-    else if t < 0.70 { 0.92 + 0.12 * ease_out((t - 0.38) / 0.32) }
-    else { 1.04 - 0.04 * ease_out((t - 0.70) / 0.30) }
+    if t >= 1.0 {
+        return 1.0;
+    }
+    if t < 0.38 {
+        1.0 - 0.08 * ease_out(t / 0.38)
+    } else if t < 0.70 {
+        0.92 + 0.12 * ease_out((t - 0.38) / 0.32)
+    } else {
+        1.04 - 0.04 * ease_out((t - 0.70) / 0.30)
+    }
 }
 
 /// Interpole une nouvelle couleur de boîtier sans toucher aux rectangles ni au choix sauvegardé.
@@ -175,14 +238,20 @@ pub fn deck_color(ctx: &egui::Context, color: Option<[u8; 3]>, enabled: bool) ->
     let id = egui::Id::new("deck_color_previous");
     let (previous, current) = ctx.data_mut(|d| {
         let pair = d.get_temp_mut_or_insert_with(id, || (color, color));
-        if pair.1 != color { *pair = (pair.1, color); }
+        if pair.1 != color {
+            *pair = (pair.1, color);
+        }
         *pair
     });
     let t = progress(ctx, id.with("fade"), color, 0.18, enabled);
-    if t >= 1.0 { return current; }
+    if t >= 1.0 {
+        return current;
+    }
     let old = previous.unwrap_or([30, 35, 42]);
     let new = current.unwrap_or([30, 35, 42]);
-    Some(std::array::from_fn(|i| (old[i] as f32 + (new[i] as f32 - old[i] as f32) * t).round() as u8))
+    Some(std::array::from_fn(|i| {
+        (old[i] as f32 + (new[i] as f32 - old[i] as f32) * t).round() as u8
+    }))
 }
 
 fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
@@ -191,7 +260,13 @@ fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 }
 
 /// Peint l'indicateur NovyDeck : 4 touches (2 × 2) qui s'allument tour à tour, comme le logo.
-pub fn paint_loader(painter: &egui::Painter, center: egui::Pos2, size: f32, accent: Color32, time: f64) {
+pub fn paint_loader(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    size: f32,
+    accent: Color32,
+    time: f64,
+) {
     let gap = size * 0.12;
     let cell = (size - gap) / 2.0;
     // Ordre horaire : haut gauche, haut droite, bas droite, bas gauche.
@@ -215,7 +290,13 @@ pub fn paint_loader(painter: &egui::Painter, center: egui::Pos2, size: f32, acce
 pub fn loader(ui: &mut egui::Ui, size: f32) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
     if ui.is_rect_visible(rect) {
-        paint_loader(ui.painter(), rect.center(), size, crate::theme::accent(), now(ui.ctx()));
+        paint_loader(
+            ui.painter(),
+            rect.center(),
+            size,
+            crate::theme::accent(),
+            now(ui.ctx()),
+        );
         ui.ctx().request_repaint();
     }
     response
@@ -230,10 +311,20 @@ pub fn loading(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
 }
 
 /// Point d'état qui « respire » pendant une attente (connexion du périphérique…).
-pub fn status_dot(painter: &egui::Painter, center: egui::Pos2, color: Color32, waiting: bool, enabled: bool) {
+pub fn status_dot(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    color: Color32,
+    waiting: bool,
+    enabled: bool,
+) {
     if waiting && enabled {
         let t = (now(painter.ctx()) * 1.4).rem_euclid(1.0) as f32;
-        painter.circle_filled(center, 4.0 + 6.0 * ease_out(t), color.gamma_multiply(0.45 * (1.0 - t)));
+        painter.circle_filled(
+            center,
+            4.0 + 6.0 * ease_out(t),
+            color.gamma_multiply(0.45 * (1.0 - t)),
+        );
         painter.ctx().request_repaint();
     }
     painter.circle_filled(center, 4.0, color);
@@ -251,8 +342,15 @@ pub fn intro(ctx: &egui::Context, logo: &egui::TextureHandle, enabled: bool) -> 
     }
     let p = crate::theme::palette(ctx);
     let screen = ctx.screen_rect();
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("motion_intro")));
-    let veil = if elapsed < INTRO_HOLD { 1.0 } else { 1.0 - ease_out(((elapsed - INTRO_HOLD) / (INTRO - INTRO_HOLD)) as f32) };
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("motion_intro"),
+    ));
+    let veil = if elapsed < INTRO_HOLD {
+        1.0
+    } else {
+        1.0 - ease_out(((elapsed - INTRO_HOLD) / (INTRO - INTRO_HOLD)) as f32)
+    };
     painter.rect_filled(screen, 0.0, p.bg.gamma_multiply(veil));
     let appear = ease_out((elapsed / 0.45) as f32);
     let alpha = appear * veil;
@@ -260,7 +358,10 @@ pub fn intro(ctx: &egui::Context, logo: &egui::TextureHandle, enabled: bool) -> 
     let size = 112.0 * (0.82 + 0.18 * appear);
     painter.image(
         logo.id(),
-        egui::Rect::from_center_size(center - Vec2::new(0.0, 10.0 * (1.0 - appear)), Vec2::splat(size)),
+        egui::Rect::from_center_size(
+            center - Vec2::new(0.0, 10.0 * (1.0 - appear)),
+            Vec2::splat(size),
+        ),
         egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
         Color32::WHITE.gamma_multiply(alpha),
     );
@@ -271,7 +372,13 @@ pub fn intro(ctx: &egui::Context, logo: &egui::TextureHandle, enabled: bool) -> 
         egui::FontId::proportional(26.0),
         p.ink.gamma_multiply(alpha),
     );
-    paint_loader(&painter, center + Vec2::new(0.0, 124.0), 22.0, p.accent.gamma_multiply(alpha), time);
+    paint_loader(
+        &painter,
+        center + Vec2::new(0.0, 124.0),
+        22.0,
+        p.accent.gamma_multiply(alpha),
+        time,
+    );
     ctx.request_repaint();
     true
 }
@@ -281,7 +388,10 @@ mod tests {
     use super::*;
 
     fn frame(ctx: &egui::Context, time: f64, add: impl FnMut(&mut egui::Ui)) {
-        let input = egui::RawInput { time: Some(time), ..Default::default() };
+        let input = egui::RawInput {
+            time: Some(time),
+            ..Default::default()
+        };
         let mut add = add;
         let _ = ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| add(ui));
@@ -309,15 +419,29 @@ mod tests {
             if i == 3 {
                 key = 2;
             }
-            frame(&ctx, time, |ui| seen.push(progress(ui.ctx(), egui::Id::new("t"), key, FADE, true)));
+            frame(&ctx, time, |ui| {
+                seen.push(progress(ui.ctx(), egui::Id::new("t"), key, FADE, true))
+            });
         }
-        assert_eq!(&seen[..3], &[1.0, 1.0, 1.0], "pas d'animation au premier affichage");
+        assert_eq!(
+            &seen[..3],
+            &[1.0, 1.0, 1.0],
+            "pas d'animation au premier affichage"
+        );
         assert_eq!(seen[3], 0.0, "le changement relance le fondu");
         assert!(seen[4] > 0.0 && seen[4] < 1.0);
         assert_eq!(seen[6], 1.0, "fini après {FADE} s");
         let ctx = egui::Context::default();
-        frame(&ctx, 0.0, |ui| assert_eq!(progress(ui.ctx(), egui::Id::new("t"), 1, FADE, false), 1.0));
-        frame(&ctx, 0.1, |ui| assert_eq!(progress(ui.ctx(), egui::Id::new("t"), 2, FADE, false), 1.0, "« Réduire les animations »"));
+        frame(&ctx, 0.0, |ui| {
+            assert_eq!(progress(ui.ctx(), egui::Id::new("t"), 1, FADE, false), 1.0)
+        });
+        frame(&ctx, 0.1, |ui| {
+            assert_eq!(
+                progress(ui.ctx(), egui::Id::new("t"), 2, FADE, false),
+                1.0,
+                "« Réduire les animations »"
+            )
+        });
     }
 
     #[test]
@@ -326,17 +450,35 @@ mod tests {
         let id = egui::Id::new("repaint_transition");
         let mut delays = Vec::new();
         let mut values = Vec::new();
-        for (time, key, enabled) in [(0.0, 0, true), (0.1, 1, true), (0.2, 1, true), (0.35, 1, true), (0.5, 1, true), (0.6, 2, false)] {
-            let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| values.push(progress(ui.ctx(), id, key, 0.18, enabled)));
-            });
+        for (time, key, enabled) in [
+            (0.0, 0, true),
+            (0.1, 1, true),
+            (0.2, 1, true),
+            (0.35, 1, true),
+            (0.5, 1, true),
+            (0.6, 2, false),
+        ] {
+            let output = ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        values.push(progress(ui.ctx(), id, key, 0.18, enabled))
+                    });
+                },
+            );
             delays.push(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay);
         }
         assert!(delays[1].is_zero(), "repaint pendant le fondu");
         assert_eq!(values[3], 1.0);
         assert!(!delays[4].is_zero(), "pas de boucle de rendu après la fin");
         assert_eq!(values[5], 1.0);
-        assert!(!delays[5].is_zero(), "préférence désactivée : pas de repaint");
+        assert!(
+            !delays[5].is_zero(),
+            "préférence désactivée : pas de repaint"
+        );
     }
 
     #[test]
@@ -352,7 +494,13 @@ mod tests {
         let mut seen = Vec::new();
         let mut delays = Vec::new();
         for (time, rect) in [(0.0, a), (0.1, b), (0.16, b), (0.4, b), (0.5, b)] {
-            let output = ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| seen.push(indicator(ctx, id, rect, true)));
+            let output = ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ctx| seen.push(indicator(ctx, id, rect, true)),
+            );
             delays.push(output.viewport_output[&egui::ViewportId::ROOT].repaint_delay);
         }
         assert_eq!(seen[0], a);
@@ -360,8 +508,16 @@ mod tests {
         assert!(seen[2].min.x > a.min.x && seen[2].min.x < b.min.x);
         assert_eq!(seen[3], b);
         assert!(!delays[4].is_zero(), "aucun repaint après l'arrivée");
-        let output = ctx.run(egui::RawInput { time: Some(0.6), ..Default::default() }, |ctx| assert_eq!(indicator(ctx, id, a, false), a));
-        assert!(!output.viewport_output[&egui::ViewportId::ROOT].repaint_delay.is_zero());
+        let output = ctx.run(
+            egui::RawInput {
+                time: Some(0.6),
+                ..Default::default()
+            },
+            |ctx| assert_eq!(indicator(ctx, id, a, false), a),
+        );
+        assert!(!output.viewport_output[&egui::ViewportId::ROOT]
+            .repaint_delay
+            .is_zero());
     }
 
     #[test]
@@ -369,29 +525,72 @@ mod tests {
         for name in ["settings_tabs", "deck_page_grid"] {
             let ctx = egui::Context::default();
             let mut samples = Vec::new();
-            for (time, index) in [(0.0, 0), (0.01, 2), (0.08, 2), (0.30, 2), (0.31, 0), (0.38, 0), (0.65, 0), (0.66, 2)] {
+            for (time, index) in [
+                (0.0, 0),
+                (0.01, 2),
+                (0.08, 2),
+                (0.30, 2),
+                (0.31, 0),
+                (0.38, 0),
+                (0.65, 0),
+                (0.66, 2),
+            ] {
                 let mut widget = egui::Rect::NOTHING;
-                let output = ctx.run(egui::RawInput { time: Some(time), screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(400.0, 200.0))), ..Default::default() }, |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        let slide = begin_slide(ui, name, index, time != 0.66);
-                        let (rect, _) = ui.allocate_exact_size(Vec2::new(80.0, 24.0), egui::Sense::click());
-                        ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
-                        end_slide(ui, slide);
-                        widget = rect;
-                    });
-                });
-                let painted = output.shapes.iter().find_map(|clipped| match &clipped.shape {
-                    egui::Shape::Rect(shape) if shape.fill == Color32::WHITE => Some(shape.rect.min.x),
-                    _ => None,
-                }).expect("painted rectangle");
-                samples.push((widget, painted, output.viewport_output[&egui::ViewportId::ROOT].repaint_delay));
+                let output = ctx.run(
+                    egui::RawInput {
+                        time: Some(time),
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            Vec2::new(400.0, 200.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| {
+                            let slide = begin_slide(ui, name, index, time != 0.66);
+                            let (rect, _) =
+                                ui.allocate_exact_size(Vec2::new(80.0, 24.0), egui::Sense::click());
+                            ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
+                            end_slide(ui, slide);
+                            widget = rect;
+                        });
+                    },
+                );
+                let painted = output
+                    .shapes
+                    .iter()
+                    .find_map(|clipped| match &clipped.shape {
+                        egui::Shape::Rect(shape) if shape.fill == Color32::WHITE => {
+                            Some(shape.rect.min.x)
+                        }
+                        _ => None,
+                    })
+                    .expect("painted rectangle");
+                samples.push((
+                    widget,
+                    painted,
+                    output.viewport_output[&egui::ViewportId::ROOT].repaint_delay,
+                ));
             }
-            assert!(samples.iter().all(|sample| sample.0 == samples[0].0), "layout and hit-test unchanged: {name}");
-            assert!(samples[1].1 > samples[2].1 && samples[2].1 > samples[3].1, "forward slide: {name}");
-            assert!(samples[4].1 < samples[5].1 && samples[5].1 < samples[6].1, "backward slide: {name}: {:?}", samples.iter().map(|s| s.1).collect::<Vec<_>>());
+            assert!(
+                samples.iter().all(|sample| sample.0 == samples[0].0),
+                "layout and hit-test unchanged: {name}"
+            );
+            assert!(
+                samples[1].1 > samples[2].1 && samples[2].1 > samples[3].1,
+                "forward slide: {name}"
+            );
+            assert!(
+                samples[4].1 < samples[5].1 && samples[5].1 < samples[6].1,
+                "backward slide: {name}: {:?}",
+                samples.iter().map(|s| s.1).collect::<Vec<_>>()
+            );
             assert_eq!(samples[3].1, samples[0].1);
             assert_eq!(samples[6].1, samples[0].1);
-            assert_eq!(samples[7].1, samples[0].1, "disabled jumps straight to final paint");
+            assert_eq!(
+                samples[7].1, samples[0].1,
+                "disabled jumps straight to final paint"
+            );
             assert!(!samples[6].2.is_zero(), "no repaint after slide: {name}");
         }
     }
@@ -401,7 +600,16 @@ mod tests {
         let ctx = egui::Context::default();
         let id = egui::Id::new("activity_height_test");
         let mut heights = Vec::new();
-        for (time, expanded) in [(0.0, false), (0.01, true), (0.07, true), (0.14, true), (0.31, true), (0.32, false), (0.40, false), (0.65, false)] {
+        for (time, expanded) in [
+            (0.0, false),
+            (0.01, true),
+            (0.07, true),
+            (0.14, true),
+            (0.31, true),
+            (0.32, false),
+            (0.40, false),
+            (0.65, false),
+        ] {
             frame(&ctx, time, |ui| {
                 let t = ui.ctx().animate_bool_with_time(id, expanded, 0.26);
                 heights.push(36.0 + 129.0 * ease_out(t));
@@ -417,10 +625,17 @@ mod tests {
     #[test]
     fn intro_shows_then_disappears_and_can_be_disabled() {
         let ctx = egui::Context::default();
-        let logo = ctx.load_texture("logo", egui::ColorImage::new([4, 4], Color32::WHITE), Default::default());
+        let logo = ctx.load_texture(
+            "logo",
+            egui::ColorImage::new([4, 4], Color32::WHITE),
+            Default::default(),
+        );
         let mut shown = Vec::new();
         for time in [0.0, 0.3, 0.9, INTRO + 0.01, 3.0] {
-            let input = egui::RawInput { time: Some(time), ..Default::default() };
+            let input = egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            };
             let _ = ctx.run(input, |ctx| shown.push(intro(ctx, &logo, true)));
         }
         assert_eq!(shown, [true, true, true, false, false]);

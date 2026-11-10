@@ -20,21 +20,100 @@ pub const NAMES: &[&str] = &[
     "Définir une variable",
     "Si une variable correspond",
     "Script AutoHotkey",
-    "OBS : scène", "OBS : enregistrement", "OBS : diffusion", "OBS : caméra",
-    "OBS : replay", "OBS : micro", "OBS : source", "Fermer la fenêtre active", "Clic souris", "Déplacer la souris", "Défilement souris", "Jouer un son", "Arrêter les sons", "Luminosité du périphérique", "Veille du périphérique", "Envoyer en UDP", "Requête HTTP", "Touche à deux états", "Volume d’une application", "Volume d’un périphérique", "Si… sinon", "Attendre que…", "Notification", "Calculer", "Texte", "Presse-papiers", "Maintenir une touche", "Opération sur une fenêtre",
+    "OBS : scène",
+    "OBS : enregistrement",
+    "OBS : diffusion",
+    "OBS : caméra",
+    "OBS : replay",
+    "OBS : micro",
+    "OBS : source",
+    "Fermer la fenêtre active",
+    "Clic souris",
+    "Déplacer la souris",
+    "Défilement souris",
+    "Jouer un son",
+    "Arrêter les sons",
+    "Luminosité du périphérique",
+    "Veille du périphérique",
+    "Envoyer en UDP",
+    "Requête HTTP",
+    "Touche à deux états",
+    "Volume d’une application",
+    "Volume d’un périphérique",
+    "Si… sinon",
+    "Attendre que…",
+    "Notification",
+    "Calculer",
+    "Texte",
+    "Presse-papiers",
+    "Maintenir une touche",
+    "Opération sur une fenêtre",
 ];
 pub fn step(kind: usize) -> Step {
     match kind {
-        46 => Step::WindowOp { target: "foreground".into(), value: String::new(), op: "maximize".into(), x: 0, y: 0, w: 800, h: 600, monitor: 2 },
-        45 => Step::KeyHold { keys: "CTRL".into(), action: "down".into(), hold_ms: 500 },
-        44 => Step::Clipboard { op: "copy_text".into(), value: "Bonjour".into(), name: "texte".into() },
-        43 => Step::TextOp { name: "texte".into(), op: "upper".into(), value: String::new(), find: String::new(), persistent: false, },
-        42 => Step::Math { name: "compteur".into(), op: "add".into(), value: "1".into(), min: 0.0, max: 100.0, persistent: false, },
-        41 => Step::Notify { title: "NovyDeck".into(), message: "Bonjour {nom}".into() },
-        40 => Step::WaitUntil { condition: crate::conditions::Condition::default(), timeout_ms: 5000, poll_ms: 200 },
-        39 => Step::IfCondition { condition: crate::conditions::Condition::default(), then_steps: vec![], else_steps: vec![] },
-        38 => Step::DeviceVolume { input: false, device: "default".into(), action: "up".into(), step: 5, level: 50 },
-        37 => Step::AppVolume { target: "foreground".into(), action: "up".into(), step: 5, level: 50, include_children: true },
+        46 => Step::WindowOp {
+            target: "foreground".into(),
+            value: String::new(),
+            op: "maximize".into(),
+            x: 0,
+            y: 0,
+            w: 800,
+            h: 600,
+            monitor: 2,
+        },
+        45 => Step::KeyHold {
+            keys: "CTRL".into(),
+            action: "down".into(),
+            hold_ms: 500,
+        },
+        44 => Step::Clipboard {
+            op: "copy_text".into(),
+            value: "Bonjour".into(),
+            name: "texte".into(),
+        },
+        43 => Step::TextOp {
+            name: "texte".into(),
+            op: "upper".into(),
+            value: String::new(),
+            find: String::new(),
+            persistent: false,
+        },
+        42 => Step::Math {
+            name: "compteur".into(),
+            op: "add".into(),
+            value: "1".into(),
+            min: 0.0,
+            max: 100.0,
+            persistent: false,
+        },
+        41 => Step::Notify {
+            title: "NovyDeck".into(),
+            message: "Bonjour {nom}".into(),
+        },
+        40 => Step::WaitUntil {
+            condition: crate::conditions::Condition::default(),
+            timeout_ms: 5000,
+            poll_ms: 200,
+        },
+        39 => Step::IfCondition {
+            condition: crate::conditions::Condition::default(),
+            then_steps: vec![],
+            else_steps: vec![],
+        },
+        38 => Step::DeviceVolume {
+            input: false,
+            device: "default".into(),
+            action: "up".into(),
+            step: 5,
+            level: 50,
+        },
+        37 => Step::AppVolume {
+            target: "foreground".into(),
+            action: "up".into(),
+            step: 5,
+            level: 50,
+            include_children: true,
+        },
         13 => Step::AudioSwitch {
             first: String::new(),
             second: String::new(),
@@ -64,24 +143,73 @@ pub fn step(kind: usize) -> Step {
             then_steps: vec![Step::Delay { ms: 250 }],
             else_steps: vec![],
         },
-        30 => Step::PlaySound { path: "choisir.wav".into(), volume: 100 },
+        30 => Step::PlaySound {
+            path: "choisir.wav".into(),
+            volume: 100,
+        },
         31 => Step::StopSounds,
-        32 => Step::D6Brightness { mode: "set".into(), value: 70 },
+        32 => Step::D6Brightness {
+            mode: "set".into(),
+            value: 70,
+        },
         33 => Step::D6Sleep,
-        34 => Step::UdpSend { host: "127.0.0.1".into(), port: 8099, text: "message".into() },
-        36 => Step::Toggle { a: vec![Step::Delay { ms: 100 }], b: vec![Step::Delay { ms: 200 }] },
-        35 => Step::HttpRequest { method: "GET".into(), url: "http://127.0.0.1:8088/api".into(), body: String::new(), content_type: "text/plain".into() },
+        34 => Step::UdpSend {
+            host: "127.0.0.1".into(),
+            port: 8099,
+            text: "message".into(),
+        },
+        36 => Step::Toggle {
+            a: vec![Step::Delay { ms: 100 }],
+            b: vec![Step::Delay { ms: 200 }],
+        },
+        35 => Step::HttpRequest {
+            method: "GET".into(),
+            url: "http://127.0.0.1:8088/api".into(),
+            body: String::new(),
+            content_type: "text/plain".into(),
+        },
         26 => Step::CloseWindow,
-        27 => Step::MouseClick { button: "left".into(), double: false, x: None, y: None, relative_to: "screen".into() },
-        28 => Step::MouseMove { x: 0, y: 0, relative: false, relative_to: "cursor".into() },
-        29 => Step::MouseScroll { amount: 1, horizontal: false },
-        19 => Step::ObsScene { name: "Scène".into() },
-        20 => Step::ObsRecord { mode: "toggle".into() },
-        21 => Step::ObsStream { mode: "toggle".into() },
-        22 => Step::ObsVirtualCam { mode: "toggle".into() },
-        23 => Step::ObsReplay { mode: "save".into() },
-        24 => Step::ObsMute { input: "Micro/Aux".into(), mode: "toggle".into() },
-        25 => Step::ObsSourceVisibility { scene: "Scène".into(), source: "Source".into(), mode: "toggle".into() },
+        27 => Step::MouseClick {
+            button: "left".into(),
+            double: false,
+            x: None,
+            y: None,
+            relative_to: "screen".into(),
+        },
+        28 => Step::MouseMove {
+            x: 0,
+            y: 0,
+            relative: false,
+            relative_to: "cursor".into(),
+        },
+        29 => Step::MouseScroll {
+            amount: 1,
+            horizontal: false,
+        },
+        19 => Step::ObsScene {
+            name: "Scène".into(),
+        },
+        20 => Step::ObsRecord {
+            mode: "toggle".into(),
+        },
+        21 => Step::ObsStream {
+            mode: "toggle".into(),
+        },
+        22 => Step::ObsVirtualCam {
+            mode: "toggle".into(),
+        },
+        23 => Step::ObsReplay {
+            mode: "save".into(),
+        },
+        24 => Step::ObsMute {
+            input: "Micro/Aux".into(),
+            mode: "toggle".into(),
+        },
+        25 => Step::ObsSourceVisibility {
+            scene: "Scène".into(),
+            source: "Source".into(),
+            mode: "toggle".into(),
+        },
         _ => Step::AutoHotkey {
             executable: detect_ahk(),
             script: "#Requires AutoHotkey v2.0\n; Écris ton script ici.\n".into(),
@@ -123,7 +251,9 @@ pub fn export(key: &Key) -> Result<String> {
     fn steps(out: &mut String, list: &[Step], indent: usize) -> Result<()> {
         let pad = "    ".repeat(indent);
         for s in list {
-            if s.is_disabled() { continue; }
+            if s.is_disabled() {
+                continue;
+            }
             let line = match s {
                 Step::Delay { ms } => format!("Sleep({ms})"),
                 Step::Text { text } => format!("SendText({})", literal(text)),
@@ -151,8 +281,15 @@ pub fn export(key: &Key) -> Result<String> {
                             .ok_or_else(|| anyhow::anyhow!("Commande média inconnue"))?
                     ))
                 ),
-                Step::SetVariable { name, value, persistent } => {
-                    anyhow::ensure!(!persistent, "Export AutoHotkey : variables enregistrées non prises en charge");
+                Step::SetVariable {
+                    name,
+                    value,
+                    persistent,
+                } => {
+                    anyhow::ensure!(
+                        !persistent,
+                        "Export AutoHotkey : variables enregistrées non prises en charge"
+                    );
                     format!("vars[{}] := {}", literal(name), literal(value))
                 }
                 Step::Repeat {
@@ -220,15 +357,31 @@ mod tests {
     use super::*;
     #[test]
     fn text_op_export_refuses_without_omitting() {
-        let key = Key { steps: vec![step(43)], ..Key::default() };
+        let key = Key {
+            steps: vec![step(43)],
+            ..Key::default()
+        };
         assert!(export(&key).unwrap_err().to_string().contains("Texte"));
     }
     #[test]
     fn disabled_unsupported_block_is_omitted_from_export() {
-        let key = Key { steps: vec![Step::Disabled { step: Box::new(Step::AudioSwitch {
-            first: "x".into(), second: "y".into(), input: false,
-            first_label: String::new(), second_label: String::new(), first_icon: String::new(), second_icon: String::new()
-        }) }, Step::Delay { ms: 42 }], ..Key::default() };
+        let key = Key {
+            steps: vec![
+                Step::Disabled {
+                    step: Box::new(Step::AudioSwitch {
+                        first: "x".into(),
+                        second: "y".into(),
+                        input: false,
+                        first_label: String::new(),
+                        second_label: String::new(),
+                        first_icon: String::new(),
+                        second_icon: String::new(),
+                    }),
+                },
+                Step::Delay { ms: 42 },
+            ],
+            ..Key::default()
+        };
         let output = export(&key).unwrap();
         assert!(output.contains("Sleep(42)"));
         assert!(!output.contains("audio"));
@@ -355,7 +508,10 @@ pub fn run_script(
 mod native_close_tests {
     #[test]
     fn export_close_window_fails_atomically() {
-        let key = crate::model::Key { steps: vec![crate::model::Step::CloseWindow], ..Default::default() };
+        let key = crate::model::Key {
+            steps: vec![crate::model::Step::CloseWindow],
+            ..Default::default()
+        };
         assert!(super::export(&key).is_err());
     }
 }
@@ -366,15 +522,27 @@ mod clipboard_export_tests {
     #[test]
     fn window_op_is_last_and_ahk_export_refuses_it() {
         assert_eq!(NAMES.len(), 47);
-        let key = Key { steps: vec![step(46)], ..Key::default() };
+        let key = Key {
+            steps: vec![step(46)],
+            ..Key::default()
+        };
         assert_eq!(NAMES[46], key.steps[0].name());
-        assert!(export(&key).unwrap_err().to_string().contains("Opération sur une fenêtre"));
+        assert!(export(&key)
+            .unwrap_err()
+            .to_string()
+            .contains("Opération sur une fenêtre"));
     }
     #[test]
     fn clipboard_is_in_palette_and_refused_by_ahk_export() {
         assert!(NAMES.len() >= 45);
         assert_eq!(NAMES[44], "Presse-papiers");
-        let key = Key { steps: vec![step(44)], ..Key::default() };
-        assert!(export(&key).unwrap_err().to_string().contains("Presse-papiers"));
+        let key = Key {
+            steps: vec![step(44)],
+            ..Key::default()
+        };
+        assert!(export(&key)
+            .unwrap_err()
+            .to_string()
+            .contains("Presse-papiers"));
     }
 }

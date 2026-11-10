@@ -113,11 +113,25 @@ pub fn error(id: Value, code: i64, message: &str) -> Value {
 pub const MASKED: &str = "<masqué>";
 pub fn redact_json(value: &Value) -> Value {
     match value {
-        Value::Object(map) => Value::Object(map.iter().map(|(key, v)| {
-            let lower = key.to_ascii_lowercase();
-            let sensitive = lower == "settings" || ["password", "token", "secret"].iter().any(|word| lower.contains(word));
-            (key.clone(), if sensitive { Value::String(MASKED.into()) } else { redact_json(v) })
-        }).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, v)| {
+                    let lower = key.to_ascii_lowercase();
+                    let sensitive = lower == "settings"
+                        || ["password", "token", "secret"]
+                            .iter()
+                            .any(|word| lower.contains(word));
+                    (
+                        key.clone(),
+                        if sensitive {
+                            Value::String(MASKED.into())
+                        } else {
+                            redact_json(v)
+                        },
+                    )
+                })
+                .collect(),
+        ),
         Value::Array(items) => Value::Array(items.iter().map(redact_json).collect()),
         other => other.clone(),
     }
@@ -141,7 +155,9 @@ mod tests {
             "obs":{"host":"h","Password":"p"},"Access_Token":"t","client_SECRET":{"a":1},"nested":[{"myPassword2":"z","ok":"visible"}]});
         let out = redact_json(&input);
         let text = out.to_string();
-        for leaked in ["apiKey", "\"x\"", "\"p\"", "\"t\"", "\"z\""] { assert!(!text.contains(leaked), "{leaked} fuite : {text}"); }
+        for leaked in ["apiKey", "\"x\"", "\"p\"", "\"t\"", "\"z\""] {
+            assert!(!text.contains(leaked), "{leaked} fuite : {text}");
+        }
         assert_eq!(out["profile"]["keys"][0]["steps"][0]["settings"], MASKED);
         assert_eq!(out["obs"]["Password"], MASKED);
         assert_eq!(out["Access_Token"], MASKED);
@@ -156,8 +172,17 @@ mod tests {
     #[test]
     fn device_key_schema_allows_xl_but_runtime_checks_active_model() {
         let list = tools();
-        for name in ["deckforge_configure_key", "deckforge_simulate_macro", "deckforge_request_run"] {
-            let tool = list["tools"].as_array().unwrap().iter().find(|t| t["name"] == name).unwrap();
+        for name in [
+            "deckforge_configure_key",
+            "deckforge_simulate_macro",
+            "deckforge_request_run",
+        ] {
+            let tool = list["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["name"] == name)
+                .unwrap();
             assert_eq!(tool["inputSchema"]["properties"]["key"]["maximum"], 32);
         }
     }
@@ -171,15 +196,30 @@ mod tests {
     #[test]
     fn soundboard_steps_are_advertised_without_secret_fields() {
         let list = tools();
-        let configure = list["tools"].as_array().unwrap().iter()
-            .find(|tool| tool["name"] == "deckforge_configure_key").unwrap();
-        let variants = configure["inputSchema"]["$defs"]["step"]["oneOf"].as_array().unwrap();
+        let configure = list["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "deckforge_configure_key")
+            .unwrap();
+        let variants = configure["inputSchema"]["$defs"]["step"]["oneOf"]
+            .as_array()
+            .unwrap();
         for kind in ["play_sound", "stop_sounds"] {
-            let schema = variants.iter().find(|v| v["properties"]["type"]["const"] == kind).unwrap();
+            let schema = variants
+                .iter()
+                .find(|v| v["properties"]["type"]["const"] == kind)
+                .unwrap();
             assert_eq!(schema["additionalProperties"], false);
             assert_eq!(schema["required"][0], "type");
         }
-        assert_eq!(variants.iter().find(|v| v["properties"]["type"]["const"] == "play_sound").unwrap()["properties"]["volume"]["maximum"], 100);
+        assert_eq!(
+            variants
+                .iter()
+                .find(|v| v["properties"]["type"]["const"] == "play_sound")
+                .unwrap()["properties"]["volume"]["maximum"],
+            100
+        );
     }
     #[test]
     fn newer_clients_get_a_supported_protocol() {
@@ -196,9 +236,19 @@ mod key_hold_schema_tests {
     #[test]
     fn key_hold_has_strict_schema() {
         let tools = super::tools();
-        let configure = tools["tools"].as_array().unwrap().iter().find(|t| t["name"] == "deckforge_configure_key").unwrap();
-        let steps = configure["inputSchema"]["$defs"]["step"]["oneOf"].as_array().unwrap();
-        let schema = steps.iter().find(|s| s["properties"]["type"]["const"] == "key_hold").unwrap();
+        let configure = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "deckforge_configure_key")
+            .unwrap();
+        let steps = configure["inputSchema"]["$defs"]["step"]["oneOf"]
+            .as_array()
+            .unwrap();
+        let schema = steps
+            .iter()
+            .find(|s| s["properties"]["type"]["const"] == "key_hold")
+            .unwrap();
         assert_eq!(schema["additionalProperties"], false);
         assert_eq!(schema["required"], serde_json::json!(["type"]));
         assert_eq!(schema["properties"]["hold_ms"]["default"], 0);
@@ -210,9 +260,19 @@ mod clipboard_schema_tests {
     #[test]
     fn clipboard_schema_is_strict() {
         let tools = super::tools();
-        let configure = tools["tools"].as_array().unwrap().iter().find(|t| t["name"] == "deckforge_configure_key").unwrap();
-        let steps = configure["inputSchema"]["$defs"]["step"]["oneOf"].as_array().unwrap();
-        let schema = steps.iter().find(|s| s["properties"]["type"]["const"] == "clipboard").unwrap();
+        let configure = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "deckforge_configure_key")
+            .unwrap();
+        let steps = configure["inputSchema"]["$defs"]["step"]["oneOf"]
+            .as_array()
+            .unwrap();
+        let schema = steps
+            .iter()
+            .find(|s| s["properties"]["type"]["const"] == "clipboard")
+            .unwrap();
         assert_eq!(schema["additionalProperties"], false);
         assert_eq!(schema["required"], serde_json::json!(["type"]));
         assert_eq!(schema["properties"]["op"]["default"], "copy_text");

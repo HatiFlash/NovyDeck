@@ -3,7 +3,9 @@ use super::*;
 
 #[test]
 fn readme_captures_013_text_overlay_and_action_menu() {
-    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else { return; };
+    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else {
+        return;
+    };
     std::fs::create_dir_all(&out).unwrap();
     for lang in ["fr", "en"] {
         let mut h = Harness::new();
@@ -19,24 +21,38 @@ fn readme_captures_013_text_overlay_and_action_menu() {
         }
         image.save(&path).unwrap();
         h.app.config.keys_mut()[0] = Key {
-            label: "Cinema OFF".into(), image: path.to_string_lossy().into_owned(),
-            steps: vec![Step::Delay { ms: 100 }], ..Key::default()
+            label: "Cinema OFF".into(),
+            image: path.to_string_lossy().into_owned(),
+            steps: vec![Step::Delay { ms: 100 }],
+            ..Key::default()
         };
         h.app.applied = h.app.config.clone();
-        h.ctx.data_mut(|data| data.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+        h.ctx
+            .data_mut(|data| data.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
         h.warm(size);
         let label = crate::i18n::tr("Fond et ombre derrière le titre");
         let checkbox = navigation_seek(&mut h, size, label, pos2(1050.0, 890.0), -60.0);
         let output = h.warm(size);
         assert!(fully_visible(&output.shapes, label));
-        h.png(size, output, &out.join(format!("v013-text-overlay-on-{lang}.png")));
+        h.png(
+            size,
+            output,
+            &out.join(format!("v013-text-overlay-on-{lang}.png")),
+        );
         h.click(size, checkbox);
         assert!(!h.app.config.keys()[0].label_overlay);
         h.app.save();
         let output = h.warm(size);
-        h.png(size, output, &out.join(format!("v013-text-overlay-off-{lang}.png")));
+        h.png(
+            size,
+            output,
+            &out.join(format!("v013-text-overlay-off-{lang}.png")),
+        );
         let saved = crate::store::load(&h.app.path).unwrap();
-        assert!(!saved.keys()[0].label_overlay, "UI choice must survive saving");
+        assert!(
+            !saved.keys()[0].label_overlay,
+            "UI choice must survive saving"
+        );
 
         let mut h = Harness::new();
         crate::i18n::set_language(lang);
@@ -52,8 +68,15 @@ fn readme_captures_013_text_overlay_and_action_menu() {
         let position = navigation_seek(&mut h, size, last, at, -80.0);
         let output = h.warm(size);
         assert!(fully_visible(&output.shapes, last));
-        h.png(size, output, &out.join(format!("v013-action-menu-{lang}.png")));
+        h.png(
+            size,
+            output,
+            &out.join(format!("v013-action-menu-{lang}.png")),
+        );
         h.click(size, position);
-        assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::WindowOp { .. }]));
+        assert!(matches!(
+            h.app.config.keys()[0].steps.as_slice(),
+            [Step::WindowOp { .. }]
+        ));
     }
 }

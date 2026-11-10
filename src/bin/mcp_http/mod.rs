@@ -5,8 +5,11 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration, Instant},
-    sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}},
 };
 struct Session {
     last: Instant,
@@ -53,12 +56,19 @@ pub fn run(address: &str, connection: PathBuf) -> anyhow::Result<()> {
         std::thread::spawn(move || {
             struct Slot(Arc<AtomicUsize>);
             impl Drop for Slot {
-                fn drop(&mut self) { self.0.fetch_sub(1, Ordering::AcqRel); }
+                fn drop(&mut self) {
+                    self.0.fetch_sub(1, Ordering::AcqRel);
+                }
             }
             let _slot = Slot(active);
             let response = handle(&mut stream, &token, &connection, address.port(), &sessions);
             if let Err(e) = response {
-                let _ = reply(&mut stream, 400, &[], &json!({"error":e.to_string()}).to_string());
+                let _ = reply(
+                    &mut stream,
+                    400,
+                    &[],
+                    &json!({"error":e.to_string()}).to_string(),
+                );
             }
         });
     }

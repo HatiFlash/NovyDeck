@@ -21,11 +21,17 @@ mod discord_assistant_tests {
     use super::*;
     #[test]
     fn only_original_discord_shortcuts_show_the_assistant() {
-        let mut key = Key { label: "Discord : Micro".into(),
-            steps: vec![Step::Hotkey { keys: "CTRL+SHIFT+F13".into() }],
-            ..Key::default() };
+        let mut key = Key {
+            label: "Discord : Micro".into(),
+            steps: vec![Step::Hotkey {
+                keys: "CTRL+SHIFT+F13".into(),
+            }],
+            ..Key::default()
+        };
         assert_eq!(discord_shortcut(&key), Some("CTRL+SHIFT+F13"));
-        key.steps = vec![Step::Hotkey { keys: "CTRL+SHIFT+F14".into() }];
+        key.steps = vec![Step::Hotkey {
+            keys: "CTRL+SHIFT+F14".into(),
+        }];
         assert_eq!(discord_shortcut(&key), None);
         key.label = "Discord : Casque".into();
         assert_eq!(discord_shortcut(&key), Some("CTRL+SHIFT+F14"));
@@ -41,8 +47,18 @@ pub(super) fn step_mut<'a>(steps: &'a mut [Step], path: &[usize]) -> Option<&'a 
     let branch = *path.get(1)?;
     let children = match step {
         Step::Repeat { steps, .. } if branch == 0 => steps,
-        Step::Toggle { a, b } => if branch == 0 { a } else { b },
-        Step::IfCondition { then_steps, else_steps, .. }
+        Step::Toggle { a, b } => {
+            if branch == 0 {
+                a
+            } else {
+                b
+            }
+        }
+        Step::IfCondition {
+            then_steps,
+            else_steps,
+            ..
+        }
         | Step::IfWindow {
             then_steps,
             else_steps,
@@ -64,62 +80,160 @@ pub(super) fn step_mut<'a>(steps: &'a mut [Step], path: &[usize]) -> Option<&'a 
     step_mut(children, &path[2..])
 }
 fn plugin_step(plugin: &crate::plugins::Plugin, action: &crate::plugins::Action) -> Step {
-    Step::PluginAction { plugin:plugin.uuid.clone(), action:action.uuid.clone(),
-        settings:serde_json::json!({}), label:action.name.clone() }
+    Step::PluginAction {
+        plugin: plugin.uuid.clone(),
+        action: action.uuid.clone(),
+        settings: serde_json::json!({}),
+        label: action.name.clone(),
+    }
 }
 /// Bloc Action de plugin à insérer pour une entrée glissée depuis la bibliothèque (si le plugin est toujours installé).
-fn palette_plugin_step(plugins: &[crate::plugins::Plugin], plugin: &str, action: &str) -> Option<Step> {
+fn palette_plugin_step(
+    plugins: &[crate::plugins::Plugin],
+    plugin: &str,
+    action: &str,
+) -> Option<Step> {
     let owner = plugins.iter().find(|p| p.uuid == plugin)?;
     let entry = owner.actions.iter().find(|a| a.uuid == action)?;
     Some(plugin_step(owner, entry))
 }
-fn plugin_choices_menu(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str) -> Option<Step> {
-    let height=(ui.ctx().screen_rect().height()*0.6).clamp(1.0,420.0);
-    egui::ScrollArea::vertical().id_salt("workshop_plugin_choices_scroll").max_height(height).show(ui,|ui| {
-        ui.set_max_width(ui.available_width().min(320.0));
-        plugin_choices(ui,plugins,search)
-    }).inner
+fn plugin_choices_menu(
+    ui: &mut egui::Ui,
+    plugins: &[crate::plugins::Plugin],
+    search: &str,
+) -> Option<Step> {
+    let height = (ui.ctx().screen_rect().height() * 0.6).clamp(1.0, 420.0);
+    egui::ScrollArea::vertical()
+        .id_salt("workshop_plugin_choices_scroll")
+        .max_height(height)
+        .show(ui, |ui| {
+            ui.set_max_width(ui.available_width().min(320.0));
+            plugin_choices(ui, plugins, search)
+        })
+        .inner
 }
-fn plugin_choices(ui:&mut egui::Ui,plugins:&[crate::plugins::Plugin],search:&str) -> Option<Step> {
-    let mut chosen=None;
-    let needle=search.trim().to_lowercase();
-    let eligible=plugins.iter().filter(|p| p.prerequisite.is_none() && matches!(p.runtime,crate::plugins::Runtime::Exe(_)|crate::plugins::Runtime::Node(_)|crate::plugins::Runtime::Html(_))).collect::<Vec<_>>();
-    if eligible.is_empty(){return None;}
-    egui::CollapsingHeader::new(crate::i18n::tr("Plugins")).default_open(!search.is_empty()).show(ui,|ui| {
-        // The workshop palette already owns its bounded scroll viewport.
-        // A second nested viewport clips wrapped action labels near the bottom.
-        for plugin in eligible {
-                let plugin_name=plugin.display_name();
-                let mut actions=plugin.actions.iter().collect::<Vec<_>>();
-                actions.sort_by(|a,b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(||a.uuid.cmp(&b.uuid)));
-                let matching=actions.into_iter().filter(|a| needle.is_empty() || format!("{} {} {}",plugin_name,a.name,a.uuid).to_lowercase().contains(&needle)).collect::<Vec<_>>();
-                if matching.is_empty(){continue;}
-                ui.push_id(&plugin.uuid,|ui|{
-                    egui::CollapsingHeader::new(plugin_name).id_salt(("workshop_plugin",&plugin.uuid)).default_open(!search.is_empty()).show(ui,|ui|{
-                        for action in matching {
-                            let title=if action.name.is_empty(){action.uuid.as_str()}else{action.name.as_str()};
-                            ui.push_id(&action.uuid,|ui|ui.horizontal(|ui|{
-                                if let Some(texture)=action.icon.as_ref().or(plugin.icon.as_ref()).and_then(|p|super::icon_ui::texture(ui.ctx(),&p.to_string_lossy())) {ui.image((texture.id(),egui::vec2(16.0,16.0)));}
-                                if ui.add(egui::Button::new(title).wrap()).on_hover_text(title).clicked(){chosen=Some(plugin_step(plugin,action));}
-                            }));
-                        }
-                    });
+fn plugin_choices(
+    ui: &mut egui::Ui,
+    plugins: &[crate::plugins::Plugin],
+    search: &str,
+) -> Option<Step> {
+    let mut chosen = None;
+    let needle = search.trim().to_lowercase();
+    let eligible = plugins
+        .iter()
+        .filter(|p| {
+            p.prerequisite.is_none()
+                && matches!(
+                    p.runtime,
+                    crate::plugins::Runtime::Exe(_)
+                        | crate::plugins::Runtime::Node(_)
+                        | crate::plugins::Runtime::Html(_)
+                )
+        })
+        .collect::<Vec<_>>();
+    if eligible.is_empty() {
+        return None;
+    }
+    egui::CollapsingHeader::new(crate::i18n::tr("Plugins"))
+        .default_open(!search.is_empty())
+        .show(ui, |ui| {
+            // The workshop palette already owns its bounded scroll viewport.
+            // A second nested viewport clips wrapped action labels near the bottom.
+            for plugin in eligible {
+                let plugin_name = plugin.display_name();
+                let mut actions = plugin.actions.iter().collect::<Vec<_>>();
+                actions.sort_by(|a, b| {
+                    a.name
+                        .to_lowercase()
+                        .cmp(&b.name.to_lowercase())
+                        .then_with(|| a.uuid.cmp(&b.uuid))
+                });
+                let matching = actions
+                    .into_iter()
+                    .filter(|a| {
+                        needle.is_empty()
+                            || format!("{} {} {}", plugin_name, a.name, a.uuid)
+                                .to_lowercase()
+                                .contains(&needle)
+                    })
+                    .collect::<Vec<_>>();
+                if matching.is_empty() {
+                    continue;
+                }
+                ui.push_id(&plugin.uuid, |ui| {
+                    egui::CollapsingHeader::new(plugin_name)
+                        .id_salt(("workshop_plugin", &plugin.uuid))
+                        .default_open(!search.is_empty())
+                        .show(ui, |ui| {
+                            for action in matching {
+                                let title = if action.name.is_empty() {
+                                    action.uuid.as_str()
+                                } else {
+                                    action.name.as_str()
+                                };
+                                ui.push_id(&action.uuid, |ui| {
+                                    ui.horizontal(|ui| {
+                                        if let Some(texture) =
+                                            action.icon.as_ref().or(plugin.icon.as_ref()).and_then(
+                                                |p| {
+                                                    super::icon_ui::texture(
+                                                        ui.ctx(),
+                                                        &p.to_string_lossy(),
+                                                    )
+                                                },
+                                            )
+                                        {
+                                            ui.image((texture.id(), egui::vec2(16.0, 16.0)));
+                                        }
+                                        if ui
+                                            .add(egui::Button::new(title).wrap())
+                                            .on_hover_text(title)
+                                            .clicked()
+                                        {
+                                            chosen = Some(plugin_step(plugin, action));
+                                        }
+                                    })
+                                });
+                            }
+                        });
                 });
             }
-    });
+        });
     chosen
 }
-fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,plugins:&[crate::plugins::Plugin],advanced:bool,path:&[usize])->bool {
-    let Step::PluginAction {plugin,action,settings,label}=step else{return false};
-    let mut changed=false;
+fn plugin_fields(
+    ui: &mut egui::Ui,
+    step: &mut Step,
+    config: &crate::model::Config,
+    plugins: &[crate::plugins::Plugin],
+    advanced: bool,
+    path: &[usize],
+) -> bool {
+    let Step::PluginAction {
+        plugin,
+        action,
+        settings,
+        label,
+    } = step
+    else {
+        return false;
+    };
+    let mut changed = false;
     if *plugin == "com.novydeck.googlehome" && *action == "com.novydeck.googlehome.control" {
         let mode = settings.get("mode").and_then(serde_json::Value::as_str);
-        let mut selected = match mode { Some("on") => 0, Some("off") => 1, Some("toggle") => 2, Some("brightness") => 3, _ => 4 };
+        let mut selected = match mode {
+            Some("on") => 0,
+            Some("off") => 1,
+            Some("toggle") => 2,
+            Some("brightness") => 3,
+            _ => 4,
+        };
         ui.horizontal(|ui| {
             ui.label(crate::i18n::tr("État à l’appui"));
             egui::ComboBox::from_id_salt(ui.id().with("googlehome-mode"))
                 .selected_text(match selected {
-                    0 => crate::i18n::tr("Allumer"), 1 => crate::i18n::tr("Éteindre"),
+                    0 => crate::i18n::tr("Allumer"),
+                    1 => crate::i18n::tr("Éteindre"),
                     2 => crate::i18n::tr("Basculer"),
                     3 => crate::i18n::tr("Luminosité (réglages du plugin)"),
                     _ => crate::i18n::tr("À configurer"),
@@ -139,54 +253,122 @@ fn plugin_fields(ui:&mut egui::Ui,step:&mut Step,config:&crate::model::Config,pl
             }
         }
     }
-    if let Some(p)=plugins.iter().find(|p|p.uuid==*plugin) {
-        if let Some(a)=p.actions.iter().find(|a|a.uuid==*action) {
-            ui.label(format!("{} › {}",p.display_name(),if a.name.is_empty(){&a.uuid}else{&a.name}));
-        } else {ui.colored_label(theme::palette(ui.ctx()).warning,crate::i18n::tr("Action de plugin introuvable"));}
-    } else {ui.colored_label(theme::palette(ui.ctx()).warning,crate::i18n::tr("Plugin introuvable"));}
-    let available=plugins.iter().any(|p|p.uuid==*plugin && p.prerequisite.is_none()
-        && p.actions.iter().any(|a|a.uuid==*action && a.inspector.as_ref().or(p.inspector.as_ref()).is_some()));
-    if ui.add_enabled(available,egui::Button::new(crate::i18n::tr("Réglages du plugin")))
+    if let Some(p) = plugins.iter().find(|p| p.uuid == *plugin) {
+        if let Some(a) = p.actions.iter().find(|a| a.uuid == *action) {
+            ui.label(format!(
+                "{} › {}",
+                p.display_name(),
+                if a.name.is_empty() { &a.uuid } else { &a.name }
+            ));
+        } else {
+            ui.colored_label(
+                theme::palette(ui.ctx()).warning,
+                crate::i18n::tr("Action de plugin introuvable"),
+            );
+        }
+    } else {
+        ui.colored_label(
+            theme::palette(ui.ctx()).warning,
+            crate::i18n::tr("Plugin introuvable"),
+        );
+    }
+    let available = plugins.iter().any(|p| {
+        p.uuid == *plugin
+            && p.prerequisite.is_none()
+            && p.actions.iter().any(|a| {
+                a.uuid == *action && a.inspector.as_ref().or(p.inspector.as_ref()).is_some()
+            })
+    });
+    if ui
+        .add_enabled(
+            available,
+            egui::Button::new(crate::i18n::tr("Réglages du plugin")),
+        )
         .on_disabled_hover_text(crate::i18n::tr("Inspecteur du plugin indisponible"))
-        .clicked() {ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.to_vec()));}
+        .clicked()
+    {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::new("plugin_block_open"), path.to_vec()));
+    }
     if *plugin == "com.novydeck.googlehome" && *action == "com.novydeck.googlehome.control" {
         if settings["scope"] == "group" {
             let count = settings["targets"].as_array().map_or(0, Vec::len);
-            ui.label(crate::i18n::trf("Groupe : {count} appareils", &[("count", &count)]));
+            ui.label(crate::i18n::trf(
+                "Groupe : {count} appareils",
+                &[("count", &count)],
+            ));
         } else {
-            ui.label(crate::i18n::tr("Plusieurs appareils : Réglages du plugin → Commander → Groupe."));
+            ui.label(crate::i18n::tr(
+                "Plusieurs appareils : Réglages du plugin → Commander → Groupe.",
+            ));
         }
     }
-    ui.menu_button(crate::i18n::tr("Copier les réglages d'une touche…"), |ui| {
-        for (index,key) in config.keys().iter().enumerate() {
-            if let Some(binding)=key.plugin.as_ref().filter(|b|b.plugin==*plugin && b.action==*action) {
-                let title=crate::i18n::trf("Touche {index} : {label}",&[("index",&(index+1)),("label",&key.label)]);
-                if ui.button(title).clicked(){*settings=binding.settings.clone();changed=true;ui.close_menu();}
+    ui.menu_button(
+        crate::i18n::tr("Copier les réglages d'une touche…"),
+        |ui| {
+            for (index, key) in config.keys().iter().enumerate() {
+                if let Some(binding) = key
+                    .plugin
+                    .as_ref()
+                    .filter(|b| b.plugin == *plugin && b.action == *action)
+                {
+                    let title = crate::i18n::trf(
+                        "Touche {index} : {label}",
+                        &[("index", &(index + 1)), ("label", &key.label)],
+                    );
+                    if ui.button(title).clicked() {
+                        *settings = binding.settings.clone();
+                        changed = true;
+                        ui.close_menu();
+                    }
+                }
             }
-        }
-    });
+        },
+    );
     if advanced {
         ui.label(crate::i18n::tr("Réglages JSON (objet)"));
-        let id=ui.id().with(("plugin-json",plugin.as_str(),action.as_str()));
-        let mut text=ui.data(|d|d.get_temp::<String>(id)).unwrap_or_else(||serde_json::to_string_pretty(settings).unwrap_or_else(|_|"{}".into()));
-        if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(4)).changed(){
-            if let Ok(value)=serde_json::from_str::<serde_json::Value>(&text) {if value.is_object(){*settings=value;changed=true;}}
-            ui.data_mut(|d|d.insert_temp(id,text.clone()));
+        let id = ui
+            .id()
+            .with(("plugin-json", plugin.as_str(), action.as_str()));
+        let mut text = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| {
+            serde_json::to_string_pretty(settings).unwrap_or_else(|_| "{}".into())
+        });
+        if ui
+            .add(egui::TextEdit::multiline(&mut text).desired_rows(4))
+            .changed()
+        {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                if value.is_object() {
+                    *settings = value;
+                    changed = true;
+                }
+            }
+            ui.data_mut(|d| d.insert_temp(id, text.clone()));
         }
-        if !serde_json::from_str::<serde_json::Value>(&text).is_ok_and(|v|v.is_object()) {
-            ui.colored_label(theme::palette(ui.ctx()).warning,crate::i18n::tr("Un objet JSON valide est requis."));
+        if !serde_json::from_str::<serde_json::Value>(&text).is_ok_and(|v| v.is_object()) {
+            ui.colored_label(
+                theme::palette(ui.ctx()).warning,
+                crate::i18n::tr("Un objet JSON valide est requis."),
+            );
         }
     }
-    let _=label;
+    let _ = label;
     changed
 }
 const BLOCK_CATEGORIES: &[(&str, &[usize])] = &[
     ("Clavier", &[0, 45]),
-    ("Streaming", &[19, 20, 21, 22, 23, 24, 25, 30, 31, 0, 4]), ("Système", &[0, 2, 4, 26, 27, 28, 29, 32, 33]),
-    ("Texte", &[1, 43, 44]), ("Applications et sites", &[2, 3]),
-    ("Médias et audio", &[4, 13, 37, 38]), ("Fenêtres", &[6, 46]), ("Attendre", &[5, 40]), ("Notifications", &[41]),
-    ("Logique et répétitions", &[14, 15, 39]), ("Variables", &[16, 17, 42]),
-    ("Navigation NovyDeck", &[7, 8, 9, 10, 11]), ("Avancé / AutoHotkey", &[18]),
+    ("Streaming", &[19, 20, 21, 22, 23, 24, 25, 30, 31, 0, 4]),
+    ("Système", &[0, 2, 4, 26, 27, 28, 29, 32, 33]),
+    ("Texte", &[1, 43, 44]),
+    ("Applications et sites", &[2, 3]),
+    ("Médias et audio", &[4, 13, 37, 38]),
+    ("Fenêtres", &[6, 46]),
+    ("Attendre", &[5, 40]),
+    ("Notifications", &[41]),
+    ("Logique et répétitions", &[14, 15, 39]),
+    ("Variables", &[16, 17, 42]),
+    ("Navigation NovyDeck", &[7, 8, 9, 10, 11]),
+    ("Avancé / AutoHotkey", &[18]),
 ];
 fn block_name(kind: usize) -> &'static str {
     match kind {
@@ -256,7 +438,10 @@ pub(super) fn step_label(step: &Step) -> &'static str {
         "OBS : couper une entrée" => crate::i18n::tr("OBS : couper une entrée"),
         "OBS : visibilité de source" => crate::i18n::tr("OBS : visibilité de source"),
         "Retour au dossier précédent" => crate::i18n::tr("Retour au dossier précédent"),
-        _ => crate::automation::NAMES.iter().position(|n| *n == name).map_or(name, block_name),
+        _ => crate::automation::NAMES
+            .iter()
+            .position(|n| *n == name)
+            .map_or(name, block_name),
     }
 }
 fn category_name(category: &str) -> &'static str {
@@ -317,57 +502,178 @@ fn simple_fields_visible(step: &Step, advanced: bool) -> bool {
     advanced || !matches!(step.active(), Step::AutoHotkey { .. })
 }
 /// Résumé avec les noms lisibles des plugins installés (« NovyDeck Clock › Stopwatch »).
-pub(super) fn plugin_names(plugin: &str, action: &str, label: &str, plugins: &[crate::plugins::Plugin]) -> (String, String) {
+pub(super) fn plugin_names(
+    plugin: &str,
+    action: &str,
+    label: &str,
+    plugins: &[crate::plugins::Plugin],
+) -> (String, String) {
     let owner = plugins.iter().find(|p| p.uuid == plugin);
     let plugin_name = owner.map(|p| p.display_name()).unwrap_or(plugin).to_owned();
-    let action_name = owner.and_then(|p| p.actions.iter().find(|a| a.uuid == action))
-        .map(|a| if a.name.is_empty() { action } else { a.name.as_str() })
-        .unwrap_or_else(|| if label.is_empty() { action } else { label }).to_owned();
+    let action_name = owner
+        .and_then(|p| p.actions.iter().find(|a| a.uuid == action))
+        .map(|a| {
+            if a.name.is_empty() {
+                action
+            } else {
+                a.name.as_str()
+            }
+        })
+        .unwrap_or_else(|| if label.is_empty() { action } else { label })
+        .to_owned();
     (plugin_name, action_name)
 }
 fn named_summary(step: &Step, plugins: &[crate::plugins::Plugin]) -> String {
-    if let Step::PluginAction { plugin, action, label, .. } = step.active() {
+    if let Step::PluginAction {
+        plugin,
+        action,
+        label,
+        ..
+    } = step.active()
+    {
         let (plugin_name, action_name) = plugin_names(plugin, action, label, plugins);
         format!("{plugin_name} › {action_name}")
-    } else { block_summary(step) }
+    } else {
+        block_summary(step)
+    }
 }
 pub(super) fn block_summary(step: &Step) -> String {
     match step.active() {
-        Step::PluginAction { plugin, action, label, .. } => crate::i18n::trf("Plugin {plugin} › {action}", &[("plugin",plugin),("action",&if label.is_empty(){action.clone()}else{label.clone()})]),
-        Step::MouseClick { .. } | Step::MouseMove { .. } | Step::MouseScroll { .. } => super::step_summary(step),
+        Step::PluginAction {
+            plugin,
+            action,
+            label,
+            ..
+        } => crate::i18n::trf(
+            "Plugin {plugin} › {action}",
+            &[
+                ("plugin", plugin),
+                (
+                    "action",
+                    &if label.is_empty() {
+                        action.clone()
+                    } else {
+                        label.clone()
+                    },
+                ),
+            ],
+        ),
+        Step::MouseClick { .. } | Step::MouseMove { .. } | Step::MouseScroll { .. } => {
+            super::step_summary(step)
+        }
         Step::Clipboard { .. } => step.clipboard_summary().unwrap_or_default(),
         Step::WindowOp { .. } => step.window_op_summary().unwrap_or_default(),
         Step::AppVolume { .. } => step.app_volume_summary().unwrap_or_default(),
         Step::DeviceVolume { .. } => step.device_volume_summary().unwrap_or_default(),
-        Step::ObsScene { name } => crate::i18n::trf("OBS : scène {name}", &[("name", &(name))] ),
-        Step::ObsRecord { mode } | Step::ObsStream { mode } | Step::ObsVirtualCam { mode } | Step::ObsReplay { mode } => format!("{} : {mode}", step.name()),
-        Step::ObsMute { input, mode } => crate::i18n::trf("OBS : {input} ({mode})", &[("input", &(input)), ("mode", &(mode))] ),
-        Step::ObsSourceVisibility { scene, source, mode } => crate::i18n::trf("OBS : {scene} / {source} ({mode})", &[("scene", &(scene)), ("source", &(source)), ("mode", &(mode))] ),
-        Step::Hotkey { keys } => crate::i18n::trf("Appuyer sur {keys}", &[("keys", &(keys))] ),
+        Step::ObsScene { name } => crate::i18n::trf("OBS : scène {name}", &[("name", &(name))]),
+        Step::ObsRecord { mode }
+        | Step::ObsStream { mode }
+        | Step::ObsVirtualCam { mode }
+        | Step::ObsReplay { mode } => format!("{} : {mode}", step.name()),
+        Step::ObsMute { input, mode } => crate::i18n::trf(
+            "OBS : {input} ({mode})",
+            &[("input", &(input)), ("mode", &(mode))],
+        ),
+        Step::ObsSourceVisibility {
+            scene,
+            source,
+            mode,
+        } => crate::i18n::trf(
+            "OBS : {scene} / {source} ({mode})",
+            &[
+                ("scene", &(scene)),
+                ("source", &(source)),
+                ("mode", &(mode)),
+            ],
+        ),
+        Step::Hotkey { keys } => crate::i18n::trf("Appuyer sur {keys}", &[("keys", &(keys))]),
         Step::KeyHold { .. } => step.key_hold_summary().unwrap_or_default(),
-        Step::Delay { ms } => crate::i18n::trf("Attendre {ms} ms", &[("ms", &(ms))] ),
-        Step::Url { url } => crate::i18n::trf("Ouvrir {url}", &[("url", &(url))] ),
-        Step::Text { text } => crate::i18n::trf("Écrire {text}", &[("text", &(text.chars().take(50).collect::<String>()))] ),
-        Step::Launch { program, .. } => crate::i18n::trf("Lancer {program}", &[("program", &(program))] ),
-        Step::Toggle { a, b } => crate::i18n::trf("Basculer : {a} / {b} blocs", &[("a", &(a.len())), ("b", &(b.len()))] ),
+        Step::Delay { ms } => crate::i18n::trf("Attendre {ms} ms", &[("ms", &(ms))]),
+        Step::Url { url } => crate::i18n::trf("Ouvrir {url}", &[("url", &(url))]),
+        Step::Text { text } => crate::i18n::trf(
+            "Écrire {text}",
+            &[("text", &(text.chars().take(50).collect::<String>()))],
+        ),
+        Step::Launch { program, .. } => {
+            crate::i18n::trf("Lancer {program}", &[("program", &(program))])
+        }
+        Step::Toggle { a, b } => crate::i18n::trf(
+            "Basculer : {a} / {b} blocs",
+            &[("a", &(a.len())), ("b", &(b.len()))],
+        ),
         Step::Repeat { count, steps } => {
             let blocks = steps.len();
             let args: &[(&str, &dyn std::fmt::Display)] = &[("count", count), ("blocks", &blocks)];
-            if steps.len() == 1 { crate::i18n::trf("Répéter {count} fois ({blocks} bloc)", args) }
-            else { crate::i18n::trf("Répéter {count} fois ({blocks} blocs)", args) }
-        },
-        Step::UdpSend { host, port, .. } => crate::i18n::trf("UDP : {host}:{port}", &[("host", &(host)), ("port", &(port))] ),
-        Step::HttpRequest { method, url, .. } => crate::i18n::trf("HTTP {method} : {url}", &[("method", &(method)), ("url", &(url))] ),
-        Step::D6Brightness { mode, value } => crate::i18n::trf("Luminosité : {mode} {value} %", &[("mode", &(mode)), ("value", &(value))] ),
-        Step::IfCondition { condition, .. } => crate::i18n::trf("Si {condition}", &[("condition", &(condition.summary()))] ),
-        Step::WaitUntil { condition, timeout_ms, .. } => crate::i18n::trf("Attendre que {condition} ({timeout} ms max)", &[("condition", &(condition.summary())), ("timeout", &(timeout_ms))] ),
-        Step::Notify { title, message } => crate::i18n::trf("Notification « {title} » : {message}", &[("title", &(title)), ("message", &(message.chars().take(50).collect::<String>()))] ),
-        Step::IfWindow { title, .. } => crate::i18n::trf("Si la fenêtre {title} est ouverte", &[("title", &(title))] ),
-        Step::IfVariable { name, value, .. } => crate::i18n::trf("Si {name} vaut {value}", &[("name", &(name)), ("value", &(value))] ),
+            if steps.len() == 1 {
+                crate::i18n::trf("Répéter {count} fois ({blocks} bloc)", args)
+            } else {
+                crate::i18n::trf("Répéter {count} fois ({blocks} blocs)", args)
+            }
+        }
+        Step::UdpSend { host, port, .. } => crate::i18n::trf(
+            "UDP : {host}:{port}",
+            &[("host", &(host)), ("port", &(port))],
+        ),
+        Step::HttpRequest { method, url, .. } => crate::i18n::trf(
+            "HTTP {method} : {url}",
+            &[("method", &(method)), ("url", &(url))],
+        ),
+        Step::D6Brightness { mode, value } => crate::i18n::trf(
+            "Luminosité : {mode} {value} %",
+            &[("mode", &(mode)), ("value", &(value))],
+        ),
+        Step::IfCondition { condition, .. } => {
+            crate::i18n::trf("Si {condition}", &[("condition", &(condition.summary()))])
+        }
+        Step::WaitUntil {
+            condition,
+            timeout_ms,
+            ..
+        } => crate::i18n::trf(
+            "Attendre que {condition} ({timeout} ms max)",
+            &[
+                ("condition", &(condition.summary())),
+                ("timeout", &(timeout_ms)),
+            ],
+        ),
+        Step::Notify { title, message } => crate::i18n::trf(
+            "Notification « {title} » : {message}",
+            &[
+                ("title", &(title)),
+                ("message", &(message.chars().take(50).collect::<String>())),
+            ],
+        ),
+        Step::IfWindow { title, .. } => {
+            crate::i18n::trf("Si la fenêtre {title} est ouverte", &[("title", &(title))])
+        }
+        Step::IfVariable { name, value, .. } => crate::i18n::trf(
+            "Si {name} vaut {value}",
+            &[("name", &(name)), ("value", &(value))],
+        ),
         Step::Math { .. } => step.math_summary().unwrap_or_default(),
         Step::TextOp { .. } => step.text_op_summary().unwrap_or_default(),
-        Step::SetVariable { name, value, persistent } => crate::i18n::trf("Mémoriser {name} = {value}{persistent}", &[("name", &(name)), ("value", &(value)), ("persistent", &(if *persistent { crate::i18n::tr(" (enregistrée)") } else { "" }))] ),
-        Step::WaitWindow { title, .. } => crate::i18n::trf("Attendre la fenêtre {title}", &[("title", &(title))] ),
+        Step::SetVariable {
+            name,
+            value,
+            persistent,
+        } => crate::i18n::trf(
+            "Mémoriser {name} = {value}{persistent}",
+            &[
+                ("name", &(name)),
+                ("value", &(value)),
+                (
+                    "persistent",
+                    &(if *persistent {
+                        crate::i18n::tr(" (enregistrée)")
+                    } else {
+                        ""
+                    }),
+                ),
+            ],
+        ),
+        Step::WaitWindow { title, .. } => {
+            crate::i18n::trf("Attendre la fenêtre {title}", &[("title", &(title))])
+        }
         _ => step.name().to_owned(),
     }
 }
@@ -376,7 +682,13 @@ mod workshop_summary_tests {
     use super::*;
     #[test]
     fn fifine_search_aliases_find_existing_actions() {
-        for (kind, query) in [(0, "Super Hotkeys"), (2, "OpenApps"), (3, "Website"), (4, "SystemVolume"), (15, "Multi Action")] {
+        for (kind, query) in [
+            (0, "Super Hotkeys"),
+            (2, "OpenApps"),
+            (3, "Website"),
+            (4, "SystemVolume"),
+            (15, "Multi Action"),
+        ] {
             assert!(matches_palette(kind, "Système", query));
         }
         assert!(!matches_palette(2, "Système", "OBS scene"));
@@ -385,70 +697,189 @@ mod workshop_summary_tests {
     fn summaries_do_not_repeat_the_block_name_and_wrappers_keep_the_summary() {
         let step = Step::Delay { ms: 250 };
         assert_eq!(block_summary(&step), "Attendre 250 ms");
-        assert_eq!(block_summary(&Step::Disabled { step: Box::new(step) }), "Attendre 250 ms");
-        assert_eq!(block_summary(&Step::SetVariable { name: "mode".into(), value: "travail".into(), persistent: false, }), "Mémoriser mode = travail");
+        assert_eq!(
+            block_summary(&Step::Disabled {
+                step: Box::new(step)
+            }),
+            "Attendre 250 ms"
+        );
+        assert_eq!(
+            block_summary(&Step::SetVariable {
+                name: "mode".into(),
+                value: "travail".into(),
+                persistent: false,
+            }),
+            "Mémoriser mode = travail"
+        );
     }
 }
 const TEMPLATE_NAMES: &[&str] = &[
-    "Ouvrir une application puis un site", "Copier puis coller ailleurs",
-    "Taper une signature", "Basculer casque / enceintes",
-    "Mode travail", "Répéter une touche N fois",
+    "Ouvrir une application puis un site",
+    "Copier puis coller ailleurs",
+    "Taper une signature",
+    "Basculer casque / enceintes",
+    "Mode travail",
+    "Répéter une touche N fois",
 ];
 fn template(index: usize) -> Vec<Step> {
     match index {
-        0 => vec![Step::Launch { program: String::new(), args: vec![], focus_if_running: false }, Step::Url { url: String::new() }],
-        1 => vec![Step::Hotkey { keys: "CTRL+C".into() }, Step::Hotkey { keys: "CTRL+V".into() }],
-        2 => vec![Step::Text { text: String::new() }],
+        0 => vec![
+            Step::Launch {
+                program: String::new(),
+                args: vec![],
+                focus_if_running: false,
+            },
+            Step::Url { url: String::new() },
+        ],
+        1 => vec![
+            Step::Hotkey {
+                keys: "CTRL+C".into(),
+            },
+            Step::Hotkey {
+                keys: "CTRL+V".into(),
+            },
+        ],
+        2 => vec![Step::Text {
+            text: String::new(),
+        }],
         3 => vec![crate::automation::step(13)],
-        4 => vec![Step::SetVariable { name: "mode".into(), value: "travail".into(), persistent: false, },
-            Step::IfVariable { name: "mode".into(), value: "travail".into(),
-                then_steps: vec![Step::Text { text: String::new() }], else_steps: vec![] }],
-        5 => vec![Step::Repeat { count: 3, steps: vec![Step::Hotkey { keys: "F13".into() }] }],
+        4 => vec![
+            Step::SetVariable {
+                name: "mode".into(),
+                value: "travail".into(),
+                persistent: false,
+            },
+            Step::IfVariable {
+                name: "mode".into(),
+                value: "travail".into(),
+                then_steps: vec![Step::Text {
+                    text: String::new(),
+                }],
+                else_steps: vec![],
+            },
+        ],
+        5 => vec![Step::Repeat {
+            count: 3,
+            steps: vec![Step::Hotkey { keys: "F13".into() }],
+        }],
         _ => unreachable!(),
     }
 }
 fn template_menu(ui: &mut egui::Ui, choice: &mut Option<usize>) {
     iconset::menu(ui, Ico::Template, crate::i18n::tr("Modèles"), |ui| {
         for (i, name) in TEMPLATE_NAMES.iter().enumerate() {
-            if ui.button(template_name(i)).clicked() { *choice = Some(i); ui.close_menu(); }
+            if ui.button(template_name(i)).clicked() {
+                *choice = Some(i);
+                ui.close_menu();
+            }
         }
     });
 }
 #[derive(Clone)]
 #[cfg(test)]
-struct TraceLine { path: Vec<usize>, text: String }
+struct TraceLine {
+    path: Vec<usize>,
+    text: String,
+}
 // Reflects engine::run_steps dry mode: both conditional branches and one loop
 // iteration are previewed; it does not evaluate the window or invoke actions.
 #[cfg(test)]
 fn simulation_trace(steps: &[Step]) -> Vec<TraceLine> {
     fn walk(steps: &[Step], parent: &[usize], out: &mut Vec<TraceLine>, limit: usize) {
         for (i, step) in steps.iter().enumerate() {
-            if out.len() >= limit { return; }
-            let mut path = parent.to_vec(); path.push(i);
-            let prefix = path.iter().step_by(2).map(|n| (n + 1).to_string()).collect::<Vec<_>>().join(".");
+            if out.len() >= limit {
+                return;
+            }
+            let mut path = parent.to_vec();
+            path.push(i);
+            let prefix = path
+                .iter()
+                .step_by(2)
+                .map(|n| (n + 1).to_string())
+                .collect::<Vec<_>>()
+                .join(".");
             if step.is_disabled() {
-                out.push(TraceLine { path, text: crate::i18n::trf("{prefix} · {block} — désactivé, sauté", &[("prefix", &(prefix)), ("block", &(block_summary(step)))] ) });
+                out.push(TraceLine {
+                    path,
+                    text: crate::i18n::trf(
+                        "{prefix} · {block} — désactivé, sauté",
+                        &[("prefix", &(prefix)), ("block", &(block_summary(step)))],
+                    ),
+                });
                 continue;
             }
             let detail = match step {
-                Step::Delay { ms } => crate::i18n::trf("{ms} ms simulées", &[("ms", &(ms))] ),
-                Step::WaitWindow { timeout_ms, .. } => crate::i18n::trf("jusqu'à {timeout_ms} ms (sans attendre)", &[("timeout_ms", &(timeout_ms))] ),
-                Step::WaitUntil { .. } => crate::i18n::tr("condition lue une fois ; sans attendre").into(),
-                Step::IfCondition { .. } => crate::i18n::tr("ALORS et SINON explorés ; condition lue sans effet").into(),
-                Step::IfWindow { .. } => crate::i18n::tr("ALORS et SINON explorés (fenêtre non évaluée)").into(),
-                Step::IfVariable { .. } => crate::i18n::tr("ALORS et SINON explorés (valeur non évaluée)").into(),
-                Step::Repeat { count, .. } => crate::i18n::trf("1 itération simulée sur {count} prévues", &[("count", &(count))] ),
+                Step::Delay { ms } => crate::i18n::trf("{ms} ms simulées", &[("ms", &(ms))]),
+                Step::WaitWindow { timeout_ms, .. } => crate::i18n::trf(
+                    "jusqu'à {timeout_ms} ms (sans attendre)",
+                    &[("timeout_ms", &(timeout_ms))],
+                ),
+                Step::WaitUntil { .. } => {
+                    crate::i18n::tr("condition lue une fois ; sans attendre").into()
+                }
+                Step::IfCondition { .. } => {
+                    crate::i18n::tr("ALORS et SINON explorés ; condition lue sans effet").into()
+                }
+                Step::IfWindow { .. } => {
+                    crate::i18n::tr("ALORS et SINON explorés (fenêtre non évaluée)").into()
+                }
+                Step::IfVariable { .. } => {
+                    crate::i18n::tr("ALORS et SINON explorés (valeur non évaluée)").into()
+                }
+                Step::Repeat { count, .. } => crate::i18n::trf(
+                    "1 itération simulée sur {count} prévues",
+                    &[("count", &(count))],
+                ),
                 Step::Toggle { .. } => crate::i18n::tr("États 1 et 2 explorés sans effet").into(),
                 _ => crate::i18n::tr("0 ms (action non exécutée)").into(),
             };
-            out.push(TraceLine { path: path.clone(), text: crate::i18n::trf("{prefix} · {block} — {detail}", &[("prefix", &(prefix)), ("block", &(block_summary(step))), ("detail", &(detail))] ) });
+            out.push(TraceLine {
+                path: path.clone(),
+                text: crate::i18n::trf(
+                    "{prefix} · {block} — {detail}",
+                    &[
+                        ("prefix", &(prefix)),
+                        ("block", &(block_summary(step))),
+                        ("detail", &(detail)),
+                    ],
+                ),
+            });
             match step {
-                Step::IfCondition { then_steps, else_steps, .. } | Step::IfWindow { then_steps, else_steps, .. } | Step::IfVariable { then_steps, else_steps, .. } => {
-                    let mut p = path.clone(); p.push(0); walk(then_steps, &p, out, limit);
-                    p.pop(); p.push(1); walk(else_steps, &p, out, limit);
+                Step::IfCondition {
+                    then_steps,
+                    else_steps,
+                    ..
                 }
-                Step::Repeat { steps, .. } => { let mut p = path; p.push(0); walk(steps, &p, out, limit); }
-                Step::Toggle { a, b } => { let mut p = path.clone(); p.push(0); walk(a, &p, out, limit); p.pop(); p.push(1); walk(b, &p, out, limit); }
+                | Step::IfWindow {
+                    then_steps,
+                    else_steps,
+                    ..
+                }
+                | Step::IfVariable {
+                    then_steps,
+                    else_steps,
+                    ..
+                } => {
+                    let mut p = path.clone();
+                    p.push(0);
+                    walk(then_steps, &p, out, limit);
+                    p.pop();
+                    p.push(1);
+                    walk(else_steps, &p, out, limit);
+                }
+                Step::Repeat { steps, .. } => {
+                    let mut p = path;
+                    p.push(0);
+                    walk(steps, &p, out, limit);
+                }
+                Step::Toggle { a, b } => {
+                    let mut p = path.clone();
+                    p.push(0);
+                    walk(a, &p, out, limit);
+                    p.pop();
+                    p.push(1);
+                    walk(b, &p, out, limit);
+                }
                 _ => {}
             }
         }
@@ -458,7 +889,12 @@ fn simulation_trace(steps: &[Step]) -> Vec<TraceLine> {
     result
 }
 fn new_block(kind: usize, profiles: &[String]) -> Step {
-    catalog::action(kind, profiles.first().map(String::as_str).unwrap_or("Bureau")).steps.remove(0)
+    catalog::action(
+        kind,
+        profiles.first().map(String::as_str).unwrap_or("Bureau"),
+    )
+    .steps
+    .remove(0)
 }
 #[allow(clippy::too_many_arguments)] // Recursive editor forwards selection and async dialog context.
 pub(super) fn block_editor(
@@ -473,7 +909,7 @@ pub(super) fn block_editor(
     running: &[usize],
     pick_audio: &mut Option<(Vec<usize>, usize)>,
     tx: &Sender<Option<DialogEffect>>,
-    target: &(usize,String,usize),
+    target: &(usize, String, usize),
     config: &crate::model::Config,
     advanced: bool,
     plugins: &[crate::plugins::Plugin],
@@ -495,8 +931,15 @@ pub(super) fn block_editor(
                     for &(category, kinds) in BLOCK_CATEGORIES {
                         ui.menu_button(category_name(category), |ui| {
                             for &kind in kinds {
-                                if depth > 0 && (7..=11).contains(&kind) || !advanced && kind == 18 { continue; }
-                                if ui.button(block_name(kind)).on_hover_text(block_help(kind)).clicked() {
+                                if depth > 0 && (7..=11).contains(&kind) || !advanced && kind == 18
+                                {
+                                    continue;
+                                }
+                                if ui
+                                    .button(block_name(kind))
+                                    .on_hover_text(block_help(kind))
+                                    .clicked()
+                                {
                                     insertion = Some((i, new_block(kind, profiles)));
                                     ui.close_menu();
                                 }
@@ -510,25 +953,43 @@ pub(super) fn block_editor(
                 });
             }
             let disabled = step.is_disabled();
-            let color = if matches!(step.active(), Step::IfWindow { .. } | Step::IfVariable { .. } | Step::IfCondition { .. }) {
+            let color = if matches!(
+                step.active(),
+                Step::IfWindow { .. } | Step::IfVariable { .. } | Step::IfCondition { .. }
+            ) {
                 Color32::from_rgb(164, 123, 239)
             } else if matches!(step.active(), Step::Repeat { .. }) {
                 Color32::from_rgb(239, 169, 83)
             } else {
                 accent()
             };
-            let error = crate::model::validate_key(&Key { steps: vec![step.active().clone()], ..Key::default() }, config).err();
+            let error = crate::model::validate_key(
+                &Key {
+                    steps: vec![step.active().clone()],
+                    ..Key::default()
+                },
+                config,
+            )
+            .err();
             egui::Frame::new()
                 .fill(if disabled { p.surface } else { p.bg })
                 .stroke(egui::Stroke::new(
                     if running == path { 2.0_f32 } else { 1.0_f32 },
-                    if running == path { GREEN } else if error.is_some() && !disabled { Color32::from_rgb(255, 170, 70) } else { p.line },
+                    if running == path {
+                        GREEN
+                    } else if error.is_some() && !disabled {
+                        Color32::from_rgb(255, 170, 70)
+                    } else {
+                        p.line
+                    },
                 ))
                 .corner_radius(12)
                 .inner_margin(14)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let (bar, _) = ui.allocate_exact_size(egui::vec2(4.0, 20.0), egui::Sense::hover()); ui.painter().rect_filled(bar, 2.0, color);
+                        let (bar, _) =
+                            ui.allocate_exact_size(egui::vec2(4.0, 20.0), egui::Sense::hover());
+                        ui.painter().rect_filled(bar, 2.0, color);
                         theme::pill(
                             ui,
                             &path
@@ -544,40 +1005,117 @@ pub(super) fn block_editor(
                         let folded_id = egui::Id::new("block_fold").with(&path);
                         let folded = ui.data(|d| d.get_temp::<bool>(folded_id)).unwrap_or(true);
                         let summary = named_summary(step, plugins);
-                        if ui.selectable_label(!folded, if summary.starts_with(step_label(step)) { summary.clone() } else { format!("{} · {}", step_label(step), summary) })
-                            .on_hover_text(format!("{} — {}", step_label(step), summary)).clicked() {
-                            if matches!(step.active(),Step::PluginAction { .. }) {ui.ctx().data_mut(|d|d.insert_temp(egui::Id::new("plugin_block_open"),path.clone()));}
+                        if ui
+                            .selectable_label(
+                                !folded,
+                                if summary.starts_with(step_label(step)) {
+                                    summary.clone()
+                                } else {
+                                    format!("{} · {}", step_label(step), summary)
+                                },
+                            )
+                            .on_hover_text(format!("{} — {}", step_label(step), summary))
+                            .clicked()
+                        {
+                            if matches!(step.active(), Step::PluginAction { .. }) {
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(egui::Id::new("plugin_block_open"), path.clone())
+                                });
+                            }
                             ui.data_mut(|d| d.insert_temp(folded_id, !folded));
                             if parent.is_empty() {
-                                ui.data_mut(|d| d.insert_temp(egui::Id::new("workshop_selected"), i));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(egui::Id::new("workshop_selected"), i)
+                                });
                             }
                         }
                         ui.menu_button("...", |ui| {
-                            if ui.button(crate::i18n::tr("Dupliquer")).clicked() { duplicate = Some(i); ui.close_menu(); }
-                            if ui.button(crate::i18n::tr("Retirer")).clicked() { remove = Some(i); ui.close_menu(); }
-                            if ui.button(if disabled { crate::i18n::tr("Activer") } else { crate::i18n::tr("Désactiver") }).clicked() { toggle = Some(i); ui.close_menu(); }
-                            if ui.add_enabled(i > 0, egui::Button::new(crate::i18n::tr("Monter"))).clicked() { movement = Some((i, i - 1)); ui.close_menu(); }
-                            if ui.add_enabled(i + 1 < step_count, egui::Button::new(crate::i18n::tr("Descendre"))).clicked() { movement = Some((i, i + 1)); ui.close_menu(); }
+                            if ui.button(crate::i18n::tr("Dupliquer")).clicked() {
+                                duplicate = Some(i);
+                                ui.close_menu();
+                            }
+                            if ui.button(crate::i18n::tr("Retirer")).clicked() {
+                                remove = Some(i);
+                                ui.close_menu();
+                            }
+                            if ui
+                                .button(if disabled {
+                                    crate::i18n::tr("Activer")
+                                } else {
+                                    crate::i18n::tr("Désactiver")
+                                })
+                                .clicked()
+                            {
+                                toggle = Some(i);
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(i > 0, egui::Button::new(crate::i18n::tr("Monter")))
+                                .clicked()
+                            {
+                                movement = Some((i, i - 1));
+                                ui.close_menu();
+                            }
+                            if ui
+                                .add_enabled(
+                                    i + 1 < step_count,
+                                    egui::Button::new(crate::i18n::tr("Descendre")),
+                                )
+                                .clicked()
+                            {
+                                movement = Some((i, i + 1));
+                                ui.close_menu();
+                            }
                         });
                     });
-                    if let Some(e) = &error { if !disabled { ui.colored_label(Color32::from_rgb(255, 170, 70), crate::i18n::trf("À compléter : {e}", &[("e", &(e))] )); } }
-                    if !advanced { ui.label(RichText::new(block_help(match step.active() {
-                        Step::Hotkey { .. } => 0, Step::Text { .. } => 1, Step::Launch { .. } => 2,
-                        Step::Url { .. } => 3, Step::Media { .. } => 4, Step::Delay { .. } => 5,
-                        Step::WaitWindow { .. } => 6, Step::AudioSwitch { .. } => 13, Step::DeviceVolume { .. } => 38,
-                        Step::IfWindow { .. } => 14, Step::IfCondition { .. } => 39, Step::WaitUntil { .. } => 40, Step::Notify { .. } => 41, Step::Repeat { .. } => 15,
-                        Step::Toggle { .. } => 36,
-                        Step::SetVariable { .. } => 16, Step::IfVariable { .. } => 17, Step::Math { .. } => 42, Step::TextOp { .. } => 43,
-                        Step::AutoHotkey { .. } => 18, _ => 7,
-                    })).small()); }
-                    if ui.data(|d| d.get_temp::<bool>(egui::Id::new("block_fold").with(&path))).unwrap_or(true) {
+                    if let Some(e) = &error {
+                        if !disabled {
+                            ui.colored_label(
+                                Color32::from_rgb(255, 170, 70),
+                                crate::i18n::trf("À compléter : {e}", &[("e", &(e))]),
+                            );
+                        }
+                    }
+                    if !advanced {
+                        ui.label(
+                            RichText::new(block_help(match step.active() {
+                                Step::Hotkey { .. } => 0,
+                                Step::Text { .. } => 1,
+                                Step::Launch { .. } => 2,
+                                Step::Url { .. } => 3,
+                                Step::Media { .. } => 4,
+                                Step::Delay { .. } => 5,
+                                Step::WaitWindow { .. } => 6,
+                                Step::AudioSwitch { .. } => 13,
+                                Step::DeviceVolume { .. } => 38,
+                                Step::IfWindow { .. } => 14,
+                                Step::IfCondition { .. } => 39,
+                                Step::WaitUntil { .. } => 40,
+                                Step::Notify { .. } => 41,
+                                Step::Repeat { .. } => 15,
+                                Step::Toggle { .. } => 36,
+                                Step::SetVariable { .. } => 16,
+                                Step::IfVariable { .. } => 17,
+                                Step::Math { .. } => 42,
+                                Step::TextOp { .. } => 43,
+                                Step::AutoHotkey { .. } => 18,
+                                _ => 7,
+                            }))
+                            .small(),
+                        );
+                    }
+                    if ui
+                        .data(|d| d.get_temp::<bool>(egui::Id::new("block_fold").with(&path)))
+                        .unwrap_or(true)
+                    {
                         return;
                     }
                     ui.add_space(6.0);
                     let mut capture = false;
                     let mut icon = None;
                     if matches!(step.active(), Step::PluginAction { .. }) {
-                        changed |= plugin_fields(ui, step.active_mut(), config, plugins, advanced, &path);
+                        changed |=
+                            plugin_fields(ui, step.active_mut(), config, plugins, advanced, &path);
                     } else if simple_fields_visible(step.active(), advanced) {
                         match step.active_mut() {
                             Step::Launch { program, .. } if !advanced => {
@@ -589,10 +1127,24 @@ pub(super) fn block_editor(
                                 changed |= ui.text_edit_singleline(title).changed();
                             }
                             _ => {
-                                changed |= edit_step(ui, step.active_mut(), profiles, pages, &mut capture, audio, &mut icon, tx, &(target.0,target.1.clone(),target.2,path.clone()));
+                                changed |= edit_step(
+                                    ui,
+                                    step.active_mut(),
+                                    profiles,
+                                    pages,
+                                    &mut capture,
+                                    audio,
+                                    &mut icon,
+                                    tx,
+                                    &(target.0, target.1.clone(), target.2, path.clone()),
+                                );
                             }
                         }
-                    } else { ui.label(crate::i18n::tr("Paramètres AutoHotkey disponibles en mode Avancé.")); }
+                    } else {
+                        ui.label(crate::i18n::tr(
+                            "Paramètres AutoHotkey disponibles en mode Avancé.",
+                        ));
+                    }
                     if let Some(state) = icon {
                         *pick_audio = Some((path.clone(), state));
                     }
@@ -600,7 +1152,11 @@ pub(super) fn block_editor(
                         *record = Some(path.clone());
                     }
                     match step.active_mut() {
-                        Step::IfCondition { then_steps, else_steps, .. }
+                        Step::IfCondition {
+                            then_steps,
+                            else_steps,
+                            ..
+                        }
                         | Step::IfWindow {
                             then_steps,
                             else_steps,
@@ -615,7 +1171,16 @@ pub(super) fn block_editor(
                                 [(0, "ALORS", then_steps), (1, "SINON", else_steps)]
                             {
                                 ui.add_space(8.0);
-                                ui.label(RichText::new(if branch == 0 { crate::i18n::tr("ALORS") } else { crate::i18n::tr("SINON") }).small().strong().color(color));
+                                ui.label(
+                                    RichText::new(if branch == 0 {
+                                        crate::i18n::tr("ALORS")
+                                    } else {
+                                        crate::i18n::tr("SINON")
+                                    })
+                                    .small()
+                                    .strong()
+                                    .color(color),
+                                );
                                 let mut child = path.clone();
                                 child.push(branch);
                                 ui.indent(branch, |ui| {
@@ -641,9 +1206,32 @@ pub(super) fn block_editor(
                         }
                         Step::Toggle { a, b } => {
                             for (branch, label, list) in [(0, "ÉTAT 1", a), (1, "ÉTAT 2", b)] {
-                                ui.label(if branch == 0 { crate::i18n::tr("ÉTAT 1") } else { crate::i18n::tr("ÉTAT 2") });
-                                let mut child = path.clone(); child.push(branch);
-                                ui.indent(branch, |ui| { changed |= block_editor(ui, list, profiles, pages, audio, &child, record, depth + 1, running, pick_audio, tx, target, config, advanced, plugins); });
+                                ui.label(if branch == 0 {
+                                    crate::i18n::tr("ÉTAT 1")
+                                } else {
+                                    crate::i18n::tr("ÉTAT 2")
+                                });
+                                let mut child = path.clone();
+                                child.push(branch);
+                                ui.indent(branch, |ui| {
+                                    changed |= block_editor(
+                                        ui,
+                                        list,
+                                        profiles,
+                                        pages,
+                                        audio,
+                                        &child,
+                                        record,
+                                        depth + 1,
+                                        running,
+                                        pick_audio,
+                                        tx,
+                                        target,
+                                        config,
+                                        advanced,
+                                        plugins,
+                                    );
+                                });
                             }
                         }
                         Step::Repeat { steps, .. } => {
@@ -676,7 +1264,15 @@ pub(super) fn block_editor(
     }
     if let Some(i) = toggle {
         let old = steps.remove(i);
-        steps.insert(i, match old { Step::Disabled { step } => *step, step => Step::Disabled { step: Box::new(step) } });
+        steps.insert(
+            i,
+            match old {
+                Step::Disabled { step } => *step,
+                step => Step::Disabled {
+                    step: Box::new(step),
+                },
+            },
+        );
         changed = true;
     }
     if let Some(i) = duplicate {
@@ -727,14 +1323,36 @@ pub(super) fn block_editor(
 /// Catégorie visuelle d'un bloc. Source unique de la couleur et de l'icône : cartes de la séquence,
 /// bibliothèque et fantômes de glisser lisent tous `block_style`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum BlockCategory { Keyboard, Audio, System, Apps, Windows, Wait, Logic, Repeat, Toggle, Plugin, Navigation, Streaming }
+pub(super) enum BlockCategory {
+    Keyboard,
+    Audio,
+    System,
+    Apps,
+    Windows,
+    Wait,
+    Logic,
+    Repeat,
+    Toggle,
+    Plugin,
+    Navigation,
+    Streaming,
+}
 impl BlockCategory {
     fn family(self) -> iconset::Family {
         use iconset::Family as F;
         match self {
-            Self::Keyboard => F::Input, Self::Audio => F::Audio, Self::System => F::System, Self::Apps => F::App,
-            Self::Windows => F::Web, Self::Wait => F::Warning, Self::Logic => F::Logic, Self::Repeat => F::Media,
-            Self::Toggle => F::Image, Self::Plugin => F::Plugin, Self::Navigation => F::Accent, Self::Streaming => F::Streaming,
+            Self::Keyboard => F::Input,
+            Self::Audio => F::Audio,
+            Self::System => F::System,
+            Self::Apps => F::App,
+            Self::Windows => F::Web,
+            Self::Wait => F::Warning,
+            Self::Logic => F::Logic,
+            Self::Repeat => F::Media,
+            Self::Toggle => F::Image,
+            Self::Plugin => F::Plugin,
+            Self::Navigation => F::Accent,
+            Self::Streaming => F::Streaming,
         }
     }
 }
@@ -742,40 +1360,92 @@ pub(super) fn block_category(step: &Step) -> BlockCategory {
     use BlockCategory as C;
     match step.active() {
         Step::PluginAction { .. } => C::Plugin,
-        Step::Hotkey { .. } | Step::KeyHold { .. } | Step::AutoHotkey { .. } | Step::Text { .. } | Step::TextOp { .. } | Step::Clipboard { .. }
-        | Step::MouseClick { .. } | Step::MouseMove { .. } | Step::MouseScroll { .. } => C::Keyboard,
-        Step::Media { .. } | Step::AppVolume { .. } | Step::DeviceVolume { .. } | Step::AudioSwitch { .. } | Step::PlaySound { .. } | Step::StopSounds => C::Audio,
+        Step::Hotkey { .. }
+        | Step::KeyHold { .. }
+        | Step::AutoHotkey { .. }
+        | Step::Text { .. }
+        | Step::TextOp { .. }
+        | Step::Clipboard { .. }
+        | Step::MouseClick { .. }
+        | Step::MouseMove { .. }
+        | Step::MouseScroll { .. } => C::Keyboard,
+        Step::Media { .. }
+        | Step::AppVolume { .. }
+        | Step::DeviceVolume { .. }
+        | Step::AudioSwitch { .. }
+        | Step::PlaySound { .. }
+        | Step::StopSounds => C::Audio,
         Step::Launch { .. } | Step::Url { .. } => C::Apps,
         Step::WindowOp { .. } | Step::CloseWindow => C::Windows,
         Step::Delay { .. } | Step::WaitWindow { .. } | Step::WaitUntil { .. } => C::Wait,
-        Step::IfCondition { .. } | Step::IfWindow { .. } | Step::IfVariable { .. } | Step::SetVariable { .. } | Step::Math { .. } => C::Logic,
+        Step::IfCondition { .. }
+        | Step::IfWindow { .. }
+        | Step::IfVariable { .. }
+        | Step::SetVariable { .. }
+        | Step::Math { .. } => C::Logic,
         Step::Repeat { .. } => C::Repeat,
         Step::Toggle { .. } => C::Toggle,
-        Step::Profile { .. } | Step::Folder { .. } | Step::Page { .. } | Step::PageNext | Step::PagePrevious | Step::Back => C::Navigation,
-        Step::ObsRecord { .. } | Step::ObsStream { .. } | Step::ObsVirtualCam { .. } | Step::ObsReplay { .. } | Step::ObsScene { .. }
-        | Step::ObsSourceVisibility { .. } | Step::ObsMute { .. } => C::Streaming,
+        Step::Profile { .. }
+        | Step::Folder { .. }
+        | Step::Page { .. }
+        | Step::PageNext
+        | Step::PagePrevious
+        | Step::Back => C::Navigation,
+        Step::ObsRecord { .. }
+        | Step::ObsStream { .. }
+        | Step::ObsVirtualCam { .. }
+        | Step::ObsReplay { .. }
+        | Step::ObsScene { .. }
+        | Step::ObsSourceVisibility { .. }
+        | Step::ObsMute { .. } => C::Streaming,
         _ => C::System,
     }
 }
-pub(super) struct BlockStyle { pub category: BlockCategory, pub color: Color32, pub family: iconset::Family, pub ico: iconset::Ico }
+pub(super) struct BlockStyle {
+    pub category: BlockCategory,
+    pub color: Color32,
+    pub family: iconset::Family,
+    pub ico: iconset::Ico,
+}
 pub(super) fn block_style(ctx: &egui::Context, step: &Step) -> BlockStyle {
     let category = block_category(step);
     let family = category.family();
     let p = theme::palette(ctx);
     // Navigation : teal dédié (Family::Accent = accent du thème = même bleu que « Applications »).
-    let color = if category == BlockCategory::Navigation { Color32::from_rgb(0x14, 0xB8, 0xA6) }
-        else { iconset::colors(family, ctx.style().visuals.dark_mode, p.accent, p.ink)[1] };
-    BlockStyle { category, color, family, ico: iconset::for_step(step) }
+    let color = if category == BlockCategory::Navigation {
+        Color32::from_rgb(0x14, 0xB8, 0xA6)
+    } else {
+        iconset::colors(family, ctx.style().visuals.dark_mode, p.accent, p.ink)[1]
+    };
+    BlockStyle {
+        category,
+        color,
+        family,
+        ico: iconset::for_step(step),
+    }
 }
 /// Fond de la pastille d'icône, dérivé de la couleur de catégorie.
-pub(super) fn badge_fill(color: Color32) -> Color32 { color.gamma_multiply(0.22) }
+pub(super) fn badge_fill(color: Color32) -> Color32 {
+    color.gamma_multiply(0.22)
+}
 /// Taille de l'icône dans la pastille (identique sur la carte et dans la bibliothèque).
 pub(super) const BADGE_ICON: f32 = 16.0;
 /// Icône du plugin ou de l'action (manifeste) d'un bloc Action de plugin, si elle est lisible.
-fn plugin_icon(ctx: &egui::Context, step: &Step, plugins: &[crate::plugins::Plugin]) -> Option<egui::TextureId> {
-    let Step::PluginAction { plugin, action, .. } = step.active() else { return None };
+fn plugin_icon(
+    ctx: &egui::Context,
+    step: &Step,
+    plugins: &[crate::plugins::Plugin],
+) -> Option<egui::TextureId> {
+    let Step::PluginAction { plugin, action, .. } = step.active() else {
+        return None;
+    };
     let owner = plugins.iter().find(|p| p.uuid == *plugin)?;
-    let path = owner.actions.iter().find(|a| a.uuid == *action).and_then(|a| a.icon.as_ref()).or(owner.icon.as_ref())?;
+    let path = owner
+        .actions
+        .iter()
+        .find(|a| a.uuid == *action)
+        .and_then(|a| a.icon.as_ref())
+        .or(owner.icon.as_ref())?;
     super::icon_ui::texture(ctx, &path.to_string_lossy()).map(|texture| texture.id())
 }
 /// Pastille colorée de la catégorie contenant l'icône IconPark du bloc (icône du manifeste pour un plugin).
@@ -785,80 +1455,188 @@ fn block_badge_for(ui: &mut egui::Ui, step: &Step, size: f32, plugins: &[crate::
     ui.painter().rect_filled(rect, 8.0, badge_fill(style.color));
     match plugin_icon(ui.ctx(), step, plugins) {
         Some(id) => {
-            let icon = egui::Rect::from_center_size(rect.center(), egui::vec2(BADGE_ICON, BADGE_ICON));
-            ui.painter().image(id, icon, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+            let icon =
+                egui::Rect::from_center_size(rect.center(), egui::vec2(BADGE_ICON, BADGE_ICON));
+            ui.painter().image(
+                id,
+                icon,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
         }
-        None => iconset::paint(ui.painter(), rect.center(), BADGE_ICON, style.ico, style.family, 1.0, 0),
+        None => iconset::paint(
+            ui.painter(),
+            rect.center(),
+            BADGE_ICON,
+            style.ico,
+            style.family,
+            1.0,
+            0,
+        ),
     }
 }
 /// Titre et résumé d'une carte. Un bloc Action de plugin : titre = nom de l'action, résumé = nom du plugin
 /// (+ libellé personnalisé) ; les autres : nom du bloc et résumé habituel.
 fn card_texts(step: &Step, plugins: &[crate::plugins::Plugin]) -> (String, String) {
-    if let Step::PluginAction { plugin, action, label, .. } = step.active() {
+    if let Step::PluginAction {
+        plugin,
+        action,
+        label,
+        ..
+    } = step.active()
+    {
         let (plugin_name, action_name) = plugin_names(plugin, action, label, plugins);
         let custom = !label.is_empty() && label.as_str() != action_name && label != action;
-        return (action_name, if custom { format!("{plugin_name} · {label}") } else { plugin_name });
+        return (
+            action_name,
+            if custom {
+                format!("{plugin_name} · {label}")
+            } else {
+                plugin_name
+            },
+        );
     }
     (step_label(step).to_owned(), named_summary(step, plugins))
 }
 /// Texte sur une ligne tronqué par « … » à `max_width`, avec infobulle non sélectionnable du texte complet.
-fn elided_label(ui: &mut egui::Ui, text: &str, font: egui::FontId, color: Color32, max_width: f32) -> egui::Response {
+fn elided_label(
+    ui: &mut egui::Ui,
+    text: &str,
+    font: egui::FontId,
+    color: Color32,
+    max_width: f32,
+) -> egui::Response {
     let painter = ui.painter().clone();
     let full = painter.layout_no_wrap(text.to_owned(), font.clone(), color);
-    let (galley, elided) = if full.size().x <= max_width { (full, false) } else {
+    let (galley, elided) = if full.size().x <= max_width {
+        (full, false)
+    } else {
         let chars: Vec<char> = text.chars().collect();
         let (mut low, mut high) = (0, chars.len());
         while low < high {
             let mid = (low + high + 1) / 2;
             let candidate = format!("{}…", chars[..mid].iter().collect::<String>().trim_end());
-            if painter.layout_no_wrap(candidate, font.clone(), color).size().x <= max_width { low = mid; } else { high = mid - 1; }
+            if painter
+                .layout_no_wrap(candidate, font.clone(), color)
+                .size()
+                .x
+                <= max_width
+            {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
         }
-        (painter.layout_no_wrap(format!("{}…", chars[..low].iter().collect::<String>().trim_end()), font, color), true)
+        (
+            painter.layout_no_wrap(
+                format!("{}…", chars[..low].iter().collect::<String>().trim_end()),
+                font,
+                color,
+            ),
+            true,
+        )
     };
     let (rect, response) = ui.allocate_exact_size(galley.size(), egui::Sense::hover());
     ui.painter().galley(rect.min, galley, color);
     if elided {
-        response.on_hover_ui(|ui| { ui.style_mut().interaction.selectable_labels = false; ui.label(text); })
-    } else { response }
+        response.on_hover_ui(|ui| {
+            ui.style_mut().interaction.selectable_labels = false;
+            ui.label(text);
+        })
+    } else {
+        response
+    }
 }
 /// Chip d'en-tête de branche : libellé en semi-gras puis, éventuellement, une étiquette (« · ON », « ×3 »).
 fn branch_chip(ui: &mut egui::Ui, label: &str, tag: &str, color: Color32) {
-    let ink = if ui.visuals().dark_mode { color.lerp_to_gamma(Color32::WHITE, 0.45) } else { color.lerp_to_gamma(Color32::BLACK, 0.35) };
-    egui::Frame::new().fill(color.gamma_multiply(0.18)).corner_radius(8).inner_margin(egui::Margin::symmetric(8, 2)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            ui.spacing_mut().interact_size.y = 16.0;
-            ui.add(egui::Label::new(RichText::new(label).font(theme::strong(11.0)).color(ink)).selectable(false));
-            if !tag.is_empty() { ui.add(egui::Label::new(RichText::new(tag).size(11.0).color(ink)).selectable(false)); }
+    let ink = if ui.visuals().dark_mode {
+        color.lerp_to_gamma(Color32::WHITE, 0.45)
+    } else {
+        color.lerp_to_gamma(Color32::BLACK, 0.35)
+    };
+    egui::Frame::new()
+        .fill(color.gamma_multiply(0.18))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(8, 2))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.spacing_mut().interact_size.y = 16.0;
+                ui.add(
+                    egui::Label::new(RichText::new(label).font(theme::strong(11.0)).color(ink))
+                        .selectable(false),
+                );
+                if !tag.is_empty() {
+                    ui.add(
+                        egui::Label::new(RichText::new(tag).size(11.0).color(ink))
+                            .selectable(false),
+                    );
+                }
+            });
         });
-    });
 }
 fn branch_label(label: &str) -> &'static str {
     match label {
-        "RÉPÉTER" => crate::i18n::tr("RÉPÉTER"), "ÉTAT 1" => crate::i18n::tr("ÉTAT 1"), "ÉTAT 2" => crate::i18n::tr("ÉTAT 2"),
-        "ALORS" => crate::i18n::tr("ALORS"), "SINON" => crate::i18n::tr("SINON"), _ => "",
+        "RÉPÉTER" => crate::i18n::tr("RÉPÉTER"),
+        "ÉTAT 1" => crate::i18n::tr("ÉTAT 1"),
+        "ÉTAT 2" => crate::i18n::tr("ÉTAT 2"),
+        "ALORS" => crate::i18n::tr("ALORS"),
+        "SINON" => crate::i18n::tr("SINON"),
+        _ => "",
     }
 }
 fn block_count(count: usize) -> String {
-    if count == 1 { crate::i18n::trf("{count} bloc", &[("count", &count)]) } else { crate::i18n::trf("{count} blocs", &[("count", &count)]) }
+    if count == 1 {
+        crate::i18n::trf("{count} bloc", &[("count", &count)])
+    } else {
+        crate::i18n::trf("{count} blocs", &[("count", &count)])
+    }
 }
 /// Chevron dessiné (replié : vers la droite ; déplié : vers le bas).
 fn fold_chevron(ui: &mut egui::Ui, collapsed: bool, color: Color32) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::click());
     let c = rect.center();
-    let color = if response.hovered() { ui.visuals().strong_text_color() } else { color };
-    let points = if collapsed { vec![c + egui::vec2(-2.0, -4.0), c + egui::vec2(2.0, 0.0), c + egui::vec2(-2.0, 4.0)] }
-        else { vec![c + egui::vec2(-4.0, -2.0), c + egui::vec2(0.0, 2.0), c + egui::vec2(4.0, -2.0)] };
-    ui.painter().add(egui::Shape::line(points, egui::Stroke::new(1.8_f32, color)));
-    let hint = if collapsed { crate::i18n::tr("Étendre") } else { crate::i18n::tr("Replier") };
-    response.on_hover_ui(|ui| { ui.style_mut().interaction.selectable_labels = false; ui.label(hint); })
+    let color = if response.hovered() {
+        ui.visuals().strong_text_color()
+    } else {
+        color
+    };
+    let points = if collapsed {
+        vec![
+            c + egui::vec2(-2.0, -4.0),
+            c + egui::vec2(2.0, 0.0),
+            c + egui::vec2(-2.0, 4.0),
+        ]
+    } else {
+        vec![
+            c + egui::vec2(-4.0, -2.0),
+            c + egui::vec2(0.0, 2.0),
+            c + egui::vec2(4.0, -2.0),
+        ]
+    };
+    ui.painter()
+        .add(egui::Shape::line(points, egui::Stroke::new(1.8_f32, color)));
+    let hint = if collapsed {
+        crate::i18n::tr("Étendre")
+    } else {
+        crate::i18n::tr("Replier")
+    };
+    response.on_hover_ui(|ui| {
+        ui.style_mut().interaction.selectable_labels = false;
+        ui.label(hint);
+    })
 }
 // Hauteur de l'emplacement de dépôt : celle d'une carte compacte.
 const DROP_SLOT_HEIGHT: f32 = 44.0;
 fn workshop_dragging(ctx: &egui::Context) -> bool {
-    ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
-        || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some()
-        || d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin")).is_some())
+    ctx.data(|d| {
+        d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))
+            .is_some()
+            || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))
+                .is_some()
+            || d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin"))
+                .is_some()
+    })
 }
 // A compact card tree; structural edits are applied only after the immutable render pass.
 // Toute la carte est saisissable (Sense::click_and_drag enregistré avant son contenu, donc sous
@@ -866,17 +1644,30 @@ fn workshop_dragging(ctx: &egui::Context) -> bool {
 // Chaque carte : liseré et pastille de la catégorie, titre semi-gras, résumé sur une ligne ; un conteneur
 // (Toggle, Si/Sinon, Répéter) a un chevron, des chips de branche et une ligne de liaison colorée.
 const FOLD_HOVER_SECS: f64 = 0.6;
-fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering: &str, selection: &mut Option<Vec<usize>>,
-    action: &mut Option<WorkshopAction>, insert_at: &mut Option<Vec<usize>>, config: &crate::model::Config,
+fn sequence_cards(
+    ui: &mut egui::Ui,
+    steps: &[Step],
+    parent: &[usize],
+    numbering: &str,
+    selection: &mut Option<Vec<usize>>,
+    action: &mut Option<WorkshopAction>,
+    insert_at: &mut Option<Vec<usize>>,
+    config: &crate::model::Config,
     plugins: &[crate::plugins::Plugin],
-    ) {
+) {
     let p = theme::palette(ui.ctx());
     let ctx = ui.ctx().clone();
-    let enabled = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("workshop_motion_enabled"))).unwrap_or(false);
+    let enabled = ctx
+        .data(|d| d.get_temp::<bool>(egui::Id::new("workshop_motion_enabled")))
+        .unwrap_or(false);
     let dragging = workshop_dragging(&ctx);
     let dragged = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")));
     // Cible calculée à l'image précédente : l'emplacement est dessiné là où le dépôt aurait lieu.
-    let shown = if dragging { ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_shown"))) } else { None };
+    let shown = if dragging {
+        ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drop_shown")))
+    } else {
+        None
+    };
     // Stable content identities let cards follow their previous painted positions after a move.
     // Duplicate blocks get distinct occurrence numbers within the same branch.
     let seen_id = egui::Id::new(("workshop_card_seen", parent));
@@ -886,13 +1677,21 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
     for step in steps {
         let signature = serde_json::to_string(step).unwrap_or_default();
         let occurrence = occurrences.entry(signature.clone()).or_insert(0_usize);
-        identities.push(egui::Id::new(("workshop_card_motion", parent, signature, *occurrence)));
+        identities.push(egui::Id::new((
+            "workshop_card_motion",
+            parent,
+            signature,
+            *occurrence,
+        )));
         *occurrence += 1;
     }
     for (i, step) in steps.iter().enumerate() {
-        let mut path = parent.to_vec(); path.push(i);
+        let mut path = parent.to_vec();
+        path.push(i);
         let slot_here = shown.as_deref() == Some(path.as_slice());
-        if slot_here { workshop_slot_zone(ui, &path, true); }
+        if slot_here {
+            workshop_slot_zone(ui, &path, true);
+        }
         ui.push_id(&path, |ui| {
             let chosen = selection.as_ref() == Some(&path);
             if i > 0 && !slot_here {
@@ -1154,14 +1953,16 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
         });
     }
     ctx.data_mut(|d| d.insert_temp(seen_id, identities));
-    let mut end = parent.to_vec(); end.push(steps.len());
+    let mut end = parent.to_vec();
+    end.push(steps.len());
     if shown.as_deref() == Some(end.as_slice()) {
         workshop_slot_zone(ui, &end, true);
     } else if !parent.is_empty() {
         if steps.is_empty() {
             workshop_slot_zone(ui, &end, false);
         } else {
-            let strip = ui.allocate_response(egui::vec2(ui.available_width(), 12.0), egui::Sense::hover());
+            let strip =
+                ui.allocate_response(egui::vec2(ui.available_width(), 12.0), egui::Sense::hover());
             workshop_drop_hit(ui, strip.rect, &end, false);
         }
     }
@@ -1171,18 +1972,45 @@ fn sequence_cards(ui: &mut egui::Ui, steps: &[Step], parent: &[usize], numbering
 fn workshop_slot_zone(ui: &mut egui::Ui, at: &[usize], target: bool) {
     let p = theme::palette(ui.ctx());
     let dragging = workshop_dragging(ui.ctx());
-    let (rect, _) = ui.allocate_exact_size(egui::vec2((ui.available_width() - 2.0).max(80.0), DROP_SLOT_HEIGHT), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2((ui.available_width() - 2.0).max(80.0), DROP_SLOT_HEIGHT),
+        egui::Sense::hover(),
+    );
     let inner = rect.shrink(1.0);
     let painter = ui.painter();
     let (stroke_color, label, font, ink) = if target {
         painter.rect_filled(inner, 10.0, accent().gamma_multiply(0.16));
-        (accent(), crate::i18n::tr("Déposer ici"), egui::TextStyle::Button.resolve(ui.style()), accent())
+        (
+            accent(),
+            crate::i18n::tr("Déposer ici"),
+            egui::TextStyle::Button.resolve(ui.style()),
+            accent(),
+        )
     } else {
-        (if dragging { accent().gamma_multiply(0.55) } else { p.muted.gamma_multiply(0.55) },
-            crate::i18n::tr("Vide — glisser un bloc ici"), egui::TextStyle::Small.resolve(ui.style()), p.muted)
+        (
+            if dragging {
+                accent().gamma_multiply(0.55)
+            } else {
+                p.muted.gamma_multiply(0.55)
+            },
+            crate::i18n::tr("Vide — glisser un bloc ici"),
+            egui::TextStyle::Small.resolve(ui.style()),
+            p.muted,
+        )
     };
-    let corners = [inner.left_top(), inner.right_top(), inner.right_bottom(), inner.left_bottom(), inner.left_top()];
-    painter.extend(egui::Shape::dashed_line(&corners, egui::Stroke::new(1.5_f32, stroke_color), 6.0, 4.0));
+    let corners = [
+        inner.left_top(),
+        inner.right_top(),
+        inner.right_bottom(),
+        inner.left_bottom(),
+        inner.left_top(),
+    ];
+    painter.extend(egui::Shape::dashed_line(
+        &corners,
+        egui::Stroke::new(1.5_f32, stroke_color),
+        6.0,
+        4.0,
+    ));
     painter.text(rect.center(), egui::Align2::CENTER_CENTER, label, font, ink);
     workshop_drop_hit(ui, rect.expand2(egui::vec2(0.0, 8.0)), at, false);
 }
@@ -1192,7 +2020,11 @@ fn grip_shape(rect: egui::Rect, color: Color32) -> egui::Shape {
     for column in 0..2 {
         for row in 0..3 {
             let offset = egui::vec2((column as f32 - 0.5) * 5.0, (row as f32 - 1.0) * 5.0);
-            dots.push(egui::Shape::circle_filled(rect.center() + offset, 1.7, color));
+            dots.push(egui::Shape::circle_filled(
+                rect.center() + offset,
+                1.7,
+                color,
+            ));
         }
     }
     egui::Shape::Vec(dots)
@@ -1208,9 +2040,13 @@ fn workshop_float_pos(ctx: &egui::Context, target: egui::Pos2, enabled: bool) ->
             let factor = 1.0 - (-dt * 24.0).exp();
             old.lerp(target, factor)
         })
-    } else { target };
+    } else {
+        target
+    };
     ctx.data_mut(|d| d.insert_temp(id, (result, now)));
-    if enabled && result.distance(target) > 0.4 { ctx.request_repaint(); }
+    if enabled && result.distance(target) > 0.4 {
+        ctx.request_repaint();
+    }
     result
 }
 /// Slightly tilted carried card; only Tooltip paint is rotated, never the source hit-tests.
@@ -1218,93 +2054,192 @@ fn workshop_ghost_tilt(ctx: &egui::Context, layer: egui::LayerId, center: egui::
     let angle = -4.0_f32.to_radians();
     fn rotate(pos: egui::Pos2, center: egui::Pos2, angle: f32) -> egui::Pos2 {
         let v = pos - center;
-        center + egui::vec2(v.x * angle.cos() - v.y * angle.sin(), v.x * angle.sin() + v.y * angle.cos())
+        center
+            + egui::vec2(
+                v.x * angle.cos() - v.y * angle.sin(),
+                v.x * angle.sin() + v.y * angle.cos(),
+            )
     }
     fn rotate_shape(shape: &mut egui::Shape, center: egui::Pos2, angle: f32) {
         match shape {
-            egui::Shape::Vec(shapes) => for child in shapes { rotate_shape(child, center, angle); },
+            egui::Shape::Vec(shapes) => {
+                for child in shapes {
+                    rotate_shape(child, center, angle);
+                }
+            }
             egui::Shape::Rect(rect) => {
-                let points = [rect.rect.left_top(), rect.rect.right_top(), rect.rect.right_bottom(), rect.rect.left_bottom()]
-                    .map(|p| rotate(p, center, angle)).to_vec();
+                let points = [
+                    rect.rect.left_top(),
+                    rect.rect.right_top(),
+                    rect.rect.right_bottom(),
+                    rect.rect.left_bottom(),
+                ]
+                .map(|p| rotate(p, center, angle))
+                .to_vec();
                 *shape = egui::Shape::convex_polygon(points, rect.fill, rect.stroke);
             }
-            egui::Shape::Path(path) => for point in &mut path.points { *point = rotate(*point, center, angle); },
-            egui::Shape::Text(text) => { text.pos = rotate(text.pos, center, angle); text.angle += angle; },
+            egui::Shape::Path(path) => {
+                for point in &mut path.points {
+                    *point = rotate(*point, center, angle);
+                }
+            }
+            egui::Shape::Text(text) => {
+                text.pos = rotate(text.pos, center, angle);
+                text.angle += angle;
+            }
             egui::Shape::Circle(circle) => circle.center = rotate(circle.center, center, angle),
-            egui::Shape::LineSegment { points, .. } => for point in points { *point = rotate(*point, center, angle); },
-            egui::Shape::Mesh(mesh) => for vertex in &mut std::sync::Arc::make_mut(mesh).vertices { vertex.pos = rotate(vertex.pos, center, angle); },
+            egui::Shape::LineSegment { points, .. } => {
+                for point in points {
+                    *point = rotate(*point, center, angle);
+                }
+            }
+            egui::Shape::Mesh(mesh) => {
+                for vertex in &mut std::sync::Arc::make_mut(mesh).vertices {
+                    vertex.pos = rotate(vertex.pos, center, angle);
+                }
+            }
             _ => {}
         }
     }
     ctx.graphics_mut(|g| {
         let list = g.entry(layer);
         for n in 0..list.next_idx().0 {
-            list.mutate_shape(egui::layers::ShapeIdx(n), |clipped| rotate_shape(&mut clipped.shape, center, angle));
+            list.mutate_shape(egui::layers::ShapeIdx(n), |clipped| {
+                rotate_shape(&mut clipped.shape, center, angle)
+            });
         }
     });
 }
 /// Calque Tooltip non interactif : la carte ne perturbe jamais le survol des blocs dessous.
-fn workshop_ghost(ctx: &egui::Context, step: &Step, number: &str, width: f32, plugins: &[crate::plugins::Plugin], enabled: bool) {
-    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
-    let grab = ctx.data(|d| d.get_temp::<egui::Vec2>(egui::Id::new("workshop_grab"))).unwrap_or(egui::vec2(24.0, 16.0));
+fn workshop_ghost(
+    ctx: &egui::Context,
+    step: &Step,
+    number: &str,
+    width: f32,
+    plugins: &[crate::plugins::Plugin],
+    enabled: bool,
+) {
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
+    let grab = ctx
+        .data(|d| d.get_temp::<egui::Vec2>(egui::Id::new("workshop_grab")))
+        .unwrap_or(egui::vec2(24.0, 16.0));
     let p = theme::palette(ctx);
     let texts = card_texts(step, plugins);
     let target = pos - grab;
     let position = workshop_float_pos(ctx, target, enabled);
-    let area = egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(position).show(ctx, |ui| {
-        egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(egui::Margin::symmetric(10, 6))
-            .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
-            .show(ui, |ui| {
-                ui.set_width(width.clamp(200.0, 380.0) - 20.0);
-                ui.horizontal(|ui| {
-                    ui.set_min_height(34.0);
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    let (grip_rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 20.0), egui::Sense::hover());
-                    ui.painter().add(grip_shape(grip_rect, accent()));
-                    block_badge_for(ui, step, 30.0, plugins);
-                    ui.vertical(|ui| {
-                        ui.spacing_mut().item_spacing.y = 1.0;
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 6.0;
-                            ui.add(egui::Label::new(RichText::new(number).small().color(p.muted)).selectable(false));
-                            ui.add(egui::Label::new(RichText::new(texts.0).font(theme::strong(13.0))).truncate().selectable(false));
+    let area = egui::Area::new(egui::Id::new("workshop_ghost"))
+        .order(egui::Order::Tooltip)
+        .interactable(false)
+        .fixed_pos(position)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(p.raised)
+                .stroke(egui::Stroke::new(1.5_f32, accent()))
+                .corner_radius(10)
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .shadow(egui::epaint::Shadow {
+                    offset: [0, 8],
+                    blur: 24,
+                    spread: 0,
+                    color: Color32::from_black_alpha(110),
+                })
+                .show(ui, |ui| {
+                    ui.set_width(width.clamp(200.0, 380.0) - 20.0);
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(34.0);
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        let (grip_rect, _) =
+                            ui.allocate_exact_size(egui::vec2(14.0, 20.0), egui::Sense::hover());
+                        ui.painter().add(grip_shape(grip_rect, accent()));
+                        block_badge_for(ui, step, 30.0, plugins);
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 1.0;
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                ui.add(
+                                    egui::Label::new(RichText::new(number).small().color(p.muted))
+                                        .selectable(false),
+                                );
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(texts.0).font(theme::strong(13.0)),
+                                    )
+                                    .truncate()
+                                    .selectable(false),
+                                );
+                            });
+                            ui.add(
+                                egui::Label::new(RichText::new(texts.1).small().color(p.muted))
+                                    .truncate()
+                                    .selectable(false),
+                            );
                         });
-                        ui.add(egui::Label::new(RichText::new(texts.1).small().color(p.muted)).truncate().selectable(false));
                     });
                 });
-            });
-    });
+        });
     if enabled {
         let scale = 1.05;
-        ctx.transform_layer_shapes(area.response.layer_id, egui::emath::TSTransform {
-            scaling: scale,
-            translation: area.response.rect.center().to_vec2() * (1.0 - scale),
-        });
+        ctx.transform_layer_shapes(
+            area.response.layer_id,
+            egui::emath::TSTransform {
+                scaling: scale,
+                translation: area.response.rect.center().to_vec2() * (1.0 - scale),
+            },
+        );
         workshop_ghost_tilt(ctx, area.response.layer_id, area.response.rect.center());
     }
 }
 /// Fantôme d'un bloc de la bibliothèque glissé vers la séquence.
-fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins: &[crate::plugins::Plugin], enabled: bool) {
-    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+fn workshop_palette_ghost(
+    ctx: &egui::Context,
+    step: &Step,
+    title: &str,
+    plugins: &[crate::plugins::Plugin],
+    enabled: bool,
+) {
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
     let p = theme::palette(ctx);
     let position = workshop_float_pos(ctx, pos + egui::vec2(14.0, -14.0), enabled);
-    let area = egui::Area::new(egui::Id::new("workshop_ghost")).order(egui::Order::Tooltip).interactable(false).fixed_pos(position).show(ctx, |ui| {
-        egui::Frame::new().fill(p.raised).stroke(egui::Stroke::new(1.5_f32, accent())).corner_radius(10).inner_margin(egui::Margin::symmetric(10, 6))
-            .shadow(egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(110) })
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    block_badge_for(ui, step, 26.0, plugins);
-                    ui.add(egui::Label::new(RichText::new(title).font(theme::strong(13.0))).selectable(false));
+    let area = egui::Area::new(egui::Id::new("workshop_ghost"))
+        .order(egui::Order::Tooltip)
+        .interactable(false)
+        .fixed_pos(position)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(p.raised)
+                .stroke(egui::Stroke::new(1.5_f32, accent()))
+                .corner_radius(10)
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .shadow(egui::epaint::Shadow {
+                    offset: [0, 8],
+                    blur: 24,
+                    spread: 0,
+                    color: Color32::from_black_alpha(110),
+                })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        block_badge_for(ui, step, 26.0, plugins);
+                        ui.add(
+                            egui::Label::new(RichText::new(title).font(theme::strong(13.0)))
+                                .selectable(false),
+                        );
+                    });
                 });
-            });
-    });
+        });
     if enabled {
         let scale = 1.05;
-        ctx.transform_layer_shapes(area.response.layer_id, egui::emath::TSTransform {
-            scaling: scale,
-            translation: area.response.rect.center().to_vec2() * (1.0 - scale),
-        });
+        ctx.transform_layer_shapes(
+            area.response.layer_id,
+            egui::emath::TSTransform {
+                scaling: scale,
+                translation: area.response.rect.center().to_vec2() * (1.0 - scale),
+            },
+        );
         workshop_ghost_tilt(ctx, area.response.layer_id, area.response.rect.center());
     }
 }
@@ -1312,12 +2247,20 @@ fn workshop_palette_ghost(ctx: &egui::Context, step: &Step, title: &str, plugins
 /// si aucune cible plus précise n'a été trouvée. Déposer un bloc dans sa propre descendance est refusé.
 fn workshop_drop_hit(ui: &egui::Ui, rect: egui::Rect, at: &[usize], weak: bool) {
     let ctx = ui.ctx();
-    if !workshop_dragging(ctx) { return; }
-    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return; };
-    if !rect.intersects(ui.clip_rect()) || !rect.contains(pos) || !ui.clip_rect().contains(pos) { return; }
+    if !workshop_dragging(ctx) {
+        return;
+    }
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return;
+    };
+    if !rect.intersects(ui.clip_rect()) || !rect.contains(pos) || !ui.clip_rect().contains(pos) {
+        return;
+    }
     let id = egui::Id::new("workshop_drop_at");
     let invalid = egui::Id::new("workshop_drop_invalid");
-    if ctx.data(|d| d.get_temp::<bool>(invalid)).unwrap_or(false) { return; }
+    if ctx.data(|d| d.get_temp::<bool>(invalid)).unwrap_or(false) {
+        return;
+    }
     if let Some(from) = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))) {
         let copy = ctx.input(|i| i.modifiers.ctrl);
         if !copy && at.len() > 1 && at[..at.len() - 1].starts_with(&from) {
@@ -1326,11 +2269,19 @@ fn workshop_drop_hit(ui: &egui::Ui, rect: egui::Rect, at: &[usize], weak: bool) 
         }
     }
     let previous = ctx.data(|d| d.get_temp::<Vec<usize>>(id));
-    if previous.as_ref().is_some_and(|p| p.len() > at.len() || weak) { return; }
+    if previous
+        .as_ref()
+        .is_some_and(|p| p.len() > at.len() || weak)
+    {
+        return;
+    }
     ctx.data_mut(|d| d.insert_temp(id, at.to_vec()));
 }
 
-enum WorkshopAction { Edit(crate::workshop_ops::Edit), Remove(Vec<usize>) }
+enum WorkshopAction {
+    Edit(crate::workshop_ops::Edit),
+    Remove(Vec<usize>),
+}
 impl App {
     pub(super) fn automation_prompt(&self) -> String {
         let profile = &self.config.profiles[self.config.active].name;
@@ -1339,7 +2290,13 @@ impl App {
         format!("Utilise le connecteur MCP NovyDeck pour proposer cette automatisation :\n{}\n\nDestination exacte : {destination}\nLis d’abord deckforge_get_state et deckforge_get_profile. Si la demande concerne l’audio, utilise deckforge_get_audio_devices pour récupérer les identifiants réels. Tu peux utiliser deckforge_get_icons ; pour audio_switch, first_icon/second_icon acceptent builtin:headphones, builtin:speakers et builtin:microphone. Crée les étapes avec deckforge_configure_key (conditions, répétitions et variables possibles). Si une information manque, demande-la-moi au lieu d’inventer un périphérique, un programme ou un script. N’exécute aucune macro. Attends la validation de la proposition dans NovyDeck ; les blocs resteront ensuite modifiables dans l’Atelier.",self.assistant_request.trim())
     }
     pub(super) fn presented_key(&self, index: usize) -> Key {
-        self.state_key(index, crate::obs_monitor::present_key(&crate::audio::present_key(&self.config.keys()[index], &self.audio), &self.obs_state))
+        self.state_key(
+            index,
+            crate::obs_monitor::present_key(
+                &crate::audio::present_key(&self.config.keys()[index], &self.audio),
+                &self.obs_state,
+            ),
+        )
     }
     pub(super) fn refresh_hotkeys(&self) {
         if let Some(desktop) = &self.desktop {
@@ -1352,7 +2309,12 @@ impl App {
                 .preferences
                 .triggers
                 .iter()
-                .filter(|t| t.kind == "hotkey" && &t.profile == name && t.page == self.config.page && t.key < 15)
+                .filter(|t| {
+                    t.kind == "hotkey"
+                        && &t.profile == name
+                        && t.page == self.config.page
+                        && t.key < 15
+                })
                 .map(|t| (t.key, t.keys.clone()))
                 .collect();
             let _ = desktop.tx.send(crate::desktop::Command::Hotkeys(bindings));
@@ -1363,8 +2325,12 @@ impl App {
             self.open_requested = false;
             let viewport = ctx.input(|i| i.viewport().clone());
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            if viewport.minimized == Some(true) { ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false)); }
-            if viewport.focused != Some(true) { ctx.send_viewport_cmd(egui::ViewportCommand::Focus); }
+            if viewport.minimized == Some(true) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            }
+            if viewport.focused != Some(true) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
         }
         if self.quitting {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1374,35 +2340,58 @@ impl App {
         self.saved_variables_window(ctx);
     }
     fn saved_variables_window(&mut self, ctx: &egui::Context) {
-        if !self.show_saved_variables { return; }
+        if !self.show_saved_variables {
+            return;
+        }
         let mut open = self.show_saved_variables;
-        crate::theme::fixed_window(crate::i18n::tr("Variables enregistrées")).open(&mut open).resizable(true).show(ctx, |ui| {
-            ui.label(crate::i18n::tr("Conservées dans variables.json ; {nom} les utilise dans les macros suivantes."));
-            let mut remove = None;
-            for (name, original) in crate::persistent_variables::snapshot() {
-                ui.horizontal(|ui| {
-                    ui.label(format!("{name} :"));
-                    let mut value = original.clone();
-                    if ui.text_edit_singleline(&mut value).changed() && value != original {
-                        if let Err(e) = crate::persistent_variables::set(&name, &value) {
-                            self.fail(crate::i18n::trf("Variable non enregistrée : {e}", &[("e", &(e))] ));
+        crate::theme::fixed_window(crate::i18n::tr("Variables enregistrées"))
+            .open(&mut open)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.label(crate::i18n::tr(
+                    "Conservées dans variables.json ; {nom} les utilise dans les macros suivantes.",
+                ));
+                let mut remove = None;
+                for (name, original) in crate::persistent_variables::snapshot() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{name} :"));
+                        let mut value = original.clone();
+                        if ui.text_edit_singleline(&mut value).changed() && value != original {
+                            if let Err(e) = crate::persistent_variables::set(&name, &value) {
+                                self.fail(crate::i18n::trf(
+                                    "Variable non enregistrée : {e}",
+                                    &[("e", &(e))],
+                                ));
+                            }
                         }
-                    }
-                    if ui.add(theme::danger_button(crate::i18n::tr("Supprimer"))).clicked() { remove = Some(name); }
-                });
-            }
-            if let Some(name) = remove {
-                if let Err(e) = crate::persistent_variables::remove(&name) {
-                    self.fail(crate::i18n::trf("Variable non supprimée : {e}", &[("e", &(e))] ));
+                        if ui
+                            .add(theme::danger_button(crate::i18n::tr("Supprimer")))
+                            .clicked()
+                        {
+                            remove = Some(name);
+                        }
+                    });
                 }
-            }
-        });
+                if let Some(name) = remove {
+                    if let Err(e) = crate::persistent_variables::remove(&name) {
+                        self.fail(crate::i18n::trf(
+                            "Variable non supprimée : {e}",
+                            &[("e", &(e))],
+                        ));
+                    }
+                }
+            });
         self.show_saved_variables = open;
     }
     pub(super) fn start_workshop_run(&mut self, dry: bool) {
-        if self.engine.running.load(Ordering::SeqCst) { return; }
+        if self.engine.running.load(Ordering::SeqCst) {
+            return;
+        }
         let mut key = self.config.keys()[self.selected].clone();
-        if key.steps.is_empty() && key.plugin.is_none() { self.fail(crate::i18n::tr("Ajoute un bloc avant de tester.").into()); return; }
+        if key.steps.is_empty() && key.plugin.is_none() {
+            self.fail(crate::i18n::tr("Ajoute un bloc avant de tester.").into());
+            return;
+        }
         if key.steps.is_empty() {
             let binding = key.plugin.as_ref().expect("checked plugin binding");
             key.steps.push(Step::PluginAction {
@@ -1412,13 +2401,21 @@ impl App {
                 label: String::new(),
             });
         }
-        if let Err(e) = validate_key(&key, &self.config) { self.fail(crate::i18n::trf("Action à corriger : {e}", &[("e", &(e))] )); return; }
-        key.runtime_id = Some(crate::engine::identity(&self.config.profiles[self.config.active].name, &self.config.page, self.selected));
+        if let Err(e) = validate_key(&key, &self.config) {
+            self.fail(crate::i18n::trf("Action à corriger : {e}", &[("e", &(e))]));
+            return;
+        }
+        key.runtime_id = Some(crate::engine::identity(
+            &self.config.profiles[self.config.active].name,
+            &self.config.page,
+            self.selected,
+        ));
         // A workshop run never queues behind another macro; no real side effect on dry mode.
         key.run_mode = Some(crate::model::RunMode::Ignore);
         key.debounce_ms = 0;
         self.workshop_journal.begin(dry);
-        self.engine.start_workshop(key, dry, self.config.obs.clone());
+        self.engine
+            .start_workshop(key, dry, self.config.obs.clone());
     }
     pub(super) fn workflow(&mut self, ctx: &egui::Context) {
         if !self.show_workflow {
@@ -1435,7 +2432,11 @@ impl App {
         let trace_id = egui::Id::new("workshop_trace");
         let context_id = egui::Id::new("workshop_context");
         let current = (self.config.active, self.config.page.clone(), self.selected);
-        if ctx.data(|d| d.get_temp::<(usize, String, usize)>(context_id)).as_ref() != Some(&current) {
+        if ctx
+            .data(|d| d.get_temp::<(usize, String, usize)>(context_id))
+            .as_ref()
+            != Some(&current)
+        {
             ctx.data_mut(|d| {
                 d.insert_temp(context_id, current.clone());
                 d.remove::<Vec<usize>>(egui::Id::new("workshop_path"));
@@ -1445,7 +2446,9 @@ impl App {
         }
         let path_id = egui::Id::new("workshop_path");
         let mut selection = ctx.data(|d| d.get_temp::<Vec<usize>>(path_id));
-        if selection.as_ref().is_some_and(|path| step_mut(&mut self.config.keys_mut()[self.selected].steps, path).is_none()) {
+        if selection.as_ref().is_some_and(|path| {
+            step_mut(&mut self.config.keys_mut()[self.selected].steps, path).is_none()
+        }) {
             selection = None;
         }
         let selection_before = selection.clone();
@@ -1455,7 +2458,9 @@ impl App {
         ctx.data_mut(|d| {
             match d.get_temp::<Vec<usize>>(drop_id) {
                 Some(previous) => d.insert_temp(egui::Id::new("workshop_drop_shown"), previous),
-                None => { d.remove::<Vec<usize>>(egui::Id::new("workshop_drop_shown")); }
+                None => {
+                    d.remove::<Vec<usize>>(egui::Id::new("workshop_drop_shown"));
+                }
             }
             d.remove::<Vec<usize>>(drop_id);
             d.remove::<bool>(egui::Id::new("workshop_drop_invalid"));
@@ -1468,40 +2473,89 @@ impl App {
                 d.remove::<(egui::Pos2, f64)>(egui::Id::new("workshop_float_pos"));
             });
         }
-        let mut insert_at = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_insert_at")));
+        let mut insert_at =
+            ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_insert_at")));
         if !ctx.wants_keyboard_input() {
             if let Some(path) = selection.clone() {
                 let index = *path.last().unwrap();
-                let len = { let mut tree = self.config.keys()[self.selected].steps.clone();
-                    let mut p = path.clone(); p.pop(); if !p.is_empty() { p.pop(); }
-                    if p.is_empty() { tree.len() } else {
+                let len = {
+                    let mut tree = self.config.keys()[self.selected].steps.clone();
+                    let mut p = path.clone();
+                    p.pop();
+                    if !p.is_empty() {
+                        p.pop();
+                    }
+                    if p.is_empty() {
+                        tree.len()
+                    } else {
                         if let Some(parent) = crate::workshop_ops::get(&mut tree, &p) {
-                        match (parent.active(), path[path.len() - 2]) {
-                            (Step::Repeat { steps, .. }, 0) => steps.len(),
-                            (Step::Toggle { a, .. }, 0) => a.len(), (Step::Toggle { b, .. }, 1) => b.len(),
-                            (Step::IfCondition { then_steps, .. } | Step::IfWindow { then_steps, .. } | Step::IfVariable { then_steps, .. }, 0) => then_steps.len(),
-                            (Step::IfCondition { else_steps, .. } | Step::IfWindow { else_steps, .. } | Step::IfVariable { else_steps, .. }, 1) => else_steps.len(),
-                            _ => 0,
+                            match (parent.active(), path[path.len() - 2]) {
+                                (Step::Repeat { steps, .. }, 0) => steps.len(),
+                                (Step::Toggle { a, .. }, 0) => a.len(),
+                                (Step::Toggle { b, .. }, 1) => b.len(),
+                                (
+                                    Step::IfCondition { then_steps, .. }
+                                    | Step::IfWindow { then_steps, .. }
+                                    | Step::IfVariable { then_steps, .. },
+                                    0,
+                                ) => then_steps.len(),
+                                (
+                                    Step::IfCondition { else_steps, .. }
+                                    | Step::IfWindow { else_steps, .. }
+                                    | Step::IfVariable { else_steps, .. },
+                                    1,
+                                ) => else_steps.len(),
+                                _ => 0,
+                            }
+                        } else {
+                            0
                         }
-                        } else { 0 }
                     }
                 };
                 let op = ctx.input(|input| {
-                    if input.modifiers.ctrl && input.key_pressed(egui::Key::D) { Some(0) }
-                    else if !input.modifiers.ctrl && input.key_pressed(egui::Key::Delete) { Some(1) }
-                    else if input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowUp) { Some(2) }
-                    else if input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowDown) { Some(3) }
-                    else if !input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowUp) { Some(4) }
-                    else if !input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowDown) { Some(5) }
-                    else if input.key_pressed(egui::Key::Escape) { Some(6) } else { None }
+                    if input.modifiers.ctrl && input.key_pressed(egui::Key::D) {
+                        Some(0)
+                    } else if !input.modifiers.ctrl && input.key_pressed(egui::Key::Delete) {
+                        Some(1)
+                    } else if input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowUp) {
+                        Some(2)
+                    } else if input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowDown) {
+                        Some(3)
+                    } else if !input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowUp) {
+                        Some(4)
+                    } else if !input.modifiers.ctrl && input.key_pressed(egui::Key::ArrowDown) {
+                        Some(5)
+                    } else if input.key_pressed(egui::Key::Escape) {
+                        Some(6)
+                    } else {
+                        None
+                    }
                 });
                 match op {
-                    Some(0) => action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(path))),
+                    Some(0) => {
+                        action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Duplicate(
+                            path,
+                        )))
+                    }
                     Some(1) => action = Some(WorkshopAction::Remove(path)),
-                    Some(2) if index > 0 => action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path, index - 1))),
-                    Some(3) if index + 1 < len => action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(path, index + 1))),
-                    Some(4) if index > 0 => { *selection.as_mut().unwrap().last_mut().unwrap() -= 1; },
-                    Some(5) if index + 1 < len => { *selection.as_mut().unwrap().last_mut().unwrap() += 1; },
+                    Some(2) if index > 0 => {
+                        action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(
+                            path,
+                            index - 1,
+                        )))
+                    }
+                    Some(3) if index + 1 < len => {
+                        action = Some(WorkshopAction::Edit(crate::workshop_ops::Edit::Move(
+                            path,
+                            index + 1,
+                        )))
+                    }
+                    Some(4) if index > 0 => {
+                        *selection.as_mut().unwrap().last_mut().unwrap() -= 1;
+                    }
+                    Some(5) if index + 1 < len => {
+                        *selection.as_mut().unwrap().last_mut().unwrap() += 1;
+                    }
                     Some(6) => selection = None,
                     _ => {}
                 }
@@ -1509,8 +2563,12 @@ impl App {
         }
         let compact = ctx.screen_rect().width() < 1500.0;
         let palette_id = egui::Id::new("workshop_palette_open");
-        let mut palette_open = ctx.data(|d| d.get_temp::<bool>(palette_id)).unwrap_or(!compact);
-        if compact && self.workshop_chat.open { palette_open = false; }
+        let mut palette_open = ctx
+            .data(|d| d.get_temp::<bool>(palette_id))
+            .unwrap_or(!compact);
+        if compact && self.workshop_chat.open {
+            palette_open = false;
+        }
         egui::TopBottomPanel::top("workshop_header").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.button(crate::i18n::tr("← Retour au deck")).clicked() { self.show_workflow = false; selection = None; }
@@ -1540,117 +2598,302 @@ impl App {
             }
         });
         let search_id = egui::Id::new("workshop_search");
-        let mut search = ctx.data(|d| d.get_temp::<String>(search_id)).unwrap_or_default();
+        let mut search = ctx
+            .data(|d| d.get_temp::<String>(search_id))
+            .unwrap_or_default();
         let mut add = None;
         let mut add_plugin = None;
         // Inventaire partagé et mis en cache par le gestionnaire (même Arc d'une image à l'autre) ; il ne change
         // qu'à l'installation, la mise à jour ou la désinstallation d'un plugin.
-        let installed_plugins = self.plugins.as_ref().map(|m| m.inventory()).unwrap_or_default();
-        ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_plugins_known"), self.plugins.is_some()));
+        let installed_plugins = self
+            .plugins
+            .as_ref()
+            .map(|m| m.inventory())
+            .unwrap_or_default();
+        ctx.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("workshop_plugins_known"),
+                self.plugins.is_some(),
+            )
+        });
         let mut to_end = false;
         let mut favorite_toggle: Option<String> = None;
         ctx.data_mut(|d| d.insert_temp(palette_id, palette_open));
         if (!compact || palette_open) && !(compact && self.workshop_chat.open) {
-        egui::SidePanel::left("workshop_library").resizable(!compact).default_width(if compact { 240.0 } else { 280.0 }).min_width(200.0).max_width(if compact { 260.0 } else { 350.0 }).show(ctx, |ui| {
-            ui.label(RichText::new(crate::i18n::tr("BIBLIOTHÈQUE DE BLOCS")).strong());
-            let response = library::search_field(ui, &mut search);
-            let kinds: Vec<_> = BLOCK_CATEGORIES.iter().flat_map(|(category, kinds)| kinds.iter().copied()
-                .filter(|&kind| (self.preferences.workshop_advanced || kind != 18) && matches_palette(kind, category, &search))).collect();
-            let cursor_id = egui::Id::new("workshop_palette_cursor");
-            let mut cursor = ctx.data(|d| d.get_temp::<usize>(cursor_id)).unwrap_or(0);
-            if !kinds.is_empty() { cursor = cursor.min(kinds.len()-1); }
-            if response.changed() { cursor = 0; }
-            if response.has_focus() && !kinds.is_empty() {
-                if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) { cursor = (cursor+1) % kinds.len(); }
-                if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) { cursor = (cursor+kinds.len()-1) % kinds.len(); }
-                if ui.input(|i| i.key_pressed(egui::Key::Enter)) { add = Some(kinds[cursor]); }
-            }
-            ctx.data_mut(|d| d.insert_temp(cursor_id, cursor));
-            ui.separator();
-            egui::ScrollArea::vertical().id_salt("block_palette").show(ui, |ui| {
-                let result = library::show(ui, &search, self.preferences.workshop_advanced, response.has_focus().then_some(cursor),
-                    &installed_plugins, &self.preferences.workshop_favorites);
-                if result.add.is_some() { add = result.add; }
-                if result.add_plugin.is_some() { add_plugin = result.add_plugin; }
-                to_end |= result.to_end;
-                if result.favorite.is_some() { favorite_toggle = result.favorite; }
-            });
-        });
+            egui::SidePanel::left("workshop_library")
+                .resizable(!compact)
+                .default_width(if compact { 240.0 } else { 280.0 })
+                .min_width(200.0)
+                .max_width(if compact { 260.0 } else { 350.0 })
+                .show(ctx, |ui| {
+                    ui.label(RichText::new(crate::i18n::tr("BIBLIOTHÈQUE DE BLOCS")).strong());
+                    let response = library::search_field(ui, &mut search);
+                    let kinds: Vec<_> = BLOCK_CATEGORIES
+                        .iter()
+                        .flat_map(|(category, kinds)| {
+                            kinds.iter().copied().filter(|&kind| {
+                                (self.preferences.workshop_advanced || kind != 18)
+                                    && matches_palette(kind, category, &search)
+                            })
+                        })
+                        .collect();
+                    let cursor_id = egui::Id::new("workshop_palette_cursor");
+                    let mut cursor = ctx.data(|d| d.get_temp::<usize>(cursor_id)).unwrap_or(0);
+                    if !kinds.is_empty() {
+                        cursor = cursor.min(kinds.len() - 1);
+                    }
+                    if response.changed() {
+                        cursor = 0;
+                    }
+                    if response.has_focus() && !kinds.is_empty() {
+                        if ui.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                            cursor = (cursor + 1) % kinds.len();
+                        }
+                        if ui.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                            cursor = (cursor + kinds.len() - 1) % kinds.len();
+                        }
+                        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            add = Some(kinds[cursor]);
+                        }
+                    }
+                    ctx.data_mut(|d| d.insert_temp(cursor_id, cursor));
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .id_salt("block_palette")
+                        .show(ui, |ui| {
+                            let result = library::show(
+                                ui,
+                                &search,
+                                self.preferences.workshop_advanced,
+                                response.has_focus().then_some(cursor),
+                                &installed_plugins,
+                                &self.preferences.workshop_favorites,
+                            );
+                            if result.add.is_some() {
+                                add = result.add;
+                            }
+                            if result.add_plugin.is_some() {
+                                add_plugin = result.add_plugin;
+                            }
+                            to_end |= result.to_end;
+                            if result.favorite.is_some() {
+                                favorite_toggle = result.favorite;
+                            }
+                        });
+                });
         }
         ctx.data_mut(|d| d.insert_temp(search_id, search));
         if let Some(key) = favorite_toggle {
             let favorites = &mut self.preferences.workshop_favorites;
-            if let Some(index) = favorites.iter().position(|k| *k == key) { favorites.remove(index); }
-            else { favorites.push(key); if favorites.len() > 64 { favorites.remove(0); } }
+            if let Some(index) = favorites.iter().position(|k| *k == key) {
+                favorites.remove(index);
+            } else {
+                favorites.push(key);
+                if favorites.len() > 64 {
+                    favorites.remove(0);
+                }
+            }
             self.save_preferences();
         }
-        if !self.engine.running.load(Ordering::SeqCst) { self.running_block.clear(); }
+        if !self.engine.running.load(Ordering::SeqCst) {
+            self.running_block.clear();
+        }
         let validation_config = self.config.clone();
-        let profiles = self.config.profiles.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        let profiles = self
+            .config
+            .profiles
+            .iter()
+            .map(|p| p.name.clone())
+            .collect::<Vec<_>>();
         let pages = self.config.profiles[self.config.active].pages.clone();
         let selected = self.selected;
         let target = (self.config.active, self.config.page.clone(), selected);
         let dialog_tx = self.dialog_tx.clone();
-        let can_run = !self.engine.running.load(Ordering::SeqCst) && !self.workshop_journal.confirm_real;
+        let can_run =
+            !self.engine.running.load(Ordering::SeqCst) && !self.workshop_journal.confirm_real;
         egui::TopBottomPanel::bottom("workshop_journal_bar").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                let arrow = if self.workshop_journal.open { crate::i18n::tr("Masquer") } else { crate::i18n::tr("Journal") };
-                if ui.add(iconset::button(ui.ctx(), Ico::Log, arrow)).clicked() { self.workshop_journal.open = !self.workshop_journal.open; }
+                let arrow = if self.workshop_journal.open {
+                    crate::i18n::tr("Masquer")
+                } else {
+                    crate::i18n::tr("Journal")
+                };
+                if ui.add(iconset::button(ui.ctx(), Ico::Log, arrow)).clicked() {
+                    self.workshop_journal.open = !self.workshop_journal.open;
+                }
                 ui.add(egui::Label::new(self.workshop_journal.summary()).truncate());
-                if ui.add_enabled(can_run, iconset::button(ui.ctx(), Ico::Play, crate::i18n::tr("Simuler"))).on_hover_text(crate::i18n::tr("Déroule les actions dans le journal, sans aucun effet sur le PC")).clicked() { self.start_workshop_run(true); }
-                if ui.add_enabled(can_run, iconset::button(ui.ctx(), Ico::Actions, crate::i18n::tr("Tester pour de vrai"))).on_hover_text(crate::i18n::tr("Exécute réellement les actions, après confirmation")).clicked() {
+                if ui
+                    .add_enabled(
+                        can_run,
+                        iconset::button(ui.ctx(), Ico::Play, crate::i18n::tr("Simuler")),
+                    )
+                    .on_hover_text(crate::i18n::tr(
+                        "Déroule les actions dans le journal, sans aucun effet sur le PC",
+                    ))
+                    .clicked()
+                {
+                    self.start_workshop_run(true);
+                }
+                if ui
+                    .add_enabled(
+                        can_run,
+                        iconset::button(
+                            ui.ctx(),
+                            Ico::Actions,
+                            crate::i18n::tr("Tester pour de vrai"),
+                        ),
+                    )
+                    .on_hover_text(crate::i18n::tr(
+                        "Exécute réellement les actions, après confirmation",
+                    ))
+                    .clicked()
+                {
                     self.workshop_journal.confirm_real = true;
                 }
-                if ui.add(iconset::button(ui.ctx(), Ico::Robot, if self.workshop_chat.open { crate::i18n::tr("Fermer l’assistant") } else { crate::i18n::tr("Assistant") })).clicked() { self.workshop_chat.open = !self.workshop_chat.open; }
+                if ui
+                    .add(iconset::button(
+                        ui.ctx(),
+                        Ico::Robot,
+                        if self.workshop_chat.open {
+                            crate::i18n::tr("Fermer l’assistant")
+                        } else {
+                            crate::i18n::tr("Assistant")
+                        },
+                    ))
+                    .clicked()
+                {
+                    self.workshop_chat.open = !self.workshop_chat.open;
+                }
             });
             if self.workshop_journal.open {
                 ui.separator();
-                ui.label(if self.workshop_journal.mode == Some(false) { crate::i18n::tr("EXÉCUTION RÉELLE") } else { crate::i18n::tr("SIMULATION") });
-                egui::ScrollArea::vertical().id_salt("workshop_journal_lines").max_height(145.0).show(ui, |ui| {
-                    for line in &self.workshop_journal.lines {
-                        let title = if let Some(path) = &line.path {
-                            format!("{} · {}", path.iter().step_by(2).map(|i| (i + 1).to_string()).collect::<Vec<_>>().join("."), line.message)
-                        } else { line.message.clone() };
-                        let title = if let Some(elapsed) = line.elapsed { format!("{title} · {:.1} ms", elapsed.as_secs_f64() * 1000.0) } else { title };
-                        if let Some(path) = &line.path {
-                            if ui.button(title).clicked() { selection = Some(path.clone()); }
-                        } else { ui.label(title); }
-                    }
-                    if let Some(message) = &self.workshop_journal.error { ui.colored_label(Color32::LIGHT_RED, message); }
+                ui.label(if self.workshop_journal.mode == Some(false) {
+                    crate::i18n::tr("EXÉCUTION RÉELLE")
+                } else {
+                    crate::i18n::tr("SIMULATION")
                 });
+                egui::ScrollArea::vertical()
+                    .id_salt("workshop_journal_lines")
+                    .max_height(145.0)
+                    .show(ui, |ui| {
+                        for line in &self.workshop_journal.lines {
+                            let title = if let Some(path) = &line.path {
+                                format!(
+                                    "{} · {}",
+                                    path.iter()
+                                        .step_by(2)
+                                        .map(|i| (i + 1).to_string())
+                                        .collect::<Vec<_>>()
+                                        .join("."),
+                                    line.message
+                                )
+                            } else {
+                                line.message.clone()
+                            };
+                            let title = if let Some(elapsed) = line.elapsed {
+                                format!("{title} · {:.1} ms", elapsed.as_secs_f64() * 1000.0)
+                            } else {
+                                title
+                            };
+                            if let Some(path) = &line.path {
+                                if ui.button(title).clicked() {
+                                    selection = Some(path.clone());
+                                }
+                            } else {
+                                ui.label(title);
+                            }
+                        }
+                        if let Some(message) = &self.workshop_journal.error {
+                            ui.colored_label(Color32::LIGHT_RED, message);
+                        }
+                    });
             }
         });
-        let selected_trace = ctx.data(|d| d.get_temp::<Vec<usize>>(selected_id)).unwrap_or_default();
-        if !self.preferences.workshop_advanced && !self.workshop_chat.open && (!compact || !palette_open) {
+        let selected_trace = ctx
+            .data(|d| d.get_temp::<Vec<usize>>(selected_id))
+            .unwrap_or_default();
+        if !self.preferences.workshop_advanced
+            && !self.workshop_chat.open
+            && (!compact || !palette_open)
+        {
             if let Some(path) = selection.clone() {
                 let mut close = false;
                 egui::SidePanel::right("workshop_properties_panel")
-                    .resizable(!compact).default_width(if compact { 300.0 } else { 340.0 })
-                    .min_width(260.0).max_width(360.0).show(ctx, |ui| {
-                        if ui.small_button(crate::i18n::tr("× Fermer les propriétés")).clicked() { close = true; }
-                        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                            if let Some(step) = step_mut(&mut self.config.keys_mut()[selected].steps, &path) {
-                                ui.label(RichText::new(crate::i18n::tr("Propriétés du bloc")).strong());
-                                ui.label(RichText::new(step_label(step)).strong());
-                                ui.label(named_summary(step, &installed_plugins));
-                                 if !step.is_disabled() {
-                                     if let Err(e) = validate_key(&Key { steps: vec![step.clone()], ..Key::default() }, &validation_config) {
-                                         ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("À corriger : {e}", &[("e", &(e))] ));
-                                     }
-                                 }
-                                let mut capture = false;
-                                let mut icon = None;
-                                changed |= edit_step(ui, step, &profiles, &pages, &mut capture, &self.audio, &mut icon,
-                                    &dialog_tx, &(target.0, target.1.clone(), target.2, path.clone()));
-                                if matches!(step.active(), Step::PluginAction { .. }) {
-                                    changed |= plugin_fields(ui, step.active_mut(), &validation_config, &installed_plugins, false, &path);
+                    .resizable(!compact)
+                    .default_width(if compact { 300.0 } else { 340.0 })
+                    .min_width(260.0)
+                    .max_width(360.0)
+                    .show(ctx, |ui| {
+                        if ui
+                            .small_button(crate::i18n::tr("× Fermer les propriétés"))
+                            .clicked()
+                        {
+                            close = true;
+                        }
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                if let Some(step) =
+                                    step_mut(&mut self.config.keys_mut()[selected].steps, &path)
+                                {
+                                    ui.label(
+                                        RichText::new(crate::i18n::tr("Propriétés du bloc"))
+                                            .strong(),
+                                    );
+                                    ui.label(RichText::new(step_label(step)).strong());
+                                    ui.label(named_summary(step, &installed_plugins));
+                                    if !step.is_disabled() {
+                                        if let Err(e) = validate_key(
+                                            &Key {
+                                                steps: vec![step.clone()],
+                                                ..Key::default()
+                                            },
+                                            &validation_config,
+                                        ) {
+                                            ui.colored_label(
+                                                Color32::LIGHT_RED,
+                                                crate::i18n::trf(
+                                                    "À corriger : {e}",
+                                                    &[("e", &(e))],
+                                                ),
+                                            );
+                                        }
+                                    }
+                                    let mut capture = false;
+                                    let mut icon = None;
+                                    changed |= edit_step(
+                                        ui,
+                                        step,
+                                        &profiles,
+                                        &pages,
+                                        &mut capture,
+                                        &self.audio,
+                                        &mut icon,
+                                        &dialog_tx,
+                                        &(target.0, target.1.clone(), target.2, path.clone()),
+                                    );
+                                    if matches!(step.active(), Step::PluginAction { .. }) {
+                                        changed |= plugin_fields(
+                                            ui,
+                                            step.active_mut(),
+                                            &validation_config,
+                                            &installed_plugins,
+                                            false,
+                                            &path,
+                                        );
+                                    }
+                                    if capture {
+                                        record = Some(path.clone());
+                                    }
+                                    if let Some(state) = icon {
+                                        pick_audio = Some((path.clone(), state));
+                                    }
                                 }
-                                if capture { record = Some(path.clone()); }
-                                if let Some(state) = icon { pick_audio = Some((path.clone(), state)); }
-                            }
-                        });
+                            });
                     });
-                if close { selection = None; }
+                if close {
+                    selection = None;
+                }
             }
         }
         if self.workshop_journal.confirm_real {
@@ -1668,95 +2911,186 @@ impl App {
                 });
         }
         self.workshop_chat(ctx, selection.as_deref());
-        let highlight = if selected_trace.is_empty() { &self.running_block } else { &selected_trace };
+        let highlight = if selected_trace.is_empty() {
+            &self.running_block
+        } else {
+            &selected_trace
+        };
         let motion_enabled = self.animations();
         ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_motion_enabled"), motion_enabled));
         egui::CentralPanel::default().show(ctx, |ui| {
             // Un appui-glissé sur une carte déplace le bloc : jamais de sélection de texte dans l'Atelier.
             ui.style_mut().interaction.selectable_labels = false;
-            ui.label(RichText::new(crate::i18n::tr("Construis ton automatisation")).size(21.0).strong());
+            ui.label(
+                RichText::new(crate::i18n::tr("Construis ton automatisation"))
+                    .size(21.0)
+                    .strong(),
+            );
             if self.preferences.workshop_advanced {
-                egui::ScrollArea::vertical().id_salt("workflow_advanced_scroll").show(ui, |ui| {
-                    changed |= block_editor(ui, &mut self.config.keys_mut()[selected].steps, &profiles, &pages, &self.audio,
-                        &[], &mut record, 0, highlight, &mut pick_audio, &dialog_tx, &target, &validation_config, true, &installed_plugins);
-                });
+                egui::ScrollArea::vertical()
+                    .id_salt("workflow_advanced_scroll")
+                    .show(ui, |ui| {
+                        changed |= block_editor(
+                            ui,
+                            &mut self.config.keys_mut()[selected].steps,
+                            &profiles,
+                            &pages,
+                            &self.audio,
+                            &[],
+                            &mut record,
+                            0,
+                            highlight,
+                            &mut pick_audio,
+                            &dialog_tx,
+                            &target,
+                            &validation_config,
+                            true,
+                            &installed_plugins,
+                        );
+                    });
             } else {
-                egui::ScrollArea::vertical().id_salt("workflow_scroll").show(ui, |ui| {
-                    let clip = ui.clip_rect();
-                    #[cfg(test)]
-                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip));
-                    let steps = &self.config.keys()[selected].steps;
-                    if steps.is_empty() {
-                        ui.add_space(24.0);
-                        ui.label(RichText::new(crate::i18n::tr("Ajoute ton premier bloc")).size(20.0).strong());
-                        ui.label(crate::i18n::tr("Commence par une action, puis compose ta séquence."));
-                        ui.horizontal_wrapped(|ui| {
-                            for kind in [0, 2, 5, 39] {
-                                if ui.button(block_name(kind)).clicked() { add = Some(kind); }
-                            }
+                egui::ScrollArea::vertical()
+                    .id_salt("workflow_scroll")
+                    .show(ui, |ui| {
+                        let clip = ui.clip_rect();
+                        #[cfg(test)]
+                        ctx.data_mut(|d| {
+                            d.insert_temp(egui::Id::new("workshop_scroll_clip"), clip)
                         });
-                        if ui.button(crate::i18n::tr("Demander à l'assistant")).clicked() { self.workshop_chat.open = true; }
-                    } else {
-                        sequence_cards(ui, steps, &[], "", &mut selection, &mut action, &mut insert_at, &validation_config, &installed_plugins);
-                    }
-                    ui.menu_button(crate::i18n::tr("+ Ajouter un bloc"), |ui| {
-                        for &(category, kinds) in BLOCK_CATEGORIES {
-                            ui.menu_button(category_name(category), |ui| {
-                                for &kind in kinds {
-                                    if !self.preferences.workshop_advanced && kind == 18 { continue; }
-                                    if ui.button(block_name(kind)).clicked() { add = Some(kind); ui.close_menu(); }
+                        let steps = &self.config.keys()[selected].steps;
+                        if steps.is_empty() {
+                            ui.add_space(24.0);
+                            ui.label(
+                                RichText::new(crate::i18n::tr("Ajoute ton premier bloc"))
+                                    .size(20.0)
+                                    .strong(),
+                            );
+                            ui.label(crate::i18n::tr(
+                                "Commence par une action, puis compose ta séquence.",
+                            ));
+                            ui.horizontal_wrapped(|ui| {
+                                for kind in [0, 2, 5, 39] {
+                                    if ui.button(block_name(kind)).clicked() {
+                                        add = Some(kind);
+                                    }
                                 }
                             });
+                            if ui
+                                .button(crate::i18n::tr("Demander à l'assistant"))
+                                .clicked()
+                            {
+                                self.workshop_chat.open = true;
+                            }
+                        } else {
+                            sequence_cards(
+                                ui,
+                                steps,
+                                &[],
+                                "",
+                                &mut selection,
+                                &mut action,
+                                &mut insert_at,
+                                &validation_config,
+                                &installed_plugins,
+                            );
                         }
-                        if let Some(step) = plugin_choices_menu(ui, &installed_plugins, "") { add_plugin = Some(step); }
-                    });
-                    // Evaluate after the cards: the handle registers drag_started during
-                    // this frame's card rendering, not before the scroll area is shown.
-                    let dragging = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")).is_some()
-                        || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")).is_some());
-                    if dragging && ctx.input(|i| i.pointer.primary_down()) {
-                        if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
-                            if clip.contains(pos) {
-                                let edge = 48.0;
-                                let delta = if pos.y < clip.top() + edge { -18.0 }
-                                    else if pos.y > clip.bottom() - edge { 18.0 } else { 0.0 };
-                                if delta != 0.0 {
-                                    ui.scroll_with_delta(egui::vec2(0.0, -delta));
-                                    ctx.request_repaint();
+                        ui.menu_button(crate::i18n::tr("+ Ajouter un bloc"), |ui| {
+                            for &(category, kinds) in BLOCK_CATEGORIES {
+                                ui.menu_button(category_name(category), |ui| {
+                                    for &kind in kinds {
+                                        if !self.preferences.workshop_advanced && kind == 18 {
+                                            continue;
+                                        }
+                                        if ui.button(block_name(kind)).clicked() {
+                                            add = Some(kind);
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            }
+                            if let Some(step) = plugin_choices_menu(ui, &installed_plugins, "") {
+                                add_plugin = Some(step);
+                            }
+                        });
+                        // Evaluate after the cards: the handle registers drag_started during
+                        // this frame's card rendering, not before the scroll area is shown.
+                        let dragging = ctx.data(|d| {
+                            d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))
+                                .is_some()
+                                || d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))
+                                    .is_some()
+                        });
+                        if dragging && ctx.input(|i| i.pointer.primary_down()) {
+                            if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {
+                                if clip.contains(pos) {
+                                    let edge = 48.0;
+                                    let delta = if pos.y < clip.top() + edge {
+                                        -18.0
+                                    } else if pos.y > clip.bottom() - edge {
+                                        18.0
+                                    } else {
+                                        0.0
+                                    };
+                                    if delta != 0.0 {
+                                        ui.scroll_with_delta(egui::vec2(0.0, -delta));
+                                        ctx.request_repaint();
+                                    }
                                 }
                             }
                         }
-                    }
-                });
+                    });
             }
             if let Err(e) = validate_key(&self.config.keys()[selected], &self.config) {
-                ui.colored_label(Color32::LIGHT_RED, crate::i18n::trf("Brouillon : {e}", &[("e", &(e))] ));
+                ui.colored_label(
+                    Color32::LIGHT_RED,
+                    crate::i18n::trf("Brouillon : {e}", &[("e", &(e))]),
+                );
             }
         });
         // Un clic sur un bloc doit afficher ses propriétés : en fenêtre compacte, la
         // bibliothèque et l'assistant occupent la même colonne et sont donc refermés.
-        if selection.is_some() && selection != selection_before && !self.preferences.workshop_advanced {
-            if compact { ctx.data_mut(|d| d.insert_temp(palette_id, false)); }
+        if selection.is_some()
+            && selection != selection_before
+            && !self.preferences.workshop_advanced
+        {
+            if compact {
+                ctx.data_mut(|d| d.insert_temp(palette_id, false));
+            }
             self.workshop_chat.open = false;
         }
         if let Some(kind) = add {
             let mut at = insert_at.take().unwrap_or_else(|| {
                 let steps = &self.config.keys()[selected].steps;
-                vec![selection.as_ref().and_then(|path| path.first()).map_or(steps.len(), |i| (i + 1).min(steps.len()))]
+                vec![selection
+                    .as_ref()
+                    .and_then(|path| path.first())
+                    .map_or(steps.len(), |i| (i + 1).min(steps.len()))]
             });
-            if let Some(new_path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                crate::workshop_ops::Edit::Insert(std::mem::take(&mut at), new_block(kind, &profiles))) {
-                selection = Some(new_path); changed = true;
+            if let Some(new_path) = crate::workshop_ops::apply(
+                &mut self.config.keys_mut()[selected].steps,
+                crate::workshop_ops::Edit::Insert(
+                    std::mem::take(&mut at),
+                    new_block(kind, &profiles),
+                ),
+            ) {
+                selection = Some(new_path);
+                changed = true;
             }
         }
         if let Some(new_step) = add_plugin {
             let mut at = insert_at.take().unwrap_or_else(|| {
                 let steps = &self.config.keys()[selected].steps;
-                vec![selection.as_ref().and_then(|path| path.first()).map_or(steps.len(), |i| (i + 1).min(steps.len()))]
+                vec![selection
+                    .as_ref()
+                    .and_then(|path| path.first())
+                    .map_or(steps.len(), |i| (i + 1).min(steps.len()))]
             });
-            if let Some(new_path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                crate::workshop_ops::Edit::Insert(std::mem::take(&mut at), new_step)) {
-                selection = Some(new_path); changed = true;
+            if let Some(new_path) = crate::workshop_ops::apply(
+                &mut self.config.keys_mut()[selected].steps,
+                crate::workshop_ops::Edit::Insert(std::mem::take(&mut at), new_step),
+            ) {
+                selection = Some(new_path);
+                changed = true;
             }
         }
         if to_end {
@@ -1764,9 +3098,12 @@ impl App {
             if let Some(path) = selection.clone().filter(|path| path.len() == 1) {
                 let len = self.config.keys()[selected].steps.len();
                 if path[0] + 1 < len {
-                    if let Some(moved) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                        crate::workshop_ops::Edit::Move(path, len - 1)) {
-                        selection = Some(moved); changed = true;
+                    if let Some(moved) = crate::workshop_ops::apply(
+                        &mut self.config.keys_mut()[selected].steps,
+                        crate::workshop_ops::Edit::Move(path, len - 1),
+                    ) {
+                        selection = Some(moved);
+                        changed = true;
                     }
                 }
             }
@@ -1774,48 +3111,93 @@ impl App {
         if let Some(operation) = action {
             match operation {
                 WorkshopAction::Edit(edit) => {
-                    if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps, edit) {
-                        selection = Some(path); changed = true;
+                    if let Some(path) = crate::workshop_ops::apply(
+                        &mut self.config.keys_mut()[selected].steps,
+                        edit,
+                    ) {
+                        selection = Some(path);
+                        changed = true;
                     }
                 }
                 WorkshopAction::Remove(path) => {
-                    if crate::workshop_ops::remove(&mut self.config.keys_mut()[selected].steps, &path) {
-                        selection = None; changed = true;
+                    if crate::workshop_ops::remove(
+                        &mut self.config.keys_mut()[selected].steps,
+                        &path,
+                    ) {
+                        selection = None;
+                        changed = true;
                     }
                 }
             }
         }
         if workshop_dragging(ctx) {
-            if let Some(kind) = ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))) {
-                workshop_palette_ghost(ctx, &crate::automation::step(kind), block_name(kind), &installed_plugins, motion_enabled);
+            if let Some(kind) =
+                ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")))
+            {
+                workshop_palette_ghost(
+                    ctx,
+                    &crate::automation::step(kind),
+                    block_name(kind),
+                    &installed_plugins,
+                    motion_enabled,
+                );
             }
-            if let Some((uuid, action)) = ctx.data(|d| d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin"))) {
+            if let Some((uuid, action)) = ctx
+                .data(|d| d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin")))
+            {
                 if let Some(step) = palette_plugin_step(&installed_plugins, &uuid, &action) {
-                    workshop_palette_ghost(ctx, &step, &card_texts(&step, &installed_plugins).0, &installed_plugins, motion_enabled);
+                    workshop_palette_ghost(
+                        ctx,
+                        &step,
+                        &card_texts(&step, &installed_plugins).0,
+                        &installed_plugins,
+                        motion_enabled,
+                    );
                 }
             }
-            let refused = ctx.data(|d| d.get_temp::<bool>(egui::Id::new("workshop_drop_invalid"))).unwrap_or(false);
-            ctx.set_cursor_icon(if refused { egui::CursorIcon::NotAllowed } else { egui::CursorIcon::Grabbing });
+            let refused = ctx
+                .data(|d| d.get_temp::<bool>(egui::Id::new("workshop_drop_invalid")))
+                .unwrap_or(false);
+            ctx.set_cursor_icon(if refused {
+                egui::CursorIcon::NotAllowed
+            } else {
+                egui::CursorIcon::Grabbing
+            });
         }
         if ctx.input(|i| i.pointer.any_released()) {
             let destination = ctx.data(|d| d.get_temp::<Vec<usize>>(drop_id));
             if let Some(at) = destination {
-                if let Some(from) = ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))) {
+                if let Some(from) =
+                    ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")))
+                {
                     let copy = ctx.input(|i| i.modifiers.ctrl || i.events.iter().any(|event| matches!(event, egui::Event::PointerButton { pressed: false, modifiers, .. } if modifiers.ctrl)));
-                    if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                        crate::workshop_ops::Edit::Drop { from, at, copy }) {
-                        selection = Some(path); changed = true;
+                    if let Some(path) = crate::workshop_ops::apply(
+                        &mut self.config.keys_mut()[selected].steps,
+                        crate::workshop_ops::Edit::Drop { from, at, copy },
+                    ) {
+                        selection = Some(path);
+                        changed = true;
                     }
-                } else if let Some(kind) = ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag"))) {
-                    if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                        crate::workshop_ops::Edit::Insert(at, new_block(kind, &profiles))) {
-                        selection = Some(path); changed = true;
+                } else if let Some(kind) =
+                    ctx.data(|d| d.get_temp::<usize>(egui::Id::new("workshop_palette_drag")))
+                {
+                    if let Some(path) = crate::workshop_ops::apply(
+                        &mut self.config.keys_mut()[selected].steps,
+                        crate::workshop_ops::Edit::Insert(at, new_block(kind, &profiles)),
+                    ) {
+                        selection = Some(path);
+                        changed = true;
                     }
-                } else if let Some((uuid, action)) = ctx.data(|d| d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin"))) {
+                } else if let Some((uuid, action)) = ctx.data(|d| {
+                    d.get_temp::<(String, String)>(egui::Id::new("workshop_palette_plugin"))
+                }) {
                     if let Some(step) = palette_plugin_step(&installed_plugins, &uuid, &action) {
-                        if let Some(path) = crate::workshop_ops::apply(&mut self.config.keys_mut()[selected].steps,
-                            crate::workshop_ops::Edit::Insert(at, step)) {
-                            selection = Some(path); changed = true;
+                        if let Some(path) = crate::workshop_ops::apply(
+                            &mut self.config.keys_mut()[selected].steps,
+                            crate::workshop_ops::Edit::Insert(at, step),
+                        ) {
+                            selection = Some(path);
+                            changed = true;
                         }
                     }
                 }
@@ -1828,13 +3210,19 @@ impl App {
             });
         }
         ctx.data_mut(|d| {
-            if let Some(path) = insert_at { d.insert_temp(egui::Id::new("workshop_insert_at"), path); }
-            else { d.remove::<Vec<usize>>(egui::Id::new("workshop_insert_at")); }
+            if let Some(path) = insert_at {
+                d.insert_temp(egui::Id::new("workshop_insert_at"), path);
+            } else {
+                d.remove::<Vec<usize>>(egui::Id::new("workshop_insert_at"));
+            }
         });
         ctx.data_mut(|d| {
             if let Some(path) = selection {
-                if path.len() == 1 { d.insert_temp(egui::Id::new("workshop_selected"), path[0]); }
-                else { d.remove::<usize>(egui::Id::new("workshop_selected")); }
+                if path.len() == 1 {
+                    d.insert_temp(egui::Id::new("workshop_selected"), path[0]);
+                } else {
+                    d.remove::<usize>(egui::Id::new("workshop_selected"));
+                }
                 d.insert_temp(path_id, path);
             } else {
                 d.remove::<Vec<usize>>(path_id);
@@ -1844,11 +3232,23 @@ impl App {
         if let Some((index, replace)) = template_action {
             let steps = &mut self.config.keys_mut()[self.selected].steps;
             let model = template(index);
-            if replace { steps.clear(); ctx.data_mut(|d| d.remove::<Vec<usize>>(egui::Id::new("workshop_path"))); }
-            if steps.len() + model.len() <= 256 { steps.extend(model); changed = true; }
+            if replace {
+                steps.clear();
+                ctx.data_mut(|d| d.remove::<Vec<usize>>(egui::Id::new("workshop_path")));
+            }
+            if steps.len() + model.len() <= 256 {
+                steps.extend(model);
+                changed = true;
+            }
             template_choice = None;
         }
-        ctx.data_mut(|d| { if let Some(index) = template_choice { d.insert_temp(pending_id, index); } else { d.remove::<usize>(pending_id); } });
+        ctx.data_mut(|d| {
+            if let Some(index) = template_choice {
+                d.insert_temp(pending_id, index);
+            } else {
+                d.remove::<usize>(pending_id);
+            }
+        });
         if let Some(target) = pick_audio {
             self.open_icon_gallery(Some(target));
         }
@@ -1858,16 +3258,26 @@ impl App {
             self.edited();
         }
         let open_id = egui::Id::new("plugin_block_open");
-        let open = ctx.data(|d|d.get_temp::<Vec<usize>>(open_id));
-        ctx.data_mut(|d|d.remove::<Vec<usize>>(open_id));
+        let open = ctx.data(|d| d.get_temp::<Vec<usize>>(open_id));
+        ctx.data_mut(|d| d.remove::<Vec<usize>>(open_id));
         if let Some(path) = open {
-            if !ctx.data(|d|d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag"))).is_some()
-                && (self.preferences.workshop_advanced || ctx.data(|d|d.get_temp::<Vec<usize>>(path_id)).as_ref()==Some(&path)) {
+            if !ctx
+                .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_drag")))
+                .is_some()
+                && (self.preferences.workshop_advanced
+                    || ctx.data(|d| d.get_temp::<Vec<usize>>(path_id)).as_ref() == Some(&path))
+            {
                 self.block_inspector_open(path);
             }
         } else if self.block_inspector.is_some() {
-            let selected_path = ctx.data(|d|d.get_temp::<Vec<usize>>(path_id));
-            if !self.block_inspector_valid() || (!self.preferences.workshop_advanced && self.block_inspector.as_ref().is_some_and(|s|selected_path.as_ref()!=Some(&s.path))) {
+            let selected_path = ctx.data(|d| d.get_temp::<Vec<usize>>(path_id));
+            if !self.block_inspector_valid()
+                || (!self.preferences.workshop_advanced
+                    && self
+                        .block_inspector
+                        .as_ref()
+                        .is_some_and(|s| selected_path.as_ref() != Some(&s.path)))
+            {
                 self.block_inspector_close();
             }
         }
@@ -1887,14 +3297,19 @@ impl App {
         if export {
             match crate::automation::export(&self.config.keys()[self.selected]) {
                 Ok(text) => {
-                    let tx=self.dialog_tx.clone();
+                    let tx = self.dialog_tx.clone();
                     std::thread::spawn(move || {
-                        let Some(path)=rfd::FileDialog::new().set_file_name("automatisation.ahk")
-                            .add_filter(crate::i18n::tr("Script AutoHotkey v2"), &["ahk"]).save_file() else {return};
-                        let result=std::fs::write(path,text);
-                        let _=tx.send(Some(Box::new(move |app: &mut App| match result {
-                            Ok(())=>app.log(crate::i18n::tr("Script AutoHotkey exporté.").into()),
-                            Err(e)=>app.fail(e.to_string()),
+                        let Some(path) = rfd::FileDialog::new()
+                            .set_file_name("automatisation.ahk")
+                            .add_filter(crate::i18n::tr("Script AutoHotkey v2"), &["ahk"])
+                            .save_file()
+                        else {
+                            return;
+                        };
+                        let result = std::fs::write(path, text);
+                        let _ = tx.send(Some(Box::new(move |app: &mut App| match result {
+                            Ok(()) => app.log(crate::i18n::tr("Script AutoHotkey exporté.").into()),
+                            Err(e) => app.fail(e.to_string()),
                         }) as DialogEffect));
                     });
                 }
@@ -2010,7 +3425,12 @@ impl App {
                 Err(e) => self.fail(e.to_string()),
             }
         }
-        if changed { self.save(); if self.save_preferences() { self.refresh_hotkeys(); } }
+        if changed {
+            self.save();
+            if self.save_preferences() {
+                self.refresh_hotkeys();
+            }
+        }
     }
     pub(super) fn record_trigger(&mut self, ctx: &egui::Context) {
         if !self.trigger_recording || !ctx.input(|i| i.focused) {
@@ -2028,15 +3448,14 @@ impl App {
                     let name = self.config.profiles[self.config.active].name.clone();
                     let page = self.config.page.clone();
                     let key = self.selected;
-                    if let Some(t) = self
-                        .preferences
-                        .triggers
-                        .iter_mut()
-                        .find(|t| t.kind == "hotkey" && t.profile == name && t.page == page && t.key == key)
-                    {
+                    if let Some(t) = self.preferences.triggers.iter_mut().find(|t| {
+                        t.kind == "hotkey" && t.profile == name && t.page == page && t.key == key
+                    }) {
                         t.keys = keys;
                     } else if self.preferences.triggers.len() < 256 {
-                        self.preferences.triggers.push(crate::desktop::Trigger::hotkey(name, page, key, keys));
+                        self.preferences
+                            .triggers
+                            .push(crate::desktop::Trigger::hotkey(name, page, key, keys));
                     }
                     self.trigger_recording = false;
                     if self.save_preferences() {
@@ -2054,10 +3473,26 @@ mod workshop_tests {
     use super::*;
     #[test]
     fn trace_respects_disabled_branches_and_one_iteration_without_actions() {
-        let steps = vec![Step::SetVariable { name: "mode".into(), value: "travail".into(), persistent: false, },
-            Step::IfVariable { name: "mode".into(), value: "travail".into(),
-                then_steps: vec![Step::Repeat { count: 4, steps: vec![Step::Delay { ms: 250 }] }],
-                else_steps: vec![Step::Disabled { step: Box::new(Step::Text { text: "secret".into() }) }] }];
+        let steps = vec![
+            Step::SetVariable {
+                name: "mode".into(),
+                value: "travail".into(),
+                persistent: false,
+            },
+            Step::IfVariable {
+                name: "mode".into(),
+                value: "travail".into(),
+                then_steps: vec![Step::Repeat {
+                    count: 4,
+                    steps: vec![Step::Delay { ms: 250 }],
+                }],
+                else_steps: vec![Step::Disabled {
+                    step: Box::new(Step::Text {
+                        text: "secret".into(),
+                    }),
+                }],
+            },
+        ];
         let trace = simulation_trace(&steps);
         assert_eq!(trace.len(), 5);
         assert!(trace[1].text.contains("ALORS et SINON"));
@@ -2074,33 +3509,76 @@ mod workshop_tests {
             assert!(!steps.is_empty());
             fn fill(steps: &mut [Step]) {
                 for s in steps {
-                    assert!(simple_fields_visible(s, false), "champ du modèle inaccessible en mode Simple: {}", s.name());
+                    assert!(
+                        simple_fields_visible(s, false),
+                        "champ du modèle inaccessible en mode Simple: {}",
+                        s.name()
+                    );
                     match s {
-                    Step::Launch { program, .. } => *program = "notepad.exe".into(),
-                    Step::Url { url } => *url = "https://example.org".into(),
-                    Step::Text { text } => *text = "Bonjour".into(),
-                    Step::AudioSwitch { first, second, .. } => { *first = "device-one".into(); *second = "device-two".into(); },
-                    Step::IfVariable { then_steps, else_steps, .. } => { fill(then_steps); fill(else_steps); },
-                    Step::Repeat { steps, .. } => fill(steps), _ => {}
-                }}
+                        Step::Launch { program, .. } => *program = "notepad.exe".into(),
+                        Step::Url { url } => *url = "https://example.org".into(),
+                        Step::Text { text } => *text = "Bonjour".into(),
+                        Step::AudioSwitch { first, second, .. } => {
+                            *first = "device-one".into();
+                            *second = "device-two".into();
+                        }
+                        Step::IfVariable {
+                            then_steps,
+                            else_steps,
+                            ..
+                        } => {
+                            fill(then_steps);
+                            fill(else_steps);
+                        }
+                        Step::Repeat { steps, .. } => fill(steps),
+                        _ => {}
+                    }
+                }
             }
             fill(&mut steps);
-            assert!(crate::model::validate_key(&Key { steps, ..Key::default() }, &c).is_ok(), "{}", name);
+            assert!(
+                crate::model::validate_key(
+                    &Key {
+                        steps,
+                        ..Key::default()
+                    },
+                    &c
+                )
+                .is_ok(),
+                "{}",
+                name
+            );
         }
     }
     #[test]
     fn simple_mode_excludes_only_autohotkey_script_fields() {
         for kind in 0..crate::automation::NAMES.len() {
-            if kind == 12 { continue; }
+            if kind == 12 {
+                continue;
+            }
             let step = catalog::action(kind, "Bureau").steps.remove(0);
-            assert_eq!(simple_fields_visible(&step, false), kind != 18, "{}", step.name());
+            assert_eq!(
+                simple_fields_visible(&step, false),
+                kind != 18,
+                "{}",
+                step.name()
+            );
             assert!(simple_fields_visible(&step, true));
         }
     }
     #[test]
     fn summaries_are_readable() {
         assert_eq!(block_summary(&Step::Delay { ms: 500 }), "Attendre 500 ms");
-        assert_eq!(block_summary(&crate::automation::step(43)), "Mettre texte en majuscules");
-        assert_eq!(block_summary(&Step::Repeat { count: 3, steps: vec![Step::Back, Step::Back] }), "Répéter 3 fois (2 blocs)");
+        assert_eq!(
+            block_summary(&crate::automation::step(43)),
+            "Mettre texte en majuscules"
+        );
+        assert_eq!(
+            block_summary(&Step::Repeat {
+                count: 3,
+                steps: vec![Step::Back, Step::Back]
+            }),
+            "Répéter 3 fois (2 blocs)"
+        );
     }
 }

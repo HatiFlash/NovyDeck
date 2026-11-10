@@ -6,12 +6,30 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 
 #[cfg(windows)]
 pub fn protect(plain: &str) -> Result<String, String> {
-    use windows_sys::Win32::{Foundation::LocalFree, Security::Cryptography::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB}};
-    let input = CRYPT_INTEGER_BLOB { cbData: plain.len() as u32, pbData: plain.as_ptr() as *mut u8 };
-    let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        Security::Cryptography::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
+    };
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: plain.len() as u32,
+        pbData: plain.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
     // SAFETY: `input` référence `plain` pendant l'appel ; `output` est alloué par DPAPI et libéré par LocalFree.
     unsafe {
-        if CryptProtectData(&input, std::ptr::null(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output) == 0 {
+        if CryptProtectData(
+            &input,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        ) == 0
+        {
             return Err("Chiffrement DPAPI impossible".into());
         }
         let bytes = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
@@ -21,13 +39,35 @@ pub fn protect(plain: &str) -> Result<String, String> {
 }
 #[cfg(windows)]
 pub fn unprotect(encoded: &str) -> Result<String, String> {
-    use windows_sys::Win32::{Foundation::LocalFree, Security::Cryptography::{CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB}};
-    let bytes = STANDARD.decode(encoded.trim()).map_err(|_| "Secret illisible")?;
-    let input = CRYPT_INTEGER_BLOB { cbData: bytes.len() as u32, pbData: bytes.as_ptr() as *mut u8 };
-    let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        Security::Cryptography::{
+            CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+        },
+    };
+    let bytes = STANDARD
+        .decode(encoded.trim())
+        .map_err(|_| "Secret illisible")?;
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: bytes.len() as u32,
+        pbData: bytes.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
     // SAFETY: voir `protect`.
     unsafe {
-        if CryptUnprotectData(&input, std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output) == 0 {
+        if CryptUnprotectData(
+            &input,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        ) == 0
+        {
             return Err("Secret non déchiffrable avec ce compte Windows".into());
         }
         let plain = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
@@ -36,14 +76,20 @@ pub fn unprotect(encoded: &str) -> Result<String, String> {
     }
 }
 #[cfg(not(windows))]
-pub fn protect(_plain: &str) -> Result<String, String> { let _ = STANDARD; Err("DPAPI indisponible hors Windows".into()) }
+pub fn protect(_plain: &str) -> Result<String, String> {
+    let _ = STANDARD;
+    Err("DPAPI indisponible hors Windows".into())
+}
 #[cfg(not(windows))]
-pub fn unprotect(_encoded: &str) -> Result<String, String> { Err("DPAPI indisponible hors Windows".into()) }
+pub fn unprotect(_encoded: &str) -> Result<String, String> {
+    Err("DPAPI indisponible hors Windows".into())
+}
 
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
-    #[test] fn dpapi_round_trip_hides_the_secret() {
+    #[test]
+    fn dpapi_round_trip_hides_the_secret() {
         for secret in ["motdepasse-OBS", "é ü 日本語 !\"#", ""] {
             let sealed = protect(secret).unwrap();
             assert!(secret.is_empty() || !sealed.contains(secret));

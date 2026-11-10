@@ -14,10 +14,23 @@ const ALL: u32 = MF_SOURCE_READER_ALL_STREAMS.0 as u32;
 // Reject obvious non-ISO-BMFF input before touching the native decoder; other
 // containers are left to Media Foundation's own format detection.
 fn validate_mp4_header(path: &Path) -> Result<()> {
-    if matches!(path.extension().and_then(|s|s.to_str()).unwrap_or("").to_ascii_lowercase().as_str(),"mp4"|"mov") {
+    if matches!(
+        path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "mp4" | "mov"
+    ) {
         use std::io::Read;
-        let mut header=[0u8;8];let mut file=std::fs::File::open(path)?;
-        ensure!(file.read_exact(&mut header).is_ok() && &header[4..]==b"ftyp" && u32::from_be_bytes(header[..4].try_into()?)>=8,"En-tête MP4/MOV invalide");
+        let mut header = [0u8; 8];
+        let mut file = std::fs::File::open(path)?;
+        ensure!(
+            file.read_exact(&mut header).is_ok()
+                && &header[4..] == b"ftyp"
+                && u32::from_be_bytes(header[..4].try_into()?) >= 8,
+            "En-tête MP4/MOV invalide"
+        );
     }
     Ok(())
 }
@@ -27,14 +40,20 @@ fn validate_mp4_header(path: &Path) -> Result<()> {
 /// (UI, shell or test thread) would otherwise make the source reader wait for a message pump forever.
 pub fn decode(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<RgbaImage>> {
     let path = path.to_path_buf();
-    std::thread::spawn(move || decode_mta(&path, fps, max_secs, size)).join().map_err(|_| anyhow!("Décodage vidéo interrompu"))?
+    std::thread::spawn(move || decode_mta(&path, fps, max_secs, size))
+        .join()
+        .map_err(|_| anyhow!("Décodage vidéo interrompu"))?
 }
 fn decode_mta(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0 && size > 0, "Paramètres vidéo invalides");
     validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
-        if !com { return Err(anyhow!("Initialisation COM multithread impossible pour Media Foundation")); }
+        if !com {
+            return Err(anyhow!(
+                "Initialisation COM multithread impossible pour Media Foundation"
+            ));
+        }
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
         let result = match started {
             Ok(()) => { let r = read(path, fps, max_secs, size); let _ = MFShutdown(); r }
@@ -50,14 +69,20 @@ fn decode_mta(path: &Path, fps: u32, max_secs: u32, size: u32) -> Result<Vec<Rgb
 /// Decode raw uncropped RGBA frames from video using Windows Media Foundation.
 pub fn decode_raw(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage>> {
     let path = path.to_path_buf();
-    std::thread::spawn(move || decode_raw_mta(&path, fps, max_secs)).join().map_err(|_| anyhow!("Décodage vidéo interrompu"))?
+    std::thread::spawn(move || decode_raw_mta(&path, fps, max_secs))
+        .join()
+        .map_err(|_| anyhow!("Décodage vidéo interrompu"))?
 }
 fn decode_raw_mta(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage>> {
     ensure!(fps > 0, "Paramètres vidéo invalides");
     validate_mp4_header(path)?;
     unsafe {
         let com = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
-        if !com { return Err(anyhow!("Initialisation COM multithread impossible pour Media Foundation")); }
+        if !com {
+            return Err(anyhow!(
+                "Initialisation COM multithread impossible pour Media Foundation"
+            ));
+        }
         let started = MFStartup(MF_VERSION, MFSTARTUP_FULL);
         let result = match started {
             Ok(()) => { let r = read_raw(path, fps, max_secs); let _ = MFShutdown(); r }
@@ -144,12 +169,7 @@ unsafe fn read_raw(path: &Path, fps: u32, max_secs: u32) -> Result<Vec<RgbaImage
     Ok(frames)
 }
 
-unsafe fn to_rgba(
-    sample: &IMFSample,
-    width: u32,
-    height: u32,
-    stride: i32,
-) -> Result<RgbaImage> {
+unsafe fn to_rgba(sample: &IMFSample, width: u32, height: u32, stride: i32) -> Result<RgbaImage> {
     let buffer = sample.ConvertToContiguousBuffer()?;
     let mut data = std::ptr::null_mut();
     let mut length = 0u32;
@@ -221,10 +241,18 @@ mod tests {
     use super::*;
     #[test]
     fn malformed_mp4_never_reaches_media_foundation() {
-        let dir=tempfile::tempdir().unwrap();let path=dir.path().join("broken.mp4");
-        std::fs::write(&path,b"ceci n'est pas une video").unwrap();
-        assert!(validate_mp4_header(&path).unwrap_err().to_string().contains("En-tête"));
-        std::fs::write(&path,[0,0,0,16,b'f',b't',b'y',b'p',0,0,0,0,0,0,0,0]).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("broken.mp4");
+        std::fs::write(&path, b"ceci n'est pas une video").unwrap();
+        assert!(validate_mp4_header(&path)
+            .unwrap_err()
+            .to_string()
+            .contains("En-tête"));
+        std::fs::write(
+            &path,
+            [0, 0, 0, 16, b'f', b't', b'y', b'p', 0, 0, 0, 0, 0, 0, 0, 0],
+        )
+        .unwrap();
         assert!(validate_mp4_header(&path).is_ok());
     }
     #[test]

@@ -117,13 +117,16 @@ pub(super) fn icons(ui: &mut egui::Ui, has_image: bool) -> IconActions {
     let mut actions = IconActions::default();
     ui.horizontal(|ui| {
         let buttons = if has_image { 2.0 } else { 1.0 };
-        let width = (ui.available_width() - buttons * (30.0 + ui.spacing().item_spacing.x)).max(80.0);
+        let width =
+            (ui.available_width() - buttons * (30.0 + ui.spacing().item_spacing.x)).max(80.0);
         actions.gallery = ui
             .add_sized(
                 Vec2::new(width, 30.0),
                 theme::primary(RichText::new(tr("Galerie")).color(Color32::WHITE)),
             )
-            .on_hover_text(tr("Choisir dans les packs FIFINE, Elgato et les icônes locales"))
+            .on_hover_text(tr(
+                "Choisir dans les packs FIFINE, Elgato et les icônes locales",
+            ))
             .clicked();
         actions.pick_file = icon_button(
             ui,

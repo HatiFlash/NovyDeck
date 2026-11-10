@@ -1,30 +1,44 @@
+use crate::devices::elgato;
+use crate::devices::report::{self, Report};
+use crate::devices::{self, Detection, DeviceModel, Family, ImageFormat, Protocol};
 use crate::key_render::for_device as render_key_or_default;
 #[cfg(test)]
 use crate::key_render::jpeg as render_key;
 use crate::{model::Config, Event};
-use crate::devices::{self, Detection, DeviceModel, Family, ImageFormat, Protocol};
-use crate::devices::report::{self, Report};
-use crate::devices::elgato;
-use std::{path::PathBuf, sync::Arc, cell::Cell};
 #[cfg(test)]
 use ab_glyph::FontArc;
 use anyhow::{Context, Result};
 use hidapi::{HidApi, HidDevice};
+use std::{cell::Cell, path::PathBuf, sync::Arc};
 use std::{
     sync::mpsc::{self, Receiver, Sender, TryRecvError},
     time::{Duration, Instant},
 };
 
 /// Pure decision: no upload during apply, one frame per turn, fair round-robin.
-fn next_animation_frame(now: Instant, applying: bool, enabled: bool, fps: u8,
-    lengths: &[usize; 15], due: &[Instant; 15], last_per_key: &[Instant; 15],
-    last_global: Instant, cursor: usize) -> Option<usize> {
-    if applying || !enabled || now.saturating_duration_since(last_global) < Duration::from_millis(34) {
+fn next_animation_frame(
+    now: Instant,
+    applying: bool,
+    enabled: bool,
+    fps: u8,
+    lengths: &[usize; 15],
+    due: &[Instant; 15],
+    last_per_key: &[Instant; 15],
+    last_global: Instant,
+    cursor: usize,
+) -> Option<usize> {
+    if applying
+        || !enabled
+        || now.saturating_duration_since(last_global) < Duration::from_millis(34)
+    {
         return None;
     }
     let interval = Duration::from_millis(1000 / fps.max(1) as u64);
-    (0..15).map(|n| (cursor + n) % 15).find(|&i| lengths[i] > 1
-        && now >= due[i] && now.saturating_duration_since(last_per_key[i]) >= interval)
+    (0..15).map(|n| (cursor + n) % 15).find(|&i| {
+        lengths[i] > 1
+            && now >= due[i]
+            && now.saturating_duration_since(last_per_key[i]) >= interval
+    })
 }
 
 pub enum Command {
@@ -37,13 +51,19 @@ pub enum Command {
     TestStop,
     TestBrightness,
 }
-pub fn spawn(tx: Sender<Event>, config_path: PathBuf, ctx: eframe::egui::Context) -> Sender<Command> {
+pub fn spawn(
+    tx: Sender<Event>,
+    config_path: PathBuf,
+    ctx: eframe::egui::Context,
+) -> Sender<Command> {
     let (cmd, rx) = mpsc::channel();
     std::thread::spawn(move || worker(rx, tx, config_path, ctx));
     cmd
 }
 fn send_input(tx: &Sender<Event>, ctx: &eframe::egui::Context, event: Event) {
-    if tx.send(event).is_ok() { ctx.request_repaint(); }
+    if tx.send(event).is_ok() {
+        ctx.request_repaint();
+    }
 }
 #[cfg(test)]
 #[test]
@@ -52,21 +72,39 @@ fn physical_input_wakes_the_ui_without_waiting_for_a_background_tick() {
     let ctx = eframe::egui::Context::default();
     let wakes = Arc::new(AtomicUsize::new(0));
     let count = wakes.clone();
-    ctx.set_request_repaint_callback(move |_| { count.fetch_add(1, Ordering::SeqCst); });
+    ctx.set_request_repaint_callback(move |_| {
+        count.fetch_add(1, Ordering::SeqCst);
+    });
     let (tx, rx) = mpsc::channel();
     send_input(&tx, &ctx, Event::Key(0, Instant::now()));
     assert!(matches!(rx.try_recv(), Ok(Event::Key(0, _))));
-    assert!(wakes.load(Ordering::SeqCst) > 0, "l'appui HID doit réveiller la fenêtre");
+    assert!(
+        wakes.load(Ordering::SeqCst) > 0,
+        "l'appui HID doit réveiller la fenêtre"
+    );
 }
-fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: eframe::egui::Context) {
+fn worker(
+    rx: Receiver<Command>,
+    tx: Sender<Event>,
+    config_path: PathBuf,
+    ctx: eframe::egui::Context,
+) {
     // Rapport dès le démarrage, même si le D6 n’est pas connecté.
     // One report file per session: retries append to it instead of rotating the first connection away.
     let session_report: Option<Arc<Report>> = match Report::start(&config_path) {
         Ok(report) => {
-            match HidApi::new() { Ok(api) => report.inventory(&api), Err(e) => report.log(&format!("Inventaire HID indisponible : {e}")) }
+            match HidApi::new() {
+                Ok(api) => report.inventory(&api),
+                Err(e) => report.log(&format!("Inventaire HID indisponible : {e}")),
+            }
             Some(Arc::new(report))
         }
-        Err(_) => { let _ = tx.send(Event::Log("Rapport périphérique : création impossible".into())); None }
+        Err(_) => {
+            let _ = tx.send(Event::Log(
+                "Rapport périphérique : création impossible".into(),
+            ));
+            None
+        }
     };
     let mut attempts = 0u32;
     let mut test_running = false;
@@ -78,7 +116,8 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
     let mut retry = Instant::now();
     let mut beat = Instant::now();
     let mut last_press = [Instant::now() - Duration::from_secs(1); 32];
-    let (animation_tx, animation_rx) = mpsc::channel::<(u64, Vec<Vec<crate::key_render::AnimatedFrame>>)>() ;
+    let (animation_tx, animation_rx) =
+        mpsc::channel::<(u64, Vec<Vec<crate::key_render::AnimatedFrame>>)>();
     let mut animation_generation = 0u64;
     let mut animations: Vec<Vec<crate::key_render::AnimatedFrame>> = Vec::new();
     let mut next_frame = [1usize; 15];
@@ -86,7 +125,7 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
     let mut last_frame = Instant::now() - Duration::from_secs(1);
     let mut last_per_key = [Instant::now() - Duration::from_secs(1); 15];
     let mut cursor = 0usize;
-    let mut key_images: [Option<Vec<u8>>;32] = std::array::from_fn(|_|None);
+    let mut key_images: [Option<Vec<u8>>; 32] = std::array::from_fn(|_| None);
     loop {
         let mut update = false;
         let mut brightness = None;
@@ -100,32 +139,69 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                             let font = crate::key_render::font()?;
                             for idx in 0..d.driver.model().keys as usize {
                                 let mut key = crate::model::Key::default();
-                                key.label = (idx+1).to_string();
+                                key.label = (idx + 1).to_string();
                                 key.title_size = 46;
                                 key.color = [20, 56, 90];
                                 key.background = true;
-                                let image = crate::key_render::jpeg(&key, d.driver.model().image_w.max(60) as u32, &font)?;
+                                let image = crate::key_render::jpeg(
+                                    &key,
+                                    d.driver.model().image_w.max(60) as u32,
+                                    &font,
+                                )?;
                                 d.set_key_image(idx, &image, frame_end())?;
                             }
                             Ok(())
                         })();
                         match result {
-                            Ok(()) => { let _=tx.send(Event::HardwareTestStatus("Images numérotées : OK. Appuie sur les touches dans l’ordre.".into())); },
-                            Err(e) => { test_running=false; update=true; let _=tx.send(Event::HardwareTestStatus(format!("Images numérotées : ÉCHEC — {e}"))); }
+                            Ok(()) => {
+                                let _ = tx.send(Event::HardwareTestStatus(
+                                    "Images numérotées : OK. Appuie sur les touches dans l’ordre."
+                                        .into(),
+                                ));
+                            }
+                            Err(e) => {
+                                test_running = false;
+                                update = true;
+                                let _ = tx.send(Event::HardwareTestStatus(format!(
+                                    "Images numérotées : ÉCHEC — {e}"
+                                )));
+                            }
                         }
-                    } else { let _=tx.send(Event::HardwareTestStatus("ÉCHEC : périphérique non connecté".into())); }
+                    } else {
+                        let _ = tx.send(Event::HardwareTestStatus(
+                            "ÉCHEC : périphérique non connecté".into(),
+                        ));
+                    }
                 }
                 Ok(Command::TestBrightness) => {
                     if test_running {
-                        if let Some(d)=&deck {
+                        if let Some(d) = &deck {
                             match d.set_brightness(30) {
-                                Ok(()) => { test_brightness_at=Some(Instant::now()); let _=tx.send(Event::HardwareTestStatus("Luminosité 30 % : commande OK".into())); },
-                                Err(e) => { let _=tx.send(Event::HardwareTestStatus(format!("ÉCHEC luminosité 30 % : {e}"))); }
+                                Ok(()) => {
+                                    test_brightness_at = Some(Instant::now());
+                                    let _ = tx.send(Event::HardwareTestStatus(
+                                        "Luminosité 30 % : commande OK".into(),
+                                    ));
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(Event::HardwareTestStatus(format!(
+                                        "ÉCHEC luminosité 30 % : {e}"
+                                    )));
+                                }
                             }
                         }
                     }
                 }
-                Ok(Command::TestStop) => { if test_running { test_running=false; test_brightness_at=None; update=true; let _=tx.send(Event::HardwareTestStatus("Test arrêté ; affichage normal restauré".into())); } }
+                Ok(Command::TestStop) => {
+                    if test_running {
+                        test_running = false;
+                        test_brightness_at = None;
+                        update = true;
+                        let _ = tx.send(Event::HardwareTestStatus(
+                            "Test arrêté ; affichage normal restauré".into(),
+                        ));
+                    }
+                }
                 Ok(Command::Connect(c, r)) => {
                     test_running = false;
                     config = c;
@@ -140,13 +216,20 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                     update = !test_running;
                 }
                 Ok(Command::Brightness(value)) => brightness = Some(value.min(100)),
-                Ok(Command::KeyImage(index,jpeg)) => { if index<32 && jpeg.len()<=100_000 {key_images[index]=Some(jpeg);} },
+                Ok(Command::KeyImage(index, jpeg)) => {
+                    if index < 32 && jpeg.len() <= 100_000 {
+                        key_images[index] = Some(jpeg);
+                    }
+                }
                 Ok(Command::Disconnect) => {
                     wanted = false;
                     test_running = false;
                     deck = None;
                     key_images.fill(None);
-                    let _ = tx.send(Event::Device(false, "Périphérique déconnecté de NovyDeck".into()));
+                    let _ = tx.send(Event::Device(
+                        false,
+                        "Périphérique déconnecté de NovyDeck".into(),
+                    ));
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => return,
@@ -157,11 +240,20 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
             attempts += 1;
             // Detailed trace for the first attempts, then a periodic one, to keep the log readable.
             let report = if attempts <= 3 || attempts % 20 == 0 {
-                if let Some(r) = &session_report { r.log(&format!("--- Tentative de connexion n°{attempts} ---")); }
+                if let Some(r) = &session_report {
+                    r.log(&format!("--- Tentative de connexion n°{attempts} ---"));
+                }
                 session_report.clone()
-            } else { None };
+            } else {
+                None
+            };
             let result = if vendor_running() {
-                if let Some(r) = &report { match HidApi::new() { Ok(api) => r.inventory(&api), Err(e) => r.log(&format!("Inventaire impossible : {e}")) } }
+                if let Some(r) = &report {
+                    match HidApi::new() {
+                        Ok(api) => r.inventory(&api),
+                        Err(e) => r.log(&format!("Inventaire impossible : {e}")),
+                    }
+                }
                 Err(anyhow::anyhow!(
                     "Ferme FIFINE Control Deck, y compris son icône près de l’horloge"
                 ))
@@ -170,11 +262,16 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
             };
             match result {
                 Ok(d) => {
-                    if let Some(r) = &report { r.log(&format!("Ouverture {} OK ; version firmware non disponible via le protocole connu", d.driver.model().name)); }
+                    if let Some(r) = &report {
+                        r.log(&format!("Ouverture {} OK ; version firmware non disponible via le protocole connu", d.driver.model().name));
+                    }
                     let model = d.driver.model();
                     let _ = tx.send(Event::DeviceModel {
-                        name: model.name.to_owned(), keys: model.keys, rows: model.rows,
-                        cols: model.cols, experimental: !model.verified,
+                        name: model.name.to_owned(),
+                        keys: model.keys,
+                        rows: model.rows,
+                        cols: model.cols,
+                        experimental: !model.verified,
                     });
                     deck = Some(d);
                     attempts = 0;
@@ -182,7 +279,12 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                     beat = Instant::now();
                 }
                 Err(e) => {
-                    if let Some(r) = &report { r.log(&format!("Ouverture périphérique échouée : {e:#} ; code Windows : {:?}", std::io::Error::last_os_error().raw_os_error())); }
+                    if let Some(r) = &report {
+                        r.log(&format!(
+                            "Ouverture périphérique échouée : {e:#} ; code Windows : {:?}",
+                            std::io::Error::last_os_error().raw_os_error()
+                        ));
+                    }
                     let _ = tx.send(Event::Device(false, format!("En attente · {e}")));
                 }
             }
@@ -201,18 +303,49 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                         key_images.fill(None);
                         let _ = tx.send(Event::Device(
                             true,
-                            format!("{}{} connecté · {} touches ({} × {}) · rapports {} octets", d.driver.model().name, if d.driver.model().verified { "" } else { " (expérimental)" }, d.driver.model().keys, d.driver.model().rows, d.driver.model().cols, d.packet),
+                            format!(
+                                "{}{} connecté · {} touches ({} × {}) · rapports {} octets",
+                                d.driver.model().name,
+                                if d.driver.model().verified {
+                                    ""
+                                } else {
+                                    " (expérimental)"
+                                },
+                                d.driver.model().keys,
+                                d.driver.model().rows,
+                                d.driver.model().cols,
+                                d.packet
+                            ),
                         ));
                         let _ = tx.send(Event::Applied(revision));
-                        if config.d6_animations && config.keys().iter().any(|k| k.image.to_ascii_lowercase().ends_with(".gif")) {
+                        if config.d6_animations
+                            && config
+                                .keys()
+                                .iter()
+                                .any(|k| k.image.to_ascii_lowercase().ends_with(".gif"))
+                        {
                             let generation = animation_generation;
                             let c = config.clone();
                             let keys = d.driver.model().keys as usize;
                             let reply = animation_tx.clone();
                             std::thread::spawn(move || {
-                                let rendered = crate::key_render::font().ok().map(|font| c.keys().iter().take(keys)
-                                    .map(|key| crate::key_render::animated(key, c.image_size, &font).unwrap_or_default())
-                                    .collect::<Vec<_>>()).unwrap_or_default();
+                                let rendered = crate::key_render::font()
+                                    .ok()
+                                    .map(|font| {
+                                        c.keys()
+                                            .iter()
+                                            .take(keys)
+                                            .map(|key| {
+                                                crate::key_render::animated(
+                                                    key,
+                                                    c.image_size,
+                                                    &font,
+                                                )
+                                                .unwrap_or_default()
+                                            })
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .unwrap_or_default();
                                 let _ = reply.send((generation, rendered));
                             });
                         }
@@ -241,10 +374,12 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                 if let Some(at) = test_brightness_at {
                     if at.elapsed() >= Duration::from_millis(900) {
                         match d.set_brightness(100) {
-                            Ok(()) => { let _=tx.send(Event::HardwareTestStatus("Luminosité 30 % / 100 % : commandes OK (effet visuel à confirmer)".into())); },
-                            Err(e) => failed=Some(format!("Test luminosité 100 % : {e}")),
+                            Ok(()) => {
+                                let _=tx.send(Event::HardwareTestStatus("Luminosité 30 % / 100 % : commandes OK (effet visuel à confirmer)".into()));
+                            }
+                            Err(e) => failed = Some(format!("Test luminosité 100 % : {e}")),
                         }
-                        test_brightness_at=None;
+                        test_brightness_at = None;
                     }
                 }
             }
@@ -254,7 +389,10 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                         "FIFINE a été relancé : connexion suspendue pour éviter les conflits"
                             .into(),
                     );
-                } else if d.driver.model().family == Family::Mirabox { if let Err(e) = d.keepalive() { failed = Some(e.to_string()); }
+                } else if d.driver.model().family == Family::Mirabox {
+                    if let Err(e) = d.keepalive() {
+                        failed = Some(e.to_string());
+                    }
                 }
                 beat = Instant::now();
             }
@@ -262,27 +400,67 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
                 let mut data = [0u8; 2048];
                 match d.hid.read_timeout(&mut data, 30) {
                     Ok(n) if n > 0 => {
-                        if let Some(r) = &d.report { if d.inputs.get() < 20 { r.log(&format!("Entrée HID #{}{} : {}", d.inputs.get() + 1, if data.starts_with(b"ACK") || data.starts_with(b"\0ACK") { " (réponse/ACK)" } else { "" }, report::hex(&data[..n]))); d.inputs.set(d.inputs.get() + 1); } }
-                        if d.driver.model().id == "elgato_plus" && data.get(1).is_some_and(|tag| *tag == 2 || *tag == 3) {
-                            d.note(&format!("Stream Deck Plus : écran/molette ignoré (type {})", data[1]));
+                        if let Some(r) = &d.report {
+                            if d.inputs.get() < 20 {
+                                r.log(&format!(
+                                    "Entrée HID #{}{} : {}",
+                                    d.inputs.get() + 1,
+                                    if data.starts_with(b"ACK") || data.starts_with(b"\0ACK") {
+                                        " (réponse/ACK)"
+                                    } else {
+                                        ""
+                                    },
+                                    report::hex(&data[..n])
+                                ));
+                                d.inputs.set(d.inputs.get() + 1);
+                            }
                         }
-                        if test_running && !data.starts_with(b"ACK") && !data.starts_with(b"\0ACK") { d.note(&format!("Test entrée brute : {}", report::hex(&data[..n]))); }
+                        if d.driver.model().id == "elgato_plus"
+                            && data.get(1).is_some_and(|tag| *tag == 2 || *tag == 3)
+                        {
+                            d.note(&format!(
+                                "Stream Deck Plus : écran/molette ignoré (type {})",
+                                data[1]
+                            ));
+                        }
+                        if test_running && !data.starts_with(b"ACK") && !data.starts_with(b"\0ACK")
+                        {
+                            d.note(&format!("Test entrée brute : {}", report::hex(&data[..n])));
+                        }
                         for event in d.decode_input(&data[..n]) {
                             match event {
-                                InputEvent::Key(mut k, down) if k < d.driver.model().keys as usize && k < config.keys().len() => {
-                                    if config.flip_input_rows && d.driver.model().id == "fifine_d6" { k = display_index(k); }
+                                InputEvent::Key(mut k, down)
+                                    if k < d.driver.model().keys as usize
+                                        && k < config.keys().len() =>
+                                {
+                                    if config.flip_input_rows && d.driver.model().id == "fifine_d6"
+                                    {
+                                        k = display_index(k);
+                                    }
                                     if down && test_running {
-                                        d.note(&format!("Test appui : brut={} ; index décodé={}", report::hex(&data[..n]), k+1));
-                                        send_input(&tx, &ctx, Event::HardwareTestPress(report::hex(&data[..n]), k));
+                                        d.note(&format!(
+                                            "Test appui : brut={} ; index décodé={}",
+                                            report::hex(&data[..n]),
+                                            k + 1
+                                        ));
+                                        send_input(
+                                            &tx,
+                                            &ctx,
+                                            Event::HardwareTestPress(report::hex(&data[..n]), k),
+                                        );
                                     } else if test_running { /* Relâchement ignoré pendant le test. */
                                     } else if down {
                                         if last_press[k].elapsed() >= Duration::from_millis(150) {
                                             last_press[k] = Instant::now();
                                             send_input(&tx, &ctx, Event::Key(k, Instant::now()));
                                         }
-                                    } else { send_input(&tx, &ctx, Event::KeyRelease(k, Instant::now())); }
+                                    } else {
+                                        send_input(&tx, &ctx, Event::KeyRelease(k, Instant::now()));
+                                    }
                                 }
-                                InputEvent::Encoder(i, direction) => d.note(&format!("Molette {i} : {direction:+} (action non configurée)")),
+                                InputEvent::Encoder(i, direction) => d.note(&format!(
+                                    "Molette {i} : {direction:+} (action non configurée)"
+                                )),
                                 _ => {}
                             }
                         }
@@ -295,22 +473,35 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
             if failed.is_none() && !update && !test_running {
                 if let Some(index) = key_images.iter().position(Option::is_some) {
                     if let Some(jpeg) = key_images[index].take() {
-                        if let Err(e)=d.set_key_image(index,&jpeg,frame_end()) { failed=Some(e.to_string()); }
+                        if let Err(e) = d.set_key_image(index, &jpeg, frame_end()) {
+                            failed = Some(e.to_string());
+                        }
                     }
                 }
             }
             // Read HID before every animation frame; uploads never preempt a full apply.
             let now = Instant::now();
             let lengths = std::array::from_fn(|i| animations.get(i).map_or(0, Vec::len));
-            if let Some(index) = next_animation_frame(now, update || failed.is_some(),
-                config.d6_animations && !test_running, config.animation_fps, &lengths, &due,
-                &last_per_key, last_frame, cursor) {
+            if let Some(index) = next_animation_frame(
+                now,
+                update || failed.is_some(),
+                config.d6_animations && !test_running,
+                config.animation_fps,
+                &lengths,
+                &due,
+                &last_per_key,
+                last_frame,
+                cursor,
+            ) {
                 let frames = &animations[index];
                 let frame = &frames[next_frame[index] % frames.len()];
                 match d.set_key_image(index, &frame.jpeg, frame_end()) {
                     Ok(()) => {
                         let sent = Instant::now();
-                        due[index] = sent + frame.delay.max(Duration::from_millis(1000 / config.animation_fps.max(1) as u64));
+                        due[index] = sent
+                            + frame.delay.max(Duration::from_millis(
+                                1000 / config.animation_fps.max(1) as u64,
+                            ));
                         last_per_key[index] = sent;
                         next_frame[index] += 1;
                         cursor = (index + 1) % 15;
@@ -323,8 +514,16 @@ fn worker(rx: Receiver<Command>, tx: Sender<Event>, config_path: PathBuf, ctx: e
             std::thread::sleep(Duration::from_millis(50));
         }
         if let Some(error) = failed {
-            if test_running { let _=tx.send(Event::HardwareTestStatus(format!("ÉCHEC périphérique : {error}"))); test_running=false; test_brightness_at=None; }
-            if let Some(d) = &deck { d.note(&format!("Connexion interrompue : {error}")); }
+            if test_running {
+                let _ = tx.send(Event::HardwareTestStatus(format!(
+                    "ÉCHEC périphérique : {error}"
+                )));
+                test_running = false;
+                test_brightness_at = None;
+            }
+            if let Some(d) = &deck {
+                d.note(&format!("Connexion interrompue : {error}"));
+            }
             deck = None;
             let _ = tx.send(Event::Device(
                 false,
@@ -450,50 +649,102 @@ struct Deck {
     transitions: Cell<u64>,
 }
 #[derive(Clone, Copy)]
-enum Driver { Mirabox(&'static DeviceModel) }
+enum Driver {
+    Mirabox(&'static DeviceModel),
+}
 impl Driver {
-    fn model(self) -> &'static DeviceModel { match self { Self::Mirabox(model) => model } }
+    fn model(self) -> &'static DeviceModel {
+        match self {
+            Self::Mirabox(model) => model,
+        }
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InputEvent { Key(usize, bool), Encoder(usize, i8) }
+enum InputEvent {
+    Key(usize, bool),
+    Encoder(usize, i8),
+}
 
 // Pure transformations and packet construction: no HID handle and no hardware in tests.
 fn mirabox_key(model: &DeviceModel, index: usize) -> Result<u8> {
-    anyhow::ensure!(index < model.keys as usize && index < 15, "Touche hors grille : {index}");
-    let index = if model.id == "fifine_d6" { display_index(index) } else { index };
+    anyhow::ensure!(
+        index < model.keys as usize && index < 15,
+        "Touche hors grille : {index}"
+    );
+    let index = if model.id == "fifine_d6" {
+        display_index(index)
+    } else {
+        index
+    };
     Ok(index as u8 + 1)
 }
 fn bat_tail(model: &DeviceModel, index: usize, len: usize) -> Result<[u8; 8]> {
     anyhow::ensure!(len <= 65535, "Image trop lourde");
-    Ok([b'B', b'A', b'T', 0, 0, (len >> 8) as u8, len as u8, mirabox_key(model, index)?])
+    Ok([
+        b'B',
+        b'A',
+        b'T',
+        0,
+        0,
+        (len >> 8) as u8,
+        len as u8,
+        mirabox_key(model, index)?,
+    ])
 }
 fn canonical_image(jpeg: &[u8], model: &DeviceModel) -> Result<Vec<u8>> {
-    if model.id == "fifine_d6" { return Ok(jpeg.to_vec()); }
+    if model.id == "fifine_d6" {
+        return Ok(jpeg.to_vec());
+    }
     // key_render produces D6-oriented pixels (180 degrees). Undo that transform,
     // then apply the catalogue orientation; no re-encoding on the D6 path.
     let source = image::load_from_memory(jpeg)?.to_rgb8();
     let source = image::imageops::rotate180(&source);
-    let mut out = image::imageops::resize(&source, model.image_w.into(), model.image_h.into(), image::imageops::FilterType::Lanczos3);
+    let mut out = image::imageops::resize(
+        &source,
+        model.image_w.into(),
+        model.image_h.into(),
+        image::imageops::FilterType::Lanczos3,
+    );
     out = match model.rotation {
-        0 => out, 90 => image::imageops::rotate90(&out),
+        0 => out,
+        90 => image::imageops::rotate90(&out),
         180 => image::imageops::rotate180(&out),
         270 => image::imageops::rotate270(&out),
         _ => anyhow::bail!("Rotation non prise en charge"),
     };
-    if model.mirror_x { out = image::imageops::flip_horizontal(&out); }
-    if model.mirror_y { out = image::imageops::flip_vertical(&out); }
+    if model.mirror_x {
+        out = image::imageops::flip_horizontal(&out);
+    }
+    if model.mirror_y {
+        out = image::imageops::flip_vertical(&out);
+    }
     let mut bytes = Vec::new();
     match model.image_format {
         ImageFormat::Jpeg => image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 88)
-            .encode(&out, out.width(), out.height(), image::ExtendedColorType::Rgb8)?,
-        ImageFormat::Bmp => image::codecs::bmp::BmpEncoder::new(&mut bytes)
-            .encode(&out, out.width(), out.height(), image::ExtendedColorType::Rgb8)?,
+            .encode(
+                &out,
+                out.width(),
+                out.height(),
+                image::ExtendedColorType::Rgb8,
+            )?,
+        ImageFormat::Bmp => image::codecs::bmp::BmpEncoder::new(&mut bytes).encode(
+            &out,
+            out.width(),
+            out.height(),
+            image::ExtendedColorType::Rgb8,
+        )?,
     }
     Ok(bytes)
 }
-fn decode_model_input(model: &DeviceModel, data: &[u8], transitions: &Cell<u64>) -> Vec<InputEvent> {
+fn decode_model_input(
+    model: &DeviceModel,
+    data: &[u8],
+    transitions: &Cell<u64>,
+) -> Vec<InputEvent> {
     if model.id == "fifine_d6" {
-        return decode_input(data).map(|(k, down)| vec![InputEvent::Key(k, down)]).unwrap_or_default();
+        return decode_input(data)
+            .map(|(k, down)| vec![InputEvent::Key(k, down)])
+            .unwrap_or_default();
     }
     if model.family == Family::Elgato {
         if let Some(states) = elgato::keys(model, data) {
@@ -509,8 +760,14 @@ fn decode_model_input(model: &DeviceModel, data: &[u8], transitions: &Cell<u64>)
         }
         return Vec::new();
     }
-    let d = if data.starts_with(b"\0ACK") { &data[1..] } else { data };
-    if d.len() < 11 || !(d.starts_with(b"ACK\0\0OK") || d[..9].iter().all(|&byte| byte == 0)) { return Vec::new(); }
+    let d = if data.starts_with(b"\0ACK") {
+        &data[1..]
+    } else {
+        data
+    };
+    if d.len() < 11 || !(d.starts_with(b"ACK\0\0OK") || d[..9].iter().all(|&byte| byte == 0)) {
+        return Vec::new();
+    }
     let tag = d[9];
     if (1..=model.keys).contains(&tag) {
         let mask = 1u64 << (tag - 1);
@@ -519,115 +776,276 @@ fn decode_model_input(model: &DeviceModel, data: &[u8], transitions: &Cell<u64>)
         return vec![InputEvent::Key(tag as usize - 1, down)];
     }
     let encoder = match tag {
-        0x90 => Some((0, -1)), 0x91 => Some((0, 1)),
-        0x50 => Some((1, -1)), 0x51 => Some((1, 1)),
-        0x60 => Some((2, -1)), 0x61 => Some((2, 1)),
+        0x90 => Some((0, -1)),
+        0x91 => Some((0, 1)),
+        0x50 => Some((1, -1)),
+        0x51 => Some((1, 1)),
+        0x60 => Some((2, -1)),
+        0x61 => Some((2, 1)),
         _ => None,
     };
-    encoder.filter(|(index, _)| *index < model.encoders as usize)
-        .map(|(index, direction)| vec![InputEvent::Encoder(index, direction)]).unwrap_or_default()
+    encoder
+        .filter(|(index, _)| *index < model.encoders as usize)
+        .map(|(index, direction)| vec![InputEvent::Encoder(index, direction)])
+        .unwrap_or_default()
 }
 
 // Hardware hypothesis: a single BAT upload ends with STP, without CLE.
 // Change this constant to UlendStp if the D6 firmware requires the full terminator.
 #[derive(Clone, Copy)]
-enum FrameEnd { Stp, UlendStp }
+enum FrameEnd {
+    Stp,
+    UlendStp,
+}
 fn frame_end() -> FrameEnd {
-    if std::env::var_os("DECKFORGE_D6_FRAME_ULEND").is_some() { FrameEnd::UlendStp } else { FrameEnd::Stp }
+    if std::env::var_os("DECKFORGE_D6_FRAME_ULEND").is_some() {
+        FrameEnd::UlendStp
+    } else {
+        FrameEnd::Stp
+    }
 }
 impl Deck {
     fn send_frame(&self, idx: usize, jpeg: &[u8], end: FrameEnd) -> Result<()> {
         let started = Instant::now();
         let data = canonical_image(jpeg, self.driver.model())?;
         if self.driver.model().family == Family::Elgato {
-            for page in elgato::image_reports(self.driver.model(), idx, &data)? { self.report(&page)?; }
-            self.note(&format!("Image Elgato touche {} : {} octets", idx + 1, data.len()));
+            for page in elgato::image_reports(self.driver.model(), idx, &data)? {
+                self.report(&page)?;
+            }
+            self.note(&format!(
+                "Image Elgato touche {} : {} octets",
+                idx + 1,
+                data.len()
+            ));
             return Ok(());
         }
         self.command(&bat_tail(self.driver.model(), idx, data.len())?)?;
-        for chunk in data.chunks(self.packet) { self.report(chunk)?; }
+        for chunk in data.chunks(self.packet) {
+            self.report(chunk)?;
+        }
         self.await_ack()?;
-        if matches!(end, FrameEnd::UlendStp) { self.command(b"ULEND")?; }
+        if matches!(end, FrameEnd::UlendStp) {
+            self.command(b"ULEND")?;
+        }
         let result = self.command(b"STP");
-        self.note(&format!("Image touche {} : {} octets en {} ms ; résultat {:?}", idx + 1, jpeg.len(), started.elapsed().as_millis(), result.as_ref().err().map(ToString::to_string)));
+        self.note(&format!(
+            "Image touche {} : {} octets en {} ms ; résultat {:?}",
+            idx + 1,
+            jpeg.len(),
+            started.elapsed().as_millis(),
+            result.as_ref().err().map(ToString::to_string)
+        ));
         result
     }
-    fn set_key_image(&self, idx: usize, image: &[u8], end: FrameEnd) -> Result<()> { self.send_frame(idx, image, end) }
-    fn set_brightness(&self, value: u8) -> Result<()> {
-        if self.driver.model().family == Family::Elgato { self.feature(&elgato::brightness(self.driver.model(), value)) }
-        else { self.command(&[b'L', b'I', b'G', 0, 0, value.min(100)]) }
+    fn set_key_image(&self, idx: usize, image: &[u8], end: FrameEnd) -> Result<()> {
+        self.send_frame(idx, image, end)
     }
-    fn clear(&self) -> Result<()> { if self.driver.model().family == Family::Elgato { self.feature(&elgato::reset(self.driver.model())) } else { self.command(&[b'C', b'L', b'E', 0, 0, 0, 0xFF]) } }
-    fn feature(&self, bytes: &[u8]) -> Result<()> { self.hid.send_feature_report(bytes).context("Rapport de fonctionnalité Elgato refusé") }
-    fn sleep(&self) -> Result<()> { self.report(b"HAN") }
-    fn wake(&self) -> Result<()> { self.command(b"DIS") }
-    fn keepalive(&self) -> Result<()> { self.command(b"CONNECT") }
-    fn decode_input(&self, data: &[u8]) -> Vec<InputEvent> { decode_model_input(self.driver.model(), data, &self.transitions) }
+    fn set_brightness(&self, value: u8) -> Result<()> {
+        if self.driver.model().family == Family::Elgato {
+            self.feature(&elgato::brightness(self.driver.model(), value))
+        } else {
+            self.command(&[b'L', b'I', b'G', 0, 0, value.min(100)])
+        }
+    }
+    fn clear(&self) -> Result<()> {
+        if self.driver.model().family == Family::Elgato {
+            self.feature(&elgato::reset(self.driver.model()))
+        } else {
+            self.command(&[b'C', b'L', b'E', 0, 0, 0, 0xFF])
+        }
+    }
+    fn feature(&self, bytes: &[u8]) -> Result<()> {
+        self.hid
+            .send_feature_report(bytes)
+            .context("Rapport de fonctionnalité Elgato refusé")
+    }
+    fn sleep(&self) -> Result<()> {
+        self.report(b"HAN")
+    }
+    fn wake(&self) -> Result<()> {
+        self.command(b"DIS")
+    }
+    fn keepalive(&self) -> Result<()> {
+        self.command(b"CONNECT")
+    }
+    fn decode_input(&self, data: &[u8]) -> Vec<InputEvent> {
+        decode_model_input(self.driver.model(), data, &self.transitions)
+    }
     fn await_ack(&self) -> Result<()> {
-        if self.driver.model().id == "fifine_d6" { return Ok(()); } // Never change D6 timing.
+        if self.driver.model().id == "fifine_d6" {
+            return Ok(());
+        } // Never change D6 timing.
         let mut data = [0u8; 2048];
         for _ in 0..4 {
             let n = self.hid.read_timeout(&mut data, 50)?;
-            if n == 0 { continue; }
-            if data[..n].starts_with(b"ACK\0\0OK") || data[..n].starts_with(b"\0ACK\0\0OK") {
-                self.note("ACK image reçu"); return Ok(());
+            if n == 0 {
+                continue;
             }
-            self.note(&format!("Entrée pendant attente ACK : {}", report::hex(&data[..n.min(32)])));
+            if data[..n].starts_with(b"ACK\0\0OK") || data[..n].starts_with(b"\0ACK\0\0OK") {
+                self.note("ACK image reçu");
+                return Ok(());
+            }
+            self.note(&format!(
+                "Entrée pendant attente ACK : {}",
+                report::hex(&data[..n.min(32)])
+            ));
         }
-        anyhow::bail!("ACK image absent après 200 ms pour {}", self.driver.model().name)
+        anyhow::bail!(
+            "ACK image absent après 200 ms pour {}",
+            self.driver.model().name
+        )
     }
-    fn open() -> Result<Self> { Self::open_with_report(None) }
+    fn open() -> Result<Self> {
+        Self::open_with_report(None)
+    }
     fn open_with_report(report: Option<Arc<Report>>) -> Result<Self> {
         let api = HidApi::new()?;
-        if let Some(r) = &report { r.inventory(&api); }
+        if let Some(r) = &report {
+            r.inventory(&api);
+        }
         let infos: Vec<_> = api.device_list().collect();
-        let candidates: Vec<_> = infos.iter().map(|d| devices::HidInfo {
-            vid: d.vendor_id(), pid: d.product_id(), usage_page: d.usage_page(),
-            usage: d.usage(), interface: d.interface_number(),
-            product: d.product_string().map(str::to_owned),
-            manufacturer: d.manufacturer_string().map(str::to_owned),
-            path: d.path().to_string_lossy().into_owned(),
-        }).collect();
-        let mut matches: Vec<_> = devices::detect(&candidates).into_iter().filter_map(|item| {
-            if let Detection::Matched { info, model } = item { Some((info, model)) } else { None }
-        }).collect();
+        let candidates: Vec<_> = infos
+            .iter()
+            .map(|d| devices::HidInfo {
+                vid: d.vendor_id(),
+                pid: d.product_id(),
+                usage_page: d.usage_page(),
+                usage: d.usage(),
+                interface: d.interface_number(),
+                product: d.product_string().map(str::to_owned),
+                manufacturer: d.manufacturer_string().map(str::to_owned),
+                path: d.path().to_string_lossy().into_owned(),
+            })
+            .collect();
+        let mut matches: Vec<_> = devices::detect(&candidates)
+            .into_iter()
+            .filter_map(|item| {
+                if let Detection::Matched { info, model } = item {
+                    Some((info, model))
+                } else {
+                    None
+                }
+            })
+            .collect();
         // Verified devices take priority regardless of HID enumeration order.
-        matches.sort_by_key(|(_, model)| (
-            !model.verified,
-            !(model.family == Family::Mirabox && matches!(model.protocol, Protocol::MiraboxV1 | Protocol::MiraboxV2)),
-        ));
+        matches.sort_by_key(|(_, model)| {
+            (
+                !model.verified,
+                !(model.family == Family::Mirabox
+                    && matches!(model.protocol, Protocol::MiraboxV1 | Protocol::MiraboxV2)),
+            )
+        });
         if let Some(r) = &report {
             for (info, model) in matches.iter().skip(1) {
-                r.log(&format!("Autre périphérique compatible ignoré : {} {:04X}:{:04X}{}", model.name, info.vid, info.pid, if model.verified { "" } else { " (expérimental)" }));
+                r.log(&format!(
+                    "Autre périphérique compatible ignoré : {} {:04X}:{:04X}{}",
+                    model.name,
+                    info.vid,
+                    info.pid,
+                    if model.verified {
+                        ""
+                    } else {
+                        " (expérimental)"
+                    }
+                ));
             }
         }
-        let (chosen, model) = matches.first().context("Aucun périphérique compatible détecté")?;
-        anyhow::ensure!(model.family == Family::Elgato || model.family == Family::Mirabox && matches!(model.protocol, Protocol::MiraboxV1 | Protocol::MiraboxV2),
-            "{} reconnu (expérimental) : pilote de ce protocole non disponible", model.name);
-        let info = infos.iter().find(|d| d.path().to_string_lossy() == chosen.path)
+        let (chosen, model) = matches
+            .first()
+            .context("Aucun périphérique compatible détecté")?;
+        anyhow::ensure!(
+            model.family == Family::Elgato
+                || model.family == Family::Mirabox
+                    && matches!(model.protocol, Protocol::MiraboxV1 | Protocol::MiraboxV2),
+            "{} reconnu (expérimental) : pilote de ce protocole non disponible",
+            model.name
+        );
+        let info = infos
+            .iter()
+            .find(|d| d.path().to_string_lossy() == chosen.path)
             .context("Interface HID disparue pendant la détection")?;
-        if let Some(r) = &report { r.log(&format!("Pilote sélectionné : {}{} ; {} touches {}×{} ; protocole {:?}", model.name, if model.verified { "" } else { " expérimental, non vérifié sur matériel" }, model.keys, model.rows, model.cols, model.protocol)); }
-        let hid = info.open_device(&api).map_err(|e| {
-            if let Some(r) = &report { r.log(&format!("Ouverture HID refusée : {e} ; code Windows {:?}", std::io::Error::last_os_error().raw_os_error())); }
-            e
-        }).context("Accès au périphérique impossible")?;
+        if let Some(r) = &report {
+            r.log(&format!(
+                "Pilote sélectionné : {}{} ; {} touches {}×{} ; protocole {:?}",
+                model.name,
+                if model.verified {
+                    ""
+                } else {
+                    " expérimental, non vérifié sur matériel"
+                },
+                model.keys,
+                model.rows,
+                model.cols,
+                model.protocol
+            ));
+        }
+        let hid = info
+            .open_device(&api)
+            .map_err(|e| {
+                if let Some(r) = &report {
+                    r.log(&format!(
+                        "Ouverture HID refusée : {e} ; code Windows {:?}",
+                        std::io::Error::last_os_error().raw_os_error()
+                    ));
+                }
+                e
+            })
+            .context("Accès au périphérique impossible")?;
         let mut descriptor = [0u8; 4096];
         let n = hid.get_report_descriptor(&mut descriptor)?;
-        let (packet, rid) = if model.family == Family::Elgato { (model.packet_len as usize, 0) } else { output_report(&descriptor[..n])? };
-        if let Some(r) = &report { r.log(&format!("Rapport sortie={} octets, ID={rid} ; tampon entrée=2048 octets ; descripteur={} octets", packet, n)); }
-        if model.id != "fifine_d6" { anyhow::ensure!(packet == model.packet_len as usize,
-            "{} : rapport HID {} octets, {} attendus ; abandon prudent", model.name, packet, model.packet_len); }
+        let (packet, rid) = if model.family == Family::Elgato {
+            (model.packet_len as usize, 0)
+        } else {
+            output_report(&descriptor[..n])?
+        };
+        if let Some(r) = &report {
+            r.log(&format!("Rapport sortie={} octets, ID={rid} ; tampon entrée=2048 octets ; descripteur={} octets", packet, n));
+        }
+        if model.id != "fifine_d6" {
+            anyhow::ensure!(
+                packet == model.packet_len as usize,
+                "{} : rapport HID {} octets, {} attendus ; abandon prudent",
+                model.name,
+                packet,
+                model.packet_len
+            );
+        }
         if model.family == Family::Elgato {
             let (id, len, _) = elgato::firmware_layout(model);
-            let mut buf = vec![0; len]; buf[0] = id;
+            let mut buf = vec![0; len];
+            buf[0] = id;
             match hid.get_feature_report(&mut buf) {
-                Ok(n) => if let Some(r) = &report { r.log(&format!("Firmware Elgato : {}", elgato::firmware(model, &buf[..n]).unwrap_or_else(|| "réponse non décodable".into()))); },
-                Err(e) => if let Some(r) = &report { r.log(&format!("Firmware Elgato indisponible : {e}")); },
+                Ok(n) => {
+                    if let Some(r) = &report {
+                        r.log(&format!(
+                            "Firmware Elgato : {}",
+                            elgato::firmware(model, &buf[..n])
+                                .unwrap_or_else(|| "réponse non décodable".into())
+                        ));
+                    }
+                }
+                Err(e) => {
+                    if let Some(r) = &report {
+                        r.log(&format!("Firmware Elgato indisponible : {e}"));
+                    }
+                }
             }
         }
-        Ok(Self { hid, packet, rid, report, inputs: Cell::new(0), driver: Driver::Mirabox(model), transitions: Cell::new(0) })
+        Ok(Self {
+            hid,
+            packet,
+            rid,
+            report,
+            inputs: Cell::new(0),
+            driver: Driver::Mirabox(model),
+            transitions: Cell::new(0),
+        })
     }
-    fn note(&self, line: &str) { if let Some(r) = &self.report { r.log(line); } }
+    fn note(&self, line: &str) {
+        if let Some(r) = &self.report {
+            r.log(line);
+        }
+    }
     fn report(&self, payload: &[u8]) -> Result<()> {
         anyhow::ensure!(payload.len() <= self.packet, "Rapport trop long");
         // Elgato reports already start with their report ID (0x02) and fill the whole output
@@ -643,7 +1061,13 @@ impl Deck {
             data
         };
         // windows-native reports 0 for a synchronously completed WriteFile.
-        let n = self.hid.write(&data).map_err(|e| { self.note(&format!("Erreur écriture HID : {e} ; code Windows {:?}", std::io::Error::last_os_error().raw_os_error())); e })?;
+        let n = self.hid.write(&data).map_err(|e| {
+            self.note(&format!(
+                "Erreur écriture HID : {e} ; code Windows {:?}",
+                std::io::Error::last_os_error().raw_os_error()
+            ));
+            e
+        })?;
         anyhow::ensure!(
             n == 0 || n == data.len(),
             "Rapport HID partiellement envoyé"
@@ -653,7 +1077,11 @@ impl Deck {
     fn command(&self, tail: &[u8]) -> Result<()> {
         let mut data = b"CRT\0\0".to_vec();
         data.extend(tail);
-        self.note(&format!("Commande {} : {}", String::from_utf8_lossy(&tail[..tail.len().min(3)]), report::hex(&data[..data.len().min(16)])));
+        self.note(&format!(
+            "Commande {} : {}",
+            String::from_utf8_lossy(&tail[..tail.len().min(3)]),
+            report::hex(&data[..data.len().min(16)])
+        ));
         self.report(&data)
     }
     fn apply(&self, c: &Config) -> Result<Vec<String>> {
@@ -669,7 +1097,9 @@ impl Deck {
         let (images, warnings): (Vec<_>, Vec<_>) = rendered.into_iter().unzip();
         if self.driver.model().family == Family::Elgato {
             self.set_brightness(c.brightness)?;
-            for (idx, jpeg) in images.iter().enumerate() { self.send_frame(idx, jpeg, FrameEnd::Stp)?; }
+            for (idx, jpeg) in images.iter().enumerate() {
+                self.send_frame(idx, jpeg, FrameEnd::Stp)?;
+            }
             return Ok(warnings.into_iter().flatten().collect());
         }
         self.wake()?;
@@ -681,9 +1111,16 @@ impl Deck {
             let data = canonical_image(jpeg, self.driver.model())?;
             self.command(&bat_tail(self.driver.model(), idx, data.len())?)?;
             let started = Instant::now();
-            for chunk in data.chunks(self.packet) { self.report(chunk)?; }
+            for chunk in data.chunks(self.packet) {
+                self.report(chunk)?;
+            }
             self.await_ack()?;
-            self.note(&format!("Image initialisation touche {} : {} octets en {} ms", idx + 1, jpeg.len(), started.elapsed().as_millis()));
+            self.note(&format!(
+                "Image initialisation touche {} : {} octets en {} ms",
+                idx + 1,
+                jpeg.len(),
+                started.elapsed().as_millis()
+            ));
         }
         self.command(b"ULEND")?;
         self.command(b"STP")?;
@@ -887,16 +1324,33 @@ mod tests {
         let d6 = &devices::MODELS[0];
         for idx in 0..15 {
             for len in [0, 1, 511, 512, 65535] {
-                let old = [b'B', b'A', b'T', 0, 0, (len >> 8) as u8, len as u8, display_index(idx) as u8 + 1];
+                let old = [
+                    b'B',
+                    b'A',
+                    b'T',
+                    0,
+                    0,
+                    (len >> 8) as u8,
+                    len as u8,
+                    display_index(idx) as u8 + 1,
+                ];
                 assert_eq!(bat_tail(d6, idx, len).unwrap(), old);
             }
         }
         assert!(bat_tail(d6, 15, 1).is_err());
         assert!(bat_tail(d6, 0, 65536).is_err());
         let other = devices::MODELS.iter().find(|m| m.id == "akp03").unwrap();
-        assert_eq!(bat_tail(other, 0, 0x1234).unwrap(), [b'B', b'A', b'T', 0, 0, 0x12, 0x34, 1]);
+        assert_eq!(
+            bat_tail(other, 0, 0x1234).unwrap(),
+            [b'B', b'A', b'T', 0, 0, 0x12, 0x34, 1]
+        );
         assert!(bat_tail(other, 6, 1).is_err());
-        let jpeg = crate::key_render::jpeg(&Config::default().keys()[0], 126, &crate::key_render::font().unwrap()).unwrap();
+        let jpeg = crate::key_render::jpeg(
+            &Config::default().keys()[0],
+            126,
+            &crate::key_render::font().unwrap(),
+        )
+        .unwrap();
         assert_eq!(canonical_image(&jpeg, d6).unwrap(), jpeg);
         let converted = canonical_image(&jpeg, other).unwrap();
         let img = image::load_from_memory(&converted).unwrap();
@@ -905,18 +1359,39 @@ mod tests {
     #[test]
     fn input_events_are_pure_and_d6_release_is_unchanged() {
         let d6 = &devices::MODELS[0];
-        let mut data = [0u8; 12]; data[..7].copy_from_slice(b"ACK\0\0OK"); data[9] = 1; data[10] = 1;
+        let mut data = [0u8; 12];
+        data[..7].copy_from_slice(b"ACK\0\0OK");
+        data[9] = 1;
+        data[10] = 1;
         let state = Cell::new(0);
-        assert_eq!(decode_model_input(d6, &data, &state), vec![InputEvent::Key(0, true)]);
+        assert_eq!(
+            decode_model_input(d6, &data, &state),
+            vec![InputEvent::Key(0, true)]
+        );
         data[10] = 0;
-        assert_eq!(decode_model_input(d6, &data, &state), vec![InputEvent::Key(0, false)]);
+        assert_eq!(
+            decode_model_input(d6, &data, &state),
+            vec![InputEvent::Key(0, false)]
+        );
         let other = devices::MODELS.iter().find(|m| m.id == "akp03").unwrap();
-        assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Key(0, true)]);
-        assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Key(0, false)]);
+        assert_eq!(
+            decode_model_input(other, &data, &state),
+            vec![InputEvent::Key(0, true)]
+        );
+        assert_eq!(
+            decode_model_input(other, &data, &state),
+            vec![InputEvent::Key(0, false)]
+        );
         data[..9].fill(0); // Some Mirabox models report raw zero-prefixed key transitions.
-        assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Key(0, true)]);
+        assert_eq!(
+            decode_model_input(other, &data, &state),
+            vec![InputEvent::Key(0, true)]
+        );
         data[9] = 0x91;
-        assert_eq!(decode_model_input(other, &data, &state), vec![InputEvent::Encoder(0, 1)]);
+        assert_eq!(
+            decode_model_input(other, &data, &state),
+            vec![InputEvent::Encoder(0, 1)]
+        );
         data[9] = 0xff;
         assert!(decode_model_input(other, &data, &state).is_empty());
     }
@@ -943,18 +1418,89 @@ mod animation_scheduler_tests {
         let mut due = [now; 15];
         let mut per_key = [now - Duration::from_secs(1); 15];
         let mut lengths = [0; 15];
-        lengths[0] = 3; lengths[1] = 2;
+        lengths[0] = 3;
+        lengths[1] = 2;
         let old = now - Duration::from_secs(1);
-        let choose = |time, apply, enabled, due: &[Instant;15], per: &[Instant;15], global, cursor|
-            next_animation_frame(time, apply, enabled, 12, &lengths, due, per, global, cursor);
+        let choose =
+            |time, apply, enabled, due: &[Instant; 15], per: &[Instant; 15], global, cursor| {
+                next_animation_frame(time, apply, enabled, 12, &lengths, due, per, global, cursor)
+            };
         assert_eq!(choose(now, false, true, &due, &per_key, old, 0), Some(0));
-        per_key[0] = now; due[0] = now + Duration::from_millis(84);
-        assert_eq!(choose(now + Duration::from_millis(33), false, true, &due, &per_key, now, 1), None);
-        assert_eq!(choose(now + Duration::from_millis(34), false, true, &due, &per_key, now, 1), Some(1));
-        assert_eq!(choose(now + Duration::from_millis(84), false, true, &due, &per_key, now, 0), Some(0));
-        assert_eq!(choose(now + Duration::from_millis(84), true, true, &due, &per_key, old, 0), None);
-        assert_eq!(choose(now + Duration::from_millis(84), false, false, &due, &per_key, old, 0), None);
-        due[1] = now; per_key[1] = now;
-        assert_eq!(choose(now + Duration::from_millis(84), false, true, &due, &per_key, old, 1), Some(1));
+        per_key[0] = now;
+        due[0] = now + Duration::from_millis(84);
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(33),
+                false,
+                true,
+                &due,
+                &per_key,
+                now,
+                1
+            ),
+            None
+        );
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(34),
+                false,
+                true,
+                &due,
+                &per_key,
+                now,
+                1
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(84),
+                false,
+                true,
+                &due,
+                &per_key,
+                now,
+                0
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(84),
+                true,
+                true,
+                &due,
+                &per_key,
+                old,
+                0
+            ),
+            None
+        );
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(84),
+                false,
+                false,
+                &due,
+                &per_key,
+                old,
+                0
+            ),
+            None
+        );
+        due[1] = now;
+        per_key[1] = now;
+        assert_eq!(
+            choose(
+                now + Duration::from_millis(84),
+                false,
+                true,
+                &due,
+                &per_key,
+                old,
+                1
+            ),
+            Some(1)
+        );
     }
 }

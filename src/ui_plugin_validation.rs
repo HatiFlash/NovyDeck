@@ -7,7 +7,9 @@ use serde_json::json;
 /// média. Elles ne doivent jamais être envoyées au système pendant une validation de plugin.
 pub(crate) fn without_local_actions(config: &mut crate::model::Config) {
     for profile in &mut config.profiles {
-        for keys in std::iter::once(&mut profile.keys).chain(profile.pages.iter_mut().map(|p| &mut p.keys)) {
+        for keys in
+            std::iter::once(&mut profile.keys).chain(profile.pages.iter_mut().map(|p| &mut p.keys))
+        {
             for key in keys.iter_mut() {
                 key.steps.clear();
                 key.long_steps.clear();
@@ -192,7 +194,11 @@ pub(crate) fn validate_witness(plugin: &Plugin, error: Option<&str>) -> Result<(
 /// Reprise après redémarrage : un plugin tiers persiste un compteur via setSettings, l'App le
 /// sauvegarde, puis un nouveau processus du plugin doit le retrouver et continuer à compter.
 #[cfg(test)]
-pub(crate) fn validate_restart_persistence(plugin: &Plugin, action: &str, setting: &str) -> Result<(), String> {
+pub(crate) fn validate_restart_persistence(
+    plugin: &Plugin,
+    action: &str,
+    setting: &str,
+) -> Result<(), String> {
     let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
     let path = dir.path().join("config.json");
     let ctx = egui::Context::default();
@@ -221,14 +227,31 @@ pub(crate) fn validate_restart_persistence(plugin: &Plugin, action: &str, settin
             if let Some(error) = app.plugin_errors.values().next() {
                 return Err(format!("{phase} : plugin en erreur : {error}"));
             }
-            let context = app.plugins.as_ref().unwrap().visible().values().find(|v| v.index == 0).map(|v| v.context.clone());
-            let title = context.as_ref().and_then(|c| app.plugin_faces.get(c)).map(|f| f.title.clone());
-            let saved = store::load(&app.path).ok().and_then(|c| c.keys()[0].plugin.as_ref().map(|b| b.settings[setting].as_i64()));
+            let context = app
+                .plugins
+                .as_ref()
+                .unwrap()
+                .visible()
+                .values()
+                .find(|v| v.index == 0)
+                .map(|v| v.context.clone());
+            let title = context
+                .as_ref()
+                .and_then(|c| app.plugin_faces.get(c))
+                .map(|f| f.title.clone());
+            let saved = store::load(&app.path).ok().and_then(|c| {
+                c.keys()[0]
+                    .plugin
+                    .as_ref()
+                    .map(|b| b.settings[setting].as_i64())
+            });
             if title.as_deref() == Some(value.to_string().as_str()) && saved == Some(Some(value)) {
                 return Ok(());
             }
             if Instant::now() >= deadline {
-                return Err(format!("{phase} : titre {title:?} et réglage sauvegardé {saved:?}, attendu {value}"));
+                return Err(format!(
+                    "{phase} : titre {title:?} et réglage sauvegardé {saved:?}, attendu {value}"
+                ));
             }
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -236,7 +259,8 @@ pub(crate) fn validate_restart_persistence(plugin: &Plugin, action: &str, settin
     let press = |app: &mut App| -> Result<(), String> {
         let now = Instant::now();
         tx.send(Event::Key(0, now)).map_err(|e| e.to_string())?;
-        tx.send(Event::KeyRelease(0, now)).map_err(|e| e.to_string())?;
+        tx.send(Event::KeyRelease(0, now))
+            .map_err(|e| e.to_string())?;
         app.events();
         Ok(())
     };
@@ -421,12 +445,18 @@ fn isolated_open_url_is_recorded_without_browser_launch() {
 #[test]
 fn validation_bench_never_runs_default_macros_or_media_keys() {
     let mut config = crate::model::Config::default();
-    config.profiles[0].pages.push(crate::model::Page::new("p".into(), "P".into(), false));
+    config.profiles[0]
+        .pages
+        .push(crate::model::Page::new("p".into(), "P".into(), false));
     config.profiles[0].pages[0].keys = config.profiles[0].keys.clone();
     assert!(config.profiles[0].keys.iter().any(|k| !k.steps.is_empty()));
     without_local_actions(&mut config);
-    for keys in std::iter::once(&config.profiles[0].keys).chain(config.profiles[0].pages.iter().map(|p| &p.keys)) {
-        assert!(keys.iter().all(|k| k.steps.is_empty() && k.long_steps.is_empty()));
+    for keys in std::iter::once(&config.profiles[0].keys)
+        .chain(config.profiles[0].pages.iter().map(|p| &p.keys))
+    {
+        assert!(keys
+            .iter()
+            .all(|k| k.steps.is_empty() && k.long_steps.is_empty()));
     }
 }
 
@@ -438,56 +468,114 @@ fn validation_bench_never_runs_default_macros_or_media_keys() {
 #[test]
 #[ignore = "requires audited local Elgato data-sources sample, VM interactive desktop and UI click"]
 fn real_property_inspector_setting_persists_in_virtual_app() {
-    let folder=std::path::PathBuf::from(std::env::var("DECKFORGE_TEST_PI_FOLDER").expect("local SDK sample path"));
-    let plugin=crate::plugins::parse(&folder,&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
-    let action=plugin.actions.iter().find(|a|a.inspector.is_some()).unwrap();
-    let dir=tempfile::tempdir().unwrap();let path=dir.path().join("config.json");
-    let mut app=App::init_with(&egui::Context::default(),Some(path.clone()),false);
+    let folder = std::path::PathBuf::from(
+        std::env::var("DECKFORGE_TEST_PI_FOLDER").expect("local SDK sample path"),
+    );
+    let plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    let action = plugin
+        .actions
+        .iter()
+        .find(|a| a.inspector.is_some())
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.json");
+    let mut app = App::init_with(&egui::Context::default(), Some(path.clone()), false);
     without_local_actions(&mut app.config);
-    let (tx,rx)=mpsc::channel();app.events=rx;
-    app.config.keys_mut()[0].plugin=Some(PluginBinding{plugin:plugin.uuid.clone(),action:action.uuid.clone(),settings:json!({}),state:0});
-    app.applied=app.config.clone();crate::store::save(&path,&app.config).unwrap();
-    app.gate.enabled=true;app.gate.connected=true;let revision=app.gate.request_apply();assert!(app.gate.applied(revision));
-    app.plugin_external_effects=Some(Vec::new());
-    app.plugins=Some(Manager::new(vec![plugin.clone()]));app.plugins.as_mut().unwrap().sync(&app.applied);
+    let (tx, rx) = mpsc::channel();
+    app.events = rx;
+    app.config.keys_mut()[0].plugin = Some(PluginBinding {
+        plugin: plugin.uuid.clone(),
+        action: action.uuid.clone(),
+        settings: json!({}),
+        state: 0,
+    });
+    app.applied = app.config.clone();
+    crate::store::save(&path, &app.config).unwrap();
+    app.gate.enabled = true;
+    app.gate.connected = true;
+    let revision = app.gate.request_apply();
+    assert!(app.gate.applied(revision));
+    app.plugin_external_effects = Some(Vec::new());
+    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(700));
     app.plugins.as_ref().unwrap().open_inspector(0);
-    let until=Instant::now()+Duration::from_secs(25);let mut saved=false;
-    while Instant::now()<until {
+    let until = Instant::now() + Duration::from_secs(25);
+    let mut saved = false;
+    while Instant::now() < until {
         app.plugin_events();
-        let live=app.config.keys()[0].plugin.as_ref().unwrap().settings["product"].as_str().unwrap_or("");
+        let live = app.config.keys()[0].plugin.as_ref().unwrap().settings["product"]
+            .as_str()
+            .unwrap_or("");
         if live.starts_with("https://www.elgato.com/uk/en/p/stream-deck") {
-            let restored=crate::store::load(&path).unwrap();
-            assert_eq!(restored.keys()[0].plugin.as_ref().unwrap().settings,app.config.keys()[0].plugin.as_ref().unwrap().settings);
-            saved=true;break;
+            let restored = crate::store::load(&path).unwrap();
+            assert_eq!(
+                restored.keys()[0].plugin.as_ref().unwrap().settings,
+                app.config.keys()[0].plugin.as_ref().unwrap().settings
+            );
+            saved = true;
+            break;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    assert!(saved,"WebView2 PI did not persist its selected product through App (errors {:?})",app.plugin_errors);
-    assert!(app.plugin_external_effects.as_ref().unwrap().is_empty(),"No external URL should open without pressing the action");
-    let product=app.config.keys()[0].plugin.as_ref().unwrap().settings["product"].as_str().unwrap().to_owned();
+    assert!(
+        saved,
+        "WebView2 PI did not persist its selected product through App (errors {:?})",
+        app.plugin_errors
+    );
+    assert!(
+        app.plugin_external_effects.as_ref().unwrap().is_empty(),
+        "No external URL should open without pressing the action"
+    );
+    let product = app.config.keys()[0].plugin.as_ref().unwrap().settings["product"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     // Simulated FIFINE D6 press: same Event::Key path as the HID reader. openUrl is recorded,
     // never launched, so no website is contacted.
-    let expect_url=|app:&mut App,tx:&Sender<Event>,phase:&str|{
-        let now=Instant::now();tx.send(Event::Key(0,now)).unwrap();tx.send(Event::KeyRelease(0,now)).unwrap();app.events();
-        let until=Instant::now()+Duration::from_secs(10);
-        while Instant::now()<until {
+    let expect_url = |app: &mut App, tx: &Sender<Event>, phase: &str| {
+        let now = Instant::now();
+        tx.send(Event::Key(0, now)).unwrap();
+        tx.send(Event::KeyRelease(0, now)).unwrap();
+        app.events();
+        let until = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < until {
             app.plugin_events();
-            if app.plugin_external_effects.as_ref().unwrap().iter().any(|e|e==&format!("openUrl: {product}")) {return;}
+            if app
+                .plugin_external_effects
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|e| e == &format!("openUrl: {product}"))
+            {
+                return;
+            }
             std::thread::sleep(Duration::from_millis(25));
         }
         panic!("{phase}: simulated key press did not reach the PI-chosen product (effects {:?}, errors {:?})",app.plugin_external_effects,app.plugin_errors);
     };
-    expect_url(&mut app,&tx,"same session");
+    expect_url(&mut app, &tx, "same session");
     drop(app);
     // Relaunch from disk: the PI setting must survive and drive the action again.
-    let mut app=App::init_with(&egui::Context::default(),Some(path.clone()),false);
+    let mut app = App::init_with(&egui::Context::default(), Some(path.clone()), false);
     without_local_actions(&mut app.config);
-    let (tx,rx)=mpsc::channel();app.events=rx;
-    app.gate.enabled=true;app.gate.connected=true;let revision=app.gate.request_apply();assert!(app.gate.applied(revision));
-    assert_eq!(app.config.keys()[0].plugin.as_ref().unwrap().settings["product"],json!(product));
-    app.plugin_external_effects=Some(Vec::new());
-    app.plugins=Some(Manager::new(vec![plugin.clone()]));app.plugins.as_mut().unwrap().sync(&app.applied);
+    let (tx, rx) = mpsc::channel();
+    app.events = rx;
+    app.gate.enabled = true;
+    app.gate.connected = true;
+    let revision = app.gate.request_apply();
+    assert!(app.gate.applied(revision));
+    assert_eq!(
+        app.config.keys()[0].plugin.as_ref().unwrap().settings["product"],
+        json!(product)
+    );
+    app.plugin_external_effects = Some(Vec::new());
+    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(700));
-    expect_url(&mut app,&tx,"after relaunch");
+    expect_url(&mut app, &tx, "after relaunch");
 }

@@ -85,11 +85,18 @@ impl Journal {
             return match last {
                 Some(path) => trf(
                     "{prefix} · Échec à l'étape {step}",
-                    &[("prefix", &prefix), ("step", &path.iter()
-                        .step_by(2)
-                        .map(|i| (i + 1).to_string())
-                        .collect::<Vec<_>>()
-                        .join("."))],
+                    &[
+                        ("prefix", &prefix),
+                        (
+                            "step",
+                            &path
+                                .iter()
+                                .step_by(2)
+                                .map(|i| (i + 1).to_string())
+                                .collect::<Vec<_>>()
+                                .join("."),
+                        ),
+                    ],
                 ),
                 None => trf("{prefix} · Échec", &[("prefix", &prefix)]),
             };
@@ -97,7 +104,11 @@ impl Journal {
         let count = self.lines.iter().filter(|line| line.path.is_some()).count();
         trf(
             "{prefix} · {count} étapes · OK · {seconds} s",
-            &[("prefix", &prefix), ("count", &count.to_string()), ("seconds", &format!("{:.1}", self.elapsed.as_secs_f64()))],
+            &[
+                ("prefix", &prefix),
+                ("count", &count.to_string()),
+                ("seconds", &format!("{:.1}", self.elapsed.as_secs_f64())),
+            ],
         )
     }
 }

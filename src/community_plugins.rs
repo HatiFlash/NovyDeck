@@ -1,15 +1,19 @@
 //! Registre communautaire : validation avant affichage et vérification cryptographique avant import.
 #![cfg(windows)]
-use std::{collections::HashSet, fs, path::Path};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use std::{collections::HashSet, fs, path::Path};
 
-pub const REGISTRY_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json";
-pub const CONTRIBUTE_URL: &str = "https://github.com/HatiFlash/novydeck-plugins/blob/main/CONTRIBUTING.md";
+pub const REGISTRY_URL: &str =
+    "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json";
+pub const CONTRIBUTE_URL: &str =
+    "https://github.com/HatiFlash/novydeck-plugins/blob/main/CONTRIBUTING.md";
 pub const SECURITY_URL: &str = "https://github.com/HatiFlash/novydeck-plugins#security-badges";
-pub const REGISTRY_SIG_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json.sig";
-const SCAN_URL: &str = "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/security/scan-results.json";
+pub const REGISTRY_SIG_URL: &str =
+    "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/registry.json.sig";
+const SCAN_URL: &str =
+    "https://raw.githubusercontent.com/HatiFlash/novydeck-plugins/main/security/scan-results.json";
 const ARCHIVE_LIMIT: usize = 50 * 1024 * 1024;
 const REGISTRY_LIMIT: usize = 1024 * 1024;
 
@@ -20,80 +24,185 @@ pub struct Entry {
     pub author: String,
     pub version: String,
     pub description: String,
-    #[serde(default)] pub description_fr: Option<String>,
+    #[serde(default)]
+    pub description_fr: Option<String>,
     pub homepage: String,
     pub download: String,
     pub sha256: String,
     pub license: String,
-    #[serde(default)] pub tested_decks: Vec<String>,
+    #[serde(default)]
+    pub tested_decks: Vec<String>,
     pub min_novydeck: String,
-    #[serde(default)] pub uuid: Option<String>,
-    #[serde(default)] pub category: Option<String>,
-    #[serde(default)] pub summary: Option<String>,
-    #[serde(default)] pub summary_fr: Option<String>,
-    #[serde(default)] pub icon: Option<String>,
-    #[serde(default)] pub screenshots: Vec<String>,
-    #[serde(default)] pub actions: Vec<Action>,
-    #[serde(default)] pub tags: Vec<String>,
-    #[serde(default)] pub requires: Option<String>,
-    #[serde(default)] pub tested_by_novydeck: Option<TestedBy>,
-    #[serde(skip)] pub compatible: bool,
+    #[serde(default)]
+    pub uuid: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub summary_fr: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub screenshots: Vec<String>,
+    #[serde(default)]
+    pub actions: Vec<Action>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub requires: Option<String>,
+    #[serde(default)]
+    pub tested_by_novydeck: Option<TestedBy>,
+    #[serde(skip)]
+    pub compatible: bool,
 }
 #[derive(Clone, Debug, Deserialize)]
-pub struct TestedBy { pub version: String, pub date: String }
+pub struct TestedBy {
+    pub version: String,
+    pub date: String,
+}
 #[derive(Clone, Debug, Deserialize)]
-pub struct Action { pub name: String, #[serde(default)] pub name_fr: Option<String> }
-#[derive(Deserialize)] struct Registry { schema: u32, plugins: Vec<Entry> }
+pub struct Action {
+    pub name: String,
+    #[serde(default)]
+    pub name_fr: Option<String>,
+}
+#[derive(Deserialize)]
+struct Registry {
+    schema: u32,
+    plugins: Vec<Entry>,
+}
 #[derive(Clone, Debug, Deserialize)]
-pub struct Scan { pub id: String, pub version: String, pub sha256: String, pub date: String, pub defender: String, pub verdict: String, #[serde(default)] pub native_unsigned: bool }
-#[derive(Deserialize)] struct ScanResults { plugins: Vec<Scan> }
+pub struct Scan {
+    pub id: String,
+    pub version: String,
+    pub sha256: String,
+    pub date: String,
+    pub defender: String,
+    pub verdict: String,
+    #[serde(default)]
+    pub native_unsigned: bool,
+}
+#[derive(Deserialize)]
+struct ScanResults {
+    plugins: Vec<Scan>,
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Badges { pub official: bool, pub scanned: bool, pub tested: bool, pub warning: bool, pub failed: bool }
+pub struct Badges {
+    pub official: bool,
+    pub scanned: bool,
+    pub tested: bool,
+    pub warning: bool,
+    pub failed: bool,
+}
 /// Only metadata matching the exact archive can provide a scan badge.
 pub fn badges(entry: &Entry, scans: &[Scan]) -> Badges {
-    let official = entry.id.starts_with("com.novydeck.") && entry.author == "NovyDeck" &&
-        url::Url::parse(&entry.download).ok().is_some_and(|url| url.scheme() == "https" && url.host_str() == Some("github.com") && url.path().starts_with("/HatiFlash/novydeck-plugins/releases/"));
-    let matching: Vec<_> = scans.iter().filter(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256).collect();
-    let scanned = matching.iter().any(|s| s.verdict == "passed" && s.defender == "clean");
+    let official = entry.id.starts_with("com.novydeck.")
+        && entry.author == "NovyDeck"
+        && url::Url::parse(&entry.download).ok().is_some_and(|url| {
+            url.scheme() == "https"
+                && url.host_str() == Some("github.com")
+                && url
+                    .path()
+                    .starts_with("/HatiFlash/novydeck-plugins/releases/")
+        });
+    let matching: Vec<_> = scans
+        .iter()
+        .filter(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256)
+        .collect();
+    let scanned = matching
+        .iter()
+        .any(|s| s.verdict == "passed" && s.defender == "clean");
     let failed = matching.iter().any(|s| s.verdict == "failed");
     let warning = !scanned && (failed || matching.iter().any(|s| s.verdict == "review"));
-    Badges { official, scanned, tested: entry.tested_by_novydeck.as_ref().is_some_and(|t| t.version == entry.version), warning, failed: warning && failed }
+    Badges {
+        official,
+        scanned,
+        tested: entry
+            .tested_by_novydeck
+            .as_ref()
+            .is_some_and(|t| t.version == entry.version),
+        warning,
+        failed: warning && failed,
+    }
 }
 /// S-08 : le badge ne promet que ce que le scan établit (Defender n'a rien détecté), pas une absence de danger.
-pub fn scan_badge() -> &'static str { crate::i18n::tr("Antivirus : rien détecté") }
-pub fn native_warning() -> &'static str { crate::i18n::tr("Exécutable natif non signé : il s'exécute avec vos droits") }
+pub fn scan_badge() -> &'static str {
+    crate::i18n::tr("Antivirus : rien détecté")
+}
+pub fn native_warning() -> &'static str {
+    crate::i18n::tr("Exécutable natif non signé : il s'exécute avec vos droits")
+}
 /// Vrai si l'archive exacte est signalée comme exécutable natif non signé par le résultat de scan.
 pub fn native_unsigned(entry: &Entry, scans: &[Scan]) -> bool {
-    scans.iter().any(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256 && s.native_unsigned)
+    scans.iter().any(|s| {
+        s.id == entry.id
+            && s.version == entry.version
+            && s.sha256 == entry.sha256
+            && s.native_unsigned
+    })
 }
 pub fn scan_date<'a>(entry: &Entry, scans: &'a [Scan]) -> Option<&'a str> {
-    scans.iter().find(|s| s.id == entry.id && s.version == entry.version && s.sha256 == entry.sha256 &&
-        ((s.verdict == "passed" && s.defender == "clean") || s.verdict == "review" || s.verdict == "failed")).map(|s| s.date.as_str())
+    scans
+        .iter()
+        .find(|s| {
+            s.id == entry.id
+                && s.version == entry.version
+                && s.sha256 == entry.sha256
+                && ((s.verdict == "passed" && s.defender == "clean")
+                    || s.verdict == "review"
+                    || s.verdict == "failed")
+        })
+        .map(|s| s.date.as_str())
 }
 pub fn parse_scans(bytes: &[u8]) -> Result<Vec<Scan>> {
-    anyhow::ensure!(bytes.len() <= REGISTRY_LIMIT, "Résultats d'analyse trop volumineux");
-    let results: ScanResults = serde_json::from_slice(bytes).context("Résultats d'analyse invalides")?;
-    anyhow::ensure!(results.plugins.len() <= 1000, "Résultats d'analyse trop volumineux");
+    anyhow::ensure!(
+        bytes.len() <= REGISTRY_LIMIT,
+        "Résultats d'analyse trop volumineux"
+    );
+    let results: ScanResults =
+        serde_json::from_slice(bytes).context("Résultats d'analyse invalides")?;
+    anyhow::ensure!(
+        results.plugins.len() <= 1000,
+        "Résultats d'analyse trop volumineux"
+    );
     Ok(results.plugins)
 }
 /// Invoke only from the consented store worker thread; scan failures leave the registry usable.
 pub fn fetch_with_scans() -> Result<(Vec<Entry>, Vec<Scan>)> {
     let entries = fetch()?;
-    let scans = crate::https_get::get(SCAN_URL, REGISTRY_LIMIT).ok().and_then(|bytes| parse_scans(&bytes).ok()).unwrap_or_default();
+    let scans = crate::https_get::get(SCAN_URL, REGISTRY_LIMIT)
+        .ok()
+        .and_then(|bytes| parse_scans(&bytes).ok())
+        .unwrap_or_default();
     Ok((entries, scans))
 }
 
 fn https_url(raw: &str) -> Result<url::Url> {
     let parsed = url::Url::parse(raw).context("URL de plugin invalide")?;
-    anyhow::ensure!(parsed.scheme() == "https" && parsed.host_str().is_some() && parsed.username().is_empty() && parsed.password().is_none(), "Adresse HTTPS sans identifiants requise");
+    anyhow::ensure!(
+        parsed.scheme() == "https"
+            && parsed.host_str().is_some()
+            && parsed.username().is_empty()
+            && parsed.password().is_none(),
+        "Adresse HTTPS sans identifiants requise"
+    );
     Ok(parsed)
 }
 fn numeric_version(s: &str) -> Result<Vec<u64>> {
-    anyhow::ensure!(!s.is_empty() && s.len() <= 64 && s.split('.').count() <= 8, "Version invalide");
-    s.split('.').map(|part| {
-        anyhow::ensure!(!part.is_empty() && part.bytes().all(|c| c.is_ascii_digit()), "Version invalide");
-        part.parse().context("Version invalide")
-    }).collect()
+    anyhow::ensure!(
+        !s.is_empty() && s.len() <= 64 && s.split('.').count() <= 8,
+        "Version invalide"
+    );
+    s.split('.')
+        .map(|part| {
+            anyhow::ensure!(
+                !part.is_empty() && part.bytes().all(|c| c.is_ascii_digit()),
+                "Version invalide"
+            );
+            part.parse().context("Version invalide")
+        })
+        .collect()
 }
 fn compatible(required: &str, current: &str) -> Result<bool> {
     let mut required = numeric_version(required)?;
@@ -104,40 +213,126 @@ fn compatible(required: &str, current: &str) -> Result<bool> {
     Ok(current >= required)
 }
 pub fn parse(bytes: &[u8]) -> Result<Vec<Entry>> {
-    anyhow::ensure!(bytes.len() <= REGISTRY_LIMIT, "Catalogue communautaire trop volumineux");
-    let registry: Registry = serde_json::from_slice(bytes).context("Catalogue communautaire invalide")?;
-    anyhow::ensure!(registry.schema == 1 && registry.plugins.len() <= 1000, "Format du catalogue communautaire non pris en charge");
+    anyhow::ensure!(
+        bytes.len() <= REGISTRY_LIMIT,
+        "Catalogue communautaire trop volumineux"
+    );
+    let registry: Registry =
+        serde_json::from_slice(bytes).context("Catalogue communautaire invalide")?;
+    anyhow::ensure!(
+        registry.schema == 1 && registry.plugins.len() <= 1000,
+        "Format du catalogue communautaire non pris en charge"
+    );
     let mut seen = HashSet::new();
     let mut entries = registry.plugins;
     for entry in &mut entries {
-        anyhow::ensure!(!entry.id.is_empty() && entry.id.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'-')) && seen.insert(entry.id.clone()), "Identifiant de plugin invalide ou en double");
-        anyhow::ensure!(!entry.name.trim().is_empty() && !entry.author.trim().is_empty() && !entry.description.trim().is_empty() && !entry.license.trim().is_empty(), "Fiche communautaire incomplète");
+        anyhow::ensure!(
+            !entry.id.is_empty()
+                && entry.id.bytes().all(|c| c.is_ascii_lowercase()
+                    || c.is_ascii_digit()
+                    || matches!(c, b'.' | b'-'))
+                && seen.insert(entry.id.clone()),
+            "Identifiant de plugin invalide ou en double"
+        );
+        anyhow::ensure!(
+            !entry.name.trim().is_empty()
+                && !entry.author.trim().is_empty()
+                && !entry.description.trim().is_empty()
+                && !entry.license.trim().is_empty(),
+            "Fiche communautaire incomplète"
+        );
         numeric_version(&entry.version)?;
         https_url(&entry.homepage)?;
         let download = https_url(&entry.download)?;
-        anyhow::ensure!(download.path().ends_with(".streamDeckPlugin") || download.path().ends_with(".zip"), "Archive de plugin non prise en charge");
-        anyhow::ensure!(entry.sha256.len() == 64 && entry.sha256.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)), "Empreinte SHA-256 invalide");
+        anyhow::ensure!(
+            download.path().ends_with(".streamDeckPlugin") || download.path().ends_with(".zip"),
+            "Archive de plugin non prise en charge"
+        );
+        anyhow::ensure!(
+            entry.sha256.len() == 64
+                && entry
+                    .sha256
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)),
+            "Empreinte SHA-256 invalide"
+        );
         entry.compatible = compatible(&entry.min_novydeck, env!("CARGO_PKG_VERSION"))?;
-        if let Some(uuid) = &entry.uuid { anyhow::ensure!(!uuid.is_empty() && uuid.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c,b'.'|b'-')), "UUID invalide"); }
-        if let Some(category) = &entry.category { anyhow::ensure!(["system","audio","streaming","productivity","smart-home","communication","gaming","utilities"].contains(&category.as_str()), "Catégorie inconnue"); }
-        for text in [&entry.summary, &entry.summary_fr] { if let Some(text) = text { anyhow::ensure!(text.chars().count() <= 140, "Résumé trop long"); } }
-        if let Some(requires) = &entry.requires { anyhow::ensure!(requires.chars().count() <= 200, "Prérequis trop long"); }
-        if let Some(icon) = &entry.icon { https_url(icon)?; }
-        anyhow::ensure!(entry.screenshots.len() <= 6 && entry.tags.len() <= 8 && entry.actions.len() <= 100, "Fiche communautaire trop longue");
-        for screenshot in &entry.screenshots { https_url(screenshot)?; }
-        anyhow::ensure!(entry.tags.iter().all(|tag| !tag.trim().is_empty() && tag.chars().count() <= 40), "Tag invalide");
-        anyhow::ensure!(entry.actions.iter().all(|action| !action.name.trim().is_empty() && action.name.len() <= 120 && action.name_fr.as_ref().is_none_or(|s| s.len() <= 120)), "Action invalide");
+        if let Some(uuid) = &entry.uuid {
+            anyhow::ensure!(
+                !uuid.is_empty()
+                    && uuid.bytes().all(|c| c.is_ascii_lowercase()
+                        || c.is_ascii_digit()
+                        || matches!(c, b'.' | b'-')),
+                "UUID invalide"
+            );
+        }
+        if let Some(category) = &entry.category {
+            anyhow::ensure!(
+                [
+                    "system",
+                    "audio",
+                    "streaming",
+                    "productivity",
+                    "smart-home",
+                    "communication",
+                    "gaming",
+                    "utilities"
+                ]
+                .contains(&category.as_str()),
+                "Catégorie inconnue"
+            );
+        }
+        for text in [&entry.summary, &entry.summary_fr] {
+            if let Some(text) = text {
+                anyhow::ensure!(text.chars().count() <= 140, "Résumé trop long");
+            }
+        }
+        if let Some(requires) = &entry.requires {
+            anyhow::ensure!(requires.chars().count() <= 200, "Prérequis trop long");
+        }
+        if let Some(icon) = &entry.icon {
+            https_url(icon)?;
+        }
+        anyhow::ensure!(
+            entry.screenshots.len() <= 6 && entry.tags.len() <= 8 && entry.actions.len() <= 100,
+            "Fiche communautaire trop longue"
+        );
+        for screenshot in &entry.screenshots {
+            https_url(screenshot)?;
+        }
+        anyhow::ensure!(
+            entry
+                .tags
+                .iter()
+                .all(|tag| !tag.trim().is_empty() && tag.chars().count() <= 40),
+            "Tag invalide"
+        );
+        anyhow::ensure!(
+            entry
+                .actions
+                .iter()
+                .all(|action| !action.name.trim().is_empty()
+                    && action.name.len() <= 120
+                    && action.name_fr.as_ref().is_none_or(|s| s.len() <= 120)),
+            "Action invalide"
+        );
     }
     Ok(entries)
 }
 /// S-02 : le catalogue n'est lu qu'après vérification de la signature Ed25519 sur ses octets exacts.
 pub fn parse_signed(bytes: &[u8], sig_text: Option<&str>) -> Result<Vec<Entry>> {
-    sig_text.and_then(|sig| crate::signing::verify_registry(bytes, sig).ok()).context(crate::i18n::tr("Catalogue non signé ou modifié : magasin indisponible"))?;
+    sig_text
+        .and_then(|sig| crate::signing::verify_registry(bytes, sig).ok())
+        .context(crate::i18n::tr(
+            "Catalogue non signé ou modifié : magasin indisponible",
+        ))?;
     parse(bytes)
 }
 pub fn fetch() -> Result<Vec<Entry>> {
     let bytes = crate::https_get::get(REGISTRY_URL, REGISTRY_LIMIT)?;
-    let sig = crate::https_get::get(REGISTRY_SIG_URL, crate::signing::SIG_LIMIT).ok().and_then(|b| String::from_utf8(b).ok());
+    let sig = crate::https_get::get(REGISTRY_SIG_URL, crate::signing::SIG_LIMIT)
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok());
     parse_signed(&bytes, sig.as_deref())
 }
 
@@ -147,86 +342,169 @@ pub fn image(url: &str, icon: bool) -> Result<eframe::egui::ColorImage> {
     let limit = if icon { 256 * 1024 } else { 2 * 1024 * 1024 };
     let bytes = crate::https_get::get(url, limit)?;
     let format = image::guess_format(&bytes)?;
-    anyhow::ensure!(matches!(format, image::ImageFormat::Png | image::ImageFormat::Jpeg) && (!icon || format == image::ImageFormat::Png), "Format d'image invalide");
+    anyhow::ensure!(
+        matches!(format, image::ImageFormat::Png | image::ImageFormat::Jpeg)
+            && (!icon || format == image::ImageFormat::Png),
+        "Format d'image invalide"
+    );
     let reader = image::ImageReader::with_format(std::io::Cursor::new(&bytes), format);
-    let (w,h) = reader.into_dimensions()?;
-    anyhow::ensure!(w > 0 && h > 0 && w <= 4096 && h <= 4096 && (!icon || w == h), "Dimensions d'image invalides");
+    let (w, h) = reader.into_dimensions()?;
+    anyhow::ensure!(
+        w > 0 && h > 0 && w <= 4096 && h <= 4096 && (!icon || w == h),
+        "Dimensions d'image invalides"
+    );
     let decoded = image::load_from_memory_with_format(&bytes, format)?.to_rgba8();
-    Ok(eframe::egui::ColorImage::from_rgba_unmultiplied([w as usize,h as usize], decoded.as_raw()))
+    Ok(eframe::egui::ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        decoded.as_raw(),
+    ))
 }
 
 /// Appel explicite après consentement UI, sur thread de travail uniquement. Aucune mutation de l'installation.
 /// Le répertoire temporaire propriétaire doit rester vivant jusqu'au remplacement.
-pub fn stage_verified_update(entry:&Entry, root:&Path) -> Result<(tempfile::TempDir,std::path::PathBuf)> {
-    anyhow::ensure!(entry.compatible,"Version de NovyDeck insuffisante");
-    let url=https_url(&entry.download)?;
-    anyhow::ensure!(url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"),"Archive non prise en charge");
-    let bytes=crate::https_get::get(&entry.download,ARCHIVE_LIMIT)?;
-    stage_verified_bytes(&bytes,&entry.sha256,entry.uuid.as_deref().context("UUID du catalogue absent")?,&entry.version,root)
+pub fn stage_verified_update(
+    entry: &Entry,
+    root: &Path,
+) -> Result<(tempfile::TempDir, std::path::PathBuf)> {
+    anyhow::ensure!(entry.compatible, "Version de NovyDeck insuffisante");
+    let url = https_url(&entry.download)?;
+    anyhow::ensure!(
+        url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"),
+        "Archive non prise en charge"
+    );
+    let bytes = crate::https_get::get(&entry.download, ARCHIVE_LIMIT)?;
+    stage_verified_bytes(
+        &bytes,
+        &entry.sha256,
+        entry.uuid.as_deref().context("UUID du catalogue absent")?,
+        &entry.version,
+        root,
+    )
 }
-fn stage_verified_bytes(bytes:&[u8],expected_hash:&str,id:&str,version:&str,root:&Path)->Result<(tempfile::TempDir,std::path::PathBuf)> {
-    anyhow::ensure!(format!("{:x}",Sha256::digest(bytes))==expected_hash,"Empreinte SHA-256 différente");
-    let staged=tempfile::Builder::new().prefix(".verified-").tempdir_in(root)?;
-    let archive=staged.path().join("archive.zip");fs::write(&archive,bytes)?;
-    let extracted=staged.path().join("extracted");
-    anyhow::ensure!(crate::plugin_import::import_archive(&archive,&extracted)?,"Archive non importée");
-    let mut entries=fs::read_dir(&extracted)?;
-    let folder=entries.next().context("Archive vide")??.path();
-    anyhow::ensure!(entries.next().is_none(),"Plusieurs plugins dans l'archive");
-    let plugin=crate::plugin_import::validated_folder(&folder)?;
-    anyhow::ensure!(plugin.uuid==id,"UUID du catalogue différent");
-    anyhow::ensure!(plugin.version==version,"Version du manifeste différente du catalogue");
-    Ok((staged,folder))
+fn stage_verified_bytes(
+    bytes: &[u8],
+    expected_hash: &str,
+    id: &str,
+    version: &str,
+    root: &Path,
+) -> Result<(tempfile::TempDir, std::path::PathBuf)> {
+    anyhow::ensure!(
+        format!("{:x}", Sha256::digest(bytes)) == expected_hash,
+        "Empreinte SHA-256 différente"
+    );
+    let staged = tempfile::Builder::new()
+        .prefix(".verified-")
+        .tempdir_in(root)?;
+    let archive = staged.path().join("archive.zip");
+    fs::write(&archive, bytes)?;
+    let extracted = staged.path().join("extracted");
+    anyhow::ensure!(
+        crate::plugin_import::import_archive(&archive, &extracted)?,
+        "Archive non importée"
+    );
+    let mut entries = fs::read_dir(&extracted)?;
+    let folder = entries.next().context("Archive vide")??.path();
+    anyhow::ensure!(entries.next().is_none(), "Plusieurs plugins dans l'archive");
+    let plugin = crate::plugin_import::validated_folder(&folder)?;
+    anyhow::ensure!(plugin.uuid == id, "UUID du catalogue différent");
+    anyhow::ensure!(
+        plugin.version == version,
+        "Version du manifeste différente du catalogue"
+    );
+    Ok((staged, folder))
 }
 /// Le fichier temporaire vérifié est passé à l'importeur local existant, puis effacé même en cas d'erreur.
 pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
-    anyhow::ensure!(entry.compatible, "Version de NovyDeck insuffisante pour ce plugin");
+    anyhow::ensure!(
+        entry.compatible,
+        "Version de NovyDeck insuffisante pour ce plugin"
+    );
     let url = https_url(&entry.download)?;
-    anyhow::ensure!(url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"), "Archive de plugin non prise en charge");
+    anyhow::ensure!(
+        url.path().ends_with(".streamDeckPlugin") || url.path().ends_with(".zip"),
+        "Archive de plugin non prise en charge"
+    );
     let bytes = crate::https_get::get(&entry.download, ARCHIVE_LIMIT)?;
     let actual = format!("{:x}", Sha256::digest(&bytes));
-    anyhow::ensure!(actual == entry.sha256, "Empreinte SHA-256 différente : rien n'a été installé");
+    anyhow::ensure!(
+        actual == entry.sha256,
+        "Empreinte SHA-256 différente : rien n'a été installé"
+    );
     let temp = tempfile::tempdir().context("Création du dossier temporaire impossible")?;
-    let name = if url.path().ends_with(".zip") { "plugin.zip" } else { "plugin.streamDeckPlugin" };
+    let name = if url.path().ends_with(".zip") {
+        "plugin.zip"
+    } else {
+        "plugin.streamDeckPlugin"
+    };
     let archive = temp.path().join(name);
     fs::write(&archive, bytes).context("Écriture temporaire impossible")?;
     crate::plugin_import::import_archive(&archive, dest)
 }
 
-#[cfg(test)] mod tests {
+#[cfg(test)]
+mod tests {
     use super::*;
-    #[test] fn verified_update_staging_rejects_hash_identity_and_version_without_installation() {
+    #[test]
+    fn verified_update_staging_rejects_hash_identity_and_version_without_installation() {
         use std::io::Write;
-        let dir=tempfile::tempdir().unwrap();let mut file=std::io::Cursor::new(Vec::new());
-        {let mut zip=zip::ZipWriter::new(&mut file);
-            for (name,bytes) in [("fixture.sdPlugin/manifest.json",br#"{"UUID":"test.fixture","Version":"2.0","CodePath":"main.js"}"#.as_slice()),("fixture.sdPlugin/main.js",b"fixture".as_slice())] {
-                zip.start_file(name,zip::write::SimpleFileOptions::default()).unwrap();zip.write_all(bytes).unwrap();
-            }zip.finish().unwrap();}
-        let bytes=file.into_inner();let hash=format!("{:x}",Sha256::digest(&bytes));
-        assert!(stage_verified_bytes(&bytes,&"0".repeat(64),"test.fixture","2.0",dir.path()).is_err());
-        assert!(stage_verified_bytes(&bytes,&hash,"test.other","2.0",dir.path()).is_err());
-        assert!(stage_verified_bytes(&bytes,&hash,"test.fixture","1.0",dir.path()).is_err());
-        let (_owner,folder)=stage_verified_bytes(&bytes,&hash,"test.fixture","2.0",dir.path()).unwrap();
-        assert!(folder.join("main.js").is_file());assert!(!dir.path().join("fixture.sdPlugin").exists());
+        let dir = tempfile::tempdir().unwrap();
+        let mut file = std::io::Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut file);
+            for (name, bytes) in [
+                (
+                    "fixture.sdPlugin/manifest.json",
+                    br#"{"UUID":"test.fixture","Version":"2.0","CodePath":"main.js"}"#.as_slice(),
+                ),
+                ("fixture.sdPlugin/main.js", b"fixture".as_slice()),
+            ] {
+                zip.start_file(name, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            zip.finish().unwrap();
+        }
+        let bytes = file.into_inner();
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        assert!(
+            stage_verified_bytes(&bytes, &"0".repeat(64), "test.fixture", "2.0", dir.path())
+                .is_err()
+        );
+        assert!(stage_verified_bytes(&bytes, &hash, "test.other", "2.0", dir.path()).is_err());
+        assert!(stage_verified_bytes(&bytes, &hash, "test.fixture", "1.0", dir.path()).is_err());
+        let (_owner, folder) =
+            stage_verified_bytes(&bytes, &hash, "test.fixture", "2.0", dir.path()).unwrap();
+        assert!(folder.join("main.js").is_file());
+        assert!(!dir.path().join("fixture.sdPlugin").exists());
     }
     fn entry() -> serde_json::Value {
         serde_json::json!({"id":"com.author.myplugin","name":"My Plugin","author":"Author","version":"1.2.0","description":"English", "description_fr":"Français", "homepage":"https://github.com/author/plugin", "download":"https://github.com/author/plugin/releases/download/v1/plugin.streamDeckPlugin", "sha256":"a".repeat(64),"license":"MIT","tested_decks":["FIFINE D6"],"min_novydeck":"0.8.12"})
     }
-    fn registry(value: serde_json::Value) -> Vec<u8> { serde_json::to_vec(&serde_json::json!({"schema":1,"plugins":[value]})).unwrap() }
+    fn registry(value: serde_json::Value) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({"schema":1,"plugins":[value]})).unwrap()
+    }
     /// Contrôle réseau réel du catalogue publié : `cargo test live_registry -- --ignored`.
-    #[test] #[ignore] fn live_registry_images_and_installs() {
+    #[test]
+    #[ignore]
+    fn live_registry_images_and_installs() {
         let entries = fetch().expect("catalogue publié lisible");
         assert!(!entries.is_empty());
         for entry in &entries {
             assert!(entry.compatible, "{} incompatible", entry.id);
-            if let Some(icon) = &entry.icon { image(icon, true).unwrap_or_else(|e| panic!("icône {}: {e}", entry.id)); }
-            for shot in &entry.screenshots { image(shot, false).unwrap_or_else(|e| panic!("capture {}: {e}", entry.id)); }
+            if let Some(icon) = &entry.icon {
+                image(icon, true).unwrap_or_else(|e| panic!("icône {}: {e}", entry.id));
+            }
+            for shot in &entry.screenshots {
+                image(shot, false).unwrap_or_else(|e| panic!("capture {}: {e}", entry.id));
+            }
             let dest = tempfile::tempdir().unwrap();
-            let installed = install(entry, dest.path()).unwrap_or_else(|e| panic!("installation {}: {e:#}", entry.id));
+            let installed = install(entry, dest.path())
+                .unwrap_or_else(|e| panic!("installation {}: {e:#}", entry.id));
             println!("LIVE {} {} installed={installed}", entry.id, entry.version);
         }
     }
-    #[test] fn registry_valid_and_version_compatibility() {
+    #[test]
+    fn registry_valid_and_version_compatibility() {
         let mut value = entry();
         value["min_novydeck"] = "0.8.11".into();
         assert!(parse(&registry(value.clone())).unwrap()[0].compatible);
@@ -234,65 +512,122 @@ pub fn install(entry: &Entry, dest: &Path) -> Result<bool> {
         assert!(!parse(&registry(value)).unwrap()[0].compatible);
         assert!(parse(br#"{"schema":1,"plugins":[]}"#).unwrap().is_empty());
     }
-    #[test] fn registry_rejects_invalid_id_duplicate_http_and_sha() {
-        let mut value = entry(); value["id"] = "BAD/id".into(); assert!(parse(&registry(value)).is_err());
+    #[test]
+    fn registry_rejects_invalid_id_duplicate_http_and_sha() {
+        let mut value = entry();
+        value["id"] = "BAD/id".into();
+        assert!(parse(&registry(value)).is_err());
         let value = entry();
-        let duplicate = serde_json::to_vec(&serde_json::json!({"schema":1,"plugins":[value.clone(),value.clone()]})).unwrap();
+        let duplicate = serde_json::to_vec(
+            &serde_json::json!({"schema":1,"plugins":[value.clone(),value.clone()]}),
+        )
+        .unwrap();
         assert!(parse(&duplicate).is_err());
-        let mut value = entry(); value["download"] = "http://example.org/x.zip".into(); assert!(parse(&registry(value)).is_err());
-        let mut value = entry(); value["homepage"] = "http://example.org/".into(); assert!(parse(&registry(value)).is_err());
-        let mut value = entry(); value["sha256"] = "A".repeat(64).into(); assert!(parse(&registry(value)).is_err());
+        let mut value = entry();
+        value["download"] = "http://example.org/x.zip".into();
+        assert!(parse(&registry(value)).is_err());
+        let mut value = entry();
+        value["homepage"] = "http://example.org/".into();
+        assert!(parse(&registry(value)).is_err());
+        let mut value = entry();
+        value["sha256"] = "A".repeat(64).into();
+        assert!(parse(&registry(value)).is_err());
     }
-    #[test] fn scan_badge_wording_native_flag_and_english_keys() {
+    #[test]
+    fn scan_badge_wording_native_flag_and_english_keys() {
         assert_eq!(scan_badge(), "Antivirus : rien détecté");
         crate::i18n::set_language("en");
         assert_eq!(scan_badge(), "Antivirus: nothing detected");
-        assert_eq!(native_warning(), "Unsigned native executable: it runs with your user rights");
+        assert_eq!(
+            native_warning(),
+            "Unsigned native executable: it runs with your user rights"
+        );
         crate::i18n::set_language("fr");
-        assert_eq!(native_warning(), "Exécutable natif non signé : il s'exécute avec vos droits");
+        assert_eq!(
+            native_warning(),
+            "Exécutable natif non signé : il s'exécute avec vos droits"
+        );
         let plugin = parse(&registry(entry())).unwrap().remove(0);
-        let mut scan = Scan { id:plugin.id.clone(),version:plugin.version.clone(),sha256:plugin.sha256.clone(),date:"2026-10-23".into(),defender:"clean".into(),verdict:"passed".into(), native_unsigned:true };
-        assert!(native_unsigned(&plugin,&[scan.clone()]));
+        let mut scan = Scan {
+            id: plugin.id.clone(),
+            version: plugin.version.clone(),
+            sha256: plugin.sha256.clone(),
+            date: "2026-10-23".into(),
+            defender: "clean".into(),
+            verdict: "passed".into(),
+            native_unsigned: true,
+        };
+        assert!(native_unsigned(&plugin, &[scan.clone()]));
         scan.sha256 = "c".repeat(64);
-        assert!(!native_unsigned(&plugin,&[scan]));
+        assert!(!native_unsigned(&plugin, &[scan]));
     }
-    #[test] fn badges_require_exact_identity_archive_and_version() {
+    #[test]
+    fn badges_require_exact_identity_archive_and_version() {
         let mut value = entry();
         value["id"] = "com.novydeck.clock".into();
         value["author"] = "NovyDeck".into();
-        value["download"] = "https://github.com/HatiFlash/novydeck-plugins/releases/download/v1/clock.zip".into();
+        value["download"] =
+            "https://github.com/HatiFlash/novydeck-plugins/releases/download/v1/clock.zip".into();
         value["tested_by_novydeck"] = serde_json::json!({"version":"1.2.0","date":"2026-10-23"});
         let mut plugin = parse(&registry(value)).unwrap().remove(0);
-        let mut scan = Scan { id:plugin.id.clone(),version:plugin.version.clone(),sha256:plugin.sha256.clone(),date:"2026-10-23".into(),defender:"clean".into(),verdict:"passed".into(), native_unsigned:false };
-        assert_eq!(badges(&plugin,&[scan.clone()]), Badges { official:true,scanned:true,tested:true,warning:false,failed:false });
+        let mut scan = Scan {
+            id: plugin.id.clone(),
+            version: plugin.version.clone(),
+            sha256: plugin.sha256.clone(),
+            date: "2026-10-23".into(),
+            defender: "clean".into(),
+            verdict: "passed".into(),
+            native_unsigned: false,
+        };
+        assert_eq!(
+            badges(&plugin, &[scan.clone()]),
+            Badges {
+                official: true,
+                scanned: true,
+                tested: true,
+                warning: false,
+                failed: false
+            }
+        );
         scan.sha256 = "b".repeat(64);
-        assert!(!badges(&plugin,&[scan.clone()]).scanned);
+        assert!(!badges(&plugin, &[scan.clone()]).scanned);
         scan.sha256 = plugin.sha256.clone();
         scan.version = "1.2.1".into();
-        assert!(!badges(&plugin,&[scan.clone()]).scanned);
+        assert!(!badges(&plugin, &[scan.clone()]).scanned);
         plugin.tested_by_novydeck.as_mut().unwrap().version = "1.2.1".into();
-        assert!(!badges(&plugin,&[]).tested);
-        scan.version = plugin.version.clone(); scan.verdict = "failed".into();
-        assert_eq!((badges(&plugin,&[scan.clone()]).warning,badges(&plugin,&[scan.clone()]).failed), (true,true));
+        assert!(!badges(&plugin, &[]).tested);
+        scan.version = plugin.version.clone();
+        scan.verdict = "failed".into();
+        assert_eq!(
+            (
+                badges(&plugin, &[scan.clone()]).warning,
+                badges(&plugin, &[scan.clone()]).failed
+            ),
+            (true, true)
+        );
         scan.verdict = "review".into();
-        assert!(badges(&plugin,&[scan.clone()]).warning);
-        scan.defender = "unknown".into(); scan.verdict = "passed".into();
-        assert!(!badges(&plugin,&[scan]).scanned);
+        assert!(badges(&plugin, &[scan.clone()]).warning);
+        scan.defender = "unknown".into();
+        scan.verdict = "passed".into();
+        assert!(!badges(&plugin, &[scan]).scanned);
         plugin.author = "Impostor".into();
-        assert!(!badges(&plugin,&[]).official);
+        assert!(!badges(&plugin, &[]).official);
     }
-    #[test] fn scans_are_optional_and_bounded() {
+    #[test]
+    fn scans_are_optional_and_bounded() {
         assert!(parse_scans(br#"{"plugins":[]}"#).unwrap().is_empty());
-        assert!(parse_scans(&vec![b' ';REGISTRY_LIMIT+1]).is_err());
+        assert!(parse_scans(&vec![b' '; REGISTRY_LIMIT + 1]).is_err());
     }
-    #[test] fn unsigned_or_modified_registry_is_refused_with_clear_message() {
+    #[test]
+    fn unsigned_or_modified_registry_is_refused_with_clear_message() {
         let bytes = br#"{"schema":1,"plugins":[]}"#;
         for sig in [None, Some(""), Some("AAAA"), Some("7a2ouLXVU9rMepZFt15oZmi5Se8GKndzkVme0FyNCFwEoT9qqbR6AH1J+QOnqX8fepm0LIQPlXDla2NM9palDg==")] {
             let error = parse_signed(bytes, sig).unwrap_err().to_string();
             assert!(error == "Catalogue non signé ou modifié : magasin indisponible" || error == "Catalog unsigned or modified: store unavailable", "{error}");
         }
     }
-    #[test] fn rejects_oversized_registry_and_unknown_schema() {
+    #[test]
+    fn rejects_oversized_registry_and_unknown_schema() {
         assert!(parse(&vec![b' '; REGISTRY_LIMIT + 1]).is_err());
         assert!(parse(br#"{"schema":2,"plugins":[]}"#).is_err());
     }

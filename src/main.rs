@@ -1,13 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod app_audio;
+mod app_update;
 mod assets;
 mod assistant;
 mod audio;
-mod app_audio;
 mod automation;
-mod network_actions;
 mod catalog;
+mod community_plugins;
 mod conditions;
 mod control;
+mod deck_chassis;
+mod demo_profile;
 mod desktop;
 mod device;
 #[allow(dead_code)] // Catalogue M1 : branchement HID dans un lot ulterieur.
@@ -16,30 +19,36 @@ mod elgato;
 mod engine;
 mod flicker_diagnostic;
 mod gesture;
+mod hardware_report;
+mod https_get;
+mod i18n;
 mod icons;
-mod key_icons;
-mod deck_chassis;
-mod demo_profile;
 mod iconset;
-mod motion;
+mod key_icons;
 mod key_render;
-#[allow(dead_code)]
-mod mcp_protocol;
-mod mcp_server;
-mod mcp_connect;
 #[allow(dead_code)]
 mod local_assistant;
 mod local_llm;
+mod mcp_connect;
+#[allow(dead_code)]
+mod mcp_protocol;
+mod mcp_server;
+mod media_crop;
 mod model;
+mod motion;
+mod network_actions;
 mod obs;
 mod obs_monitor;
-#[allow(dead_code)]
-mod plugins;
+mod persistent_variables;
+mod plugin_catalog;
 #[allow(dead_code)]
 mod plugin_host;
 mod plugin_http;
+#[allow(dead_code)]
+mod plugin_import;
 mod plugin_inspector;
 mod plugin_inspector_proxy;
+mod plugin_management;
 mod plugin_runtime;
 mod plugin_state_display;
 mod plugin_validation;
@@ -47,29 +56,20 @@ mod plugin_validation;
 #[allow(dead_code)]
 mod plugin_validation_proxy;
 #[allow(dead_code)]
-mod plugin_import;
-mod plugin_management;
-mod plugin_catalog;
-mod https_get;
-mod community_plugins;
-mod app_update;
-mod signing;
-mod i18n;
-mod hardware_report;
+mod plugins;
 mod recorder;
 mod secrets;
+mod signing;
 mod soundboard;
-mod store;
-mod persistent_variables;
-mod token_equal;
-mod theme;
-mod ui;
-mod workshop_ops;
-mod workshop_journal;
-mod video_mf;
-mod media_crop;
-mod ui_media_crop;
 mod state_display;
+mod store;
+mod theme;
+mod token_equal;
+mod ui;
+mod ui_media_crop;
+mod video_mf;
+mod workshop_journal;
+mod workshop_ops;
 
 #[derive(Debug)]
 pub enum Event {
@@ -77,8 +77,16 @@ pub enum Event {
     Notification(String, String),
     Audio(audio::Snapshot),
     Block(Vec<usize>),
-    WorkshopStep { path: Vec<usize>, name: String, elapsed: Option<std::time::Duration> },
-    WorkshopFinished { ok: bool, elapsed: std::time::Duration, message: String },
+    WorkshopStep {
+        path: Vec<usize>,
+        name: String,
+        elapsed: Option<std::time::Duration>,
+    },
+    WorkshopFinished {
+        ok: bool,
+        elapsed: std::time::Duration,
+        message: String,
+    },
     D6Brightness(String, u8),
     D6Sleep,
     ToggleVisual,
@@ -94,7 +102,13 @@ pub enum Event {
     Device(bool, String),
     HardwareTestPress(String, usize),
     HardwareTestStatus(String),
-    DeviceModel { name: String, keys: u8, rows: u8, cols: u8, experimental: bool },
+    DeviceModel {
+        name: String,
+        keys: u8,
+        rows: u8,
+        cols: u8,
+        experimental: bool,
+    },
     Applied(u64),
     Profile(String),
     Foreground(Option<String>),
@@ -186,7 +200,11 @@ fn main() -> eframe::Result<()> {
             .with_inner_size(size)
             .with_min_inner_size([1000.0, 700.0]),
         // wgpu (DirectX 12/Vulkan) : presentation en mode flip, sans images vides au survol.
-        renderer: if std::env::args().any(|a| a == "--glow") { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu },
+        renderer: if std::env::args().any(|a| a == "--glow") {
+            eframe::Renderer::Glow
+        } else {
+            eframe::Renderer::Wgpu
+        },
         ..Default::default()
     };
     eframe::run_native(

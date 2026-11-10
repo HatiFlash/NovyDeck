@@ -25,14 +25,21 @@ impl Target {
         let key = self.binding(c)?;
         match &self.destination {
             Destination::Key => Ok(&key.image),
-            Destination::State(active) => Ok(key.state_display.as_ref().and_then(|s| (if *active { &s.on.image } else { &s.off.image }).as_deref()).unwrap_or("")),
+            Destination::State(active) => Ok(key
+                .state_display
+                .as_ref()
+                .and_then(|s| (if *active { &s.on.image } else { &s.off.image }).as_deref())
+                .unwrap_or("")),
             Destination::Audio { path, state } => match step_at(&key.steps, path) {
                 Some(Step::AudioSwitch {
                     first_icon,
                     second_icon,
                     ..
                 }) => Ok(if *state == 0 { first_icon } else { second_icon }),
-                _ => Err(crate::i18n::tr("Le bloc audio a changé. Rouvre la galerie depuis ce bloc.").into()),
+                _ => Err(crate::i18n::tr(
+                    "Le bloc audio a changé. Rouvre la galerie depuis ce bloc.",
+                )
+                .into()),
             },
         }
     }
@@ -40,11 +47,23 @@ impl Target {
         let base = crate::i18n::trf("Touche {key}", &[("key", &format!("{:02}", self.key + 1))]);
         match &self.destination {
             Destination::Key => base,
-            Destination::State(active) if self.binding(c).ok().and_then(|k| k.state_display.as_ref()).is_some_and(|s| s.toggle) => {
-                let state = if *active { crate::i18n::tr("Activé") } else { crate::i18n::tr("Désactivé") };
+            Destination::State(active)
+                if self
+                    .binding(c)
+                    .ok()
+                    .and_then(|k| k.state_display.as_ref())
+                    .is_some_and(|s| s.toggle) =>
+            {
+                let state = if *active {
+                    crate::i18n::tr("Activé")
+                } else {
+                    crate::i18n::tr("Désactivé")
+                };
                 crate::i18n::trf("{base} · {label}", &[("base", &base), ("label", &state)])
             }
-            Destination::State(true) => crate::i18n::trf("{base} · Quand c'est vrai", &[("base", &base)]),
+            Destination::State(true) => {
+                crate::i18n::trf("{base} · Quand c'est vrai", &[("base", &base)])
+            }
             Destination::State(false) => crate::i18n::trf("{base} · Sinon", &[("base", &base)]),
             Destination::Audio { path, state } => {
                 let label = self
@@ -69,9 +88,18 @@ impl Target {
                     })
                     .unwrap_or("");
                 let state_label = if label.is_empty() {
-                    if *state == 0 { crate::i18n::tr("État 1") } else { crate::i18n::tr("État 2") }
-                } else { label };
-                crate::i18n::trf("{base} · {label}", &[("base", &base), ("label", &state_label)])
+                    if *state == 0 {
+                        crate::i18n::tr("État 1")
+                    } else {
+                        crate::i18n::tr("État 2")
+                    }
+                } else {
+                    label
+                };
+                crate::i18n::trf(
+                    "{base} · {label}",
+                    &[("base", &base), ("label", &state_label)],
+                )
             }
         }
     }
@@ -81,13 +109,23 @@ impl Target {
             .get_mut(self.profile)
             .and_then(|p| p.keys_at_mut(&self.page))
             .and_then(|keys| keys.get_mut(self.key))
-            .ok_or(crate::i18n::tr("La touche n’existe plus. Rouvre la galerie."))?;
+            .ok_or(crate::i18n::tr(
+                "La touche n’existe plus. Rouvre la galerie.",
+            ))?;
         match &self.destination {
             Destination::Key => key.image = image,
             Destination::State(active) => {
-                let display = key.state_display.as_mut().ok_or(crate::i18n::tr("Affichage selon l'état désactivé"))?;
-                (if *active { &mut display.on } else { &mut display.off }).image = Some(image);
-            },
+                let display = key
+                    .state_display
+                    .as_mut()
+                    .ok_or(crate::i18n::tr("Affichage selon l'état désactivé"))?;
+                (if *active {
+                    &mut display.on
+                } else {
+                    &mut display.off
+                })
+                .image = Some(image);
+            }
             Destination::Audio { path, state } => match extras::step_mut(&mut key.steps, path) {
                 Some(Step::AudioSwitch {
                     first_icon,
@@ -96,7 +134,12 @@ impl Target {
                 }) => {
                     *if *state == 0 { first_icon } else { second_icon } = image;
                 }
-                _ => return Err(crate::i18n::tr("Le bloc audio a changé. Rouvre la galerie depuis ce bloc.").into()),
+                _ => {
+                    return Err(crate::i18n::tr(
+                        "Le bloc audio a changé. Rouvre la galerie depuis ce bloc.",
+                    )
+                    .into())
+                }
             },
         }
         Ok(())
@@ -223,15 +266,30 @@ impl App {
     }
     pub(super) fn open_state_icon_gallery(&mut self, active: bool) {
         self.open_icon_gallery(None);
-        let target = Target { profile: self.config.active, page: self.config.page.clone(),
-            key: self.selected, destination: Destination::State(active) };
-        self.icon_selected = target.image(&self.config).ok().filter(|s| !s.is_empty()).map(PathBuf::from);
+        let target = Target {
+            profile: self.config.active,
+            page: self.config.page.clone(),
+            key: self.selected,
+            destination: Destination::State(active),
+        };
+        self.icon_selected = target
+            .image(&self.config)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from);
         self.icon_target = Some(target);
     }
     pub(super) fn retarget_gallery(&mut self) {
-        if !self.show_assets { return; }
+        if !self.show_assets {
+            return;
+        }
         if let Some(target) = &self.icon_target {
-            if target.profile == self.config.active && target.page == self.config.page && target.key == self.selected { return; }
+            if target.profile == self.config.active
+                && target.page == self.config.page
+                && target.key == self.selected
+            {
+                return;
+            }
         }
         let icons = self.available_icons.clone();
         self.open_icon_gallery(None);
@@ -320,75 +378,166 @@ impl App {
             self.reload_icons();
         }
         if folder {
-            let tx=self.dialog_tx.clone();let assets=self.path.parent().unwrap().join("assets");
+            let tx = self.dialog_tx.clone();
+            let assets = self.path.parent().unwrap().join("assets");
             std::thread::spawn(move || {
-                if let Some(path)=rfd::FileDialog::new().pick_folder() {
-                    let icons=crate::assets::scan(&[path,assets]);
-                    let _=tx.send(Some(Box::new(move |app: &mut App| app.available_icons=icons) as DialogEffect));
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    let icons = crate::assets::scan(&[path, assets]);
+                    let _ = tx.send(Some(
+                        Box::new(move |app: &mut App| app.available_icons = icons) as DialogEffect,
+                    ));
                 }
             });
         }
         if import_icon {
-            let tx=self.dialog_tx.clone();
-            let assets=self.path.parent().unwrap().join("assets/mes-icones");
-            let size=self.config.image_size;
-            let target=target.clone();
+            let tx = self.dialog_tx.clone();
+            let assets = self.path.parent().unwrap().join("assets/mes-icones");
+            let size = self.config.image_size;
+            let target = target.clone();
             std::thread::spawn(move || {
-                let Some(path)=rfd::FileDialog::new()
-                    .add_filter(crate::i18n::tr("Images et vidéos"), &["png","jpg","jpeg","webp","bmp","ico","svg","gif","mp4","webm","mov","mkv","avi"])
-                    .pick_file() else {return};
-                let svg=path.extension().is_some_and(|e|e.eq_ignore_ascii_case("svg"));
+                let Some(path) = rfd::FileDialog::new()
+                    .add_filter(
+                        crate::i18n::tr("Images et vidéos"),
+                        &[
+                            "png", "jpg", "jpeg", "webp", "bmp", "ico", "svg", "gif", "mp4",
+                            "webm", "mov", "mkv", "avi",
+                        ],
+                    )
+                    .pick_file()
+                else {
+                    return;
+                };
+                let svg = path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
                 if matches!(target.destination, Destination::Key) && !svg {
                     // Touche entière : passer par l'éditeur de recadrage (aperçu avant validation).
-                    let _=tx.send(Some(Box::new(move |app: &mut App| {
-                        app.show_assets=false;
-                        app.open_crop_editor(target.profile, target.page.clone(), target.key, path, size);
+                    let _ = tx.send(Some(Box::new(move |app: &mut App| {
+                        app.show_assets = false;
+                        app.open_crop_editor(
+                            target.profile,
+                            target.page.clone(),
+                            target.key,
+                            path,
+                            size,
+                        );
                     }) as DialogEffect));
                     return;
                 }
-                let imported: Result<PathBuf,String> = if crate::assets::is_video(&path) {
-                    crate::assets::import_video(&path,&assets,size).map_err(|e|e.to_string())
+                let imported: Result<PathBuf, String> = if crate::assets::is_video(&path) {
+                    crate::assets::import_video(&path, &assets, size).map_err(|e| e.to_string())
                 } else {
                     Ok(path)
                 };
-                let _=tx.send(Some(Box::new(move |app: &mut App| {
-                    let result=imported.and_then(|p|app.import_icon_from(&target,&p));
-                    if let Err(e)=result {app.fail(crate::i18n::trf("Import impossible : {error}", &[("error", &e)]));}
+                let _ = tx.send(Some(Box::new(move |app: &mut App| {
+                    let result = imported.and_then(|p| app.import_icon_from(&target, &p));
+                    if let Err(e) = result {
+                        app.fail(crate::i18n::trf(
+                            "Import impossible : {error}",
+                            &[("error", &e)],
+                        ));
+                    }
                 }) as DialogEffect));
             });
         }
         if import {
-            let tx=self.dialog_tx.clone();let assets=self.path.parent().unwrap().join("assets/mes-icones");
-            let size=self.config.image_size;
+            let tx = self.dialog_tx.clone();
+            let assets = self.path.parent().unwrap().join("assets/mes-icones");
+            let size = self.config.image_size;
             std::thread::spawn(move || {
-                let Some(path)=rfd::FileDialog::new()
-                    .add_filter(crate::i18n::tr("Images, vidéos et packs"), &["png","jpg","jpeg","svg","gif","mp4","webm","mov","mkv","avi","zip","streamDeckIconPack","sdIconPack"])
-                    .pick_file() else {return};
-                let video=crate::assets::is_video(&path);
-                if video { let _=tx.send(Some(Box::new(|app: &mut App| app.log(crate::i18n::tr("Conversion de la vidéo…").into())) as DialogEffect)); }
-                let result: Result<String, String> = if video {
-                    crate::assets::import_video(&path,&assets,size).map(|_| crate::i18n::tr("Vidéo convertie en GIF animé.").into()).map_err(|e|e.to_string())
-                } else if path.extension().is_some_and(|e| ["zip","streamDeckIconPack","sdIconPack"].iter().any(|x| e.eq_ignore_ascii_case(x))) {
-                    crate::assets::import_pack(&path,&assets).map(|(count,skipped)|crate::i18n::trf("{count} icônes importées - {skipped} images non prises en charge.", &[("count", &count), ("skipped", &skipped)])).map_err(|e|e.to_string())
-                } else {
-                    std::fs::read(&path).map_err(|e|e.to_string()).and_then(|bytes|
-                        crate::assets::import_image(&bytes,&assets,path.file_stem().and_then(|s|s.to_str()).unwrap_or("icone"))
-                            .map(|_| crate::i18n::tr("Icône importée.").into()).map_err(|e|e.to_string()))
+                let Some(path) = rfd::FileDialog::new()
+                    .add_filter(
+                        crate::i18n::tr("Images, vidéos et packs"),
+                        &[
+                            "png",
+                            "jpg",
+                            "jpeg",
+                            "svg",
+                            "gif",
+                            "mp4",
+                            "webm",
+                            "mov",
+                            "mkv",
+                            "avi",
+                            "zip",
+                            "streamDeckIconPack",
+                            "sdIconPack",
+                        ],
+                    )
+                    .pick_file()
+                else {
+                    return;
                 };
-                let icons=if result.is_ok(){Some(crate::assets::scan(&[assets]))}else{None};
-                let _=tx.send(Some(Box::new(move |app: &mut App| match result {
-                    Ok(message)=>{if let Some(icons)=icons {app.available_icons=icons;} app.log(message);}
-                    Err(e)=>app.fail(crate::i18n::trf("Import impossible : {error}", &[("error", &e)])),
+                let video = crate::assets::is_video(&path);
+                if video {
+                    let _ = tx.send(Some(Box::new(|app: &mut App| {
+                        app.log(crate::i18n::tr("Conversion de la vidéo…").into())
+                    }) as DialogEffect));
+                }
+                let result: Result<String, String> = if video {
+                    crate::assets::import_video(&path, &assets, size)
+                        .map(|_| crate::i18n::tr("Vidéo convertie en GIF animé.").into())
+                        .map_err(|e| e.to_string())
+                } else if path.extension().is_some_and(|e| {
+                    ["zip", "streamDeckIconPack", "sdIconPack"]
+                        .iter()
+                        .any(|x| e.eq_ignore_ascii_case(x))
+                }) {
+                    crate::assets::import_pack(&path, &assets)
+                        .map(|(count, skipped)| {
+                            crate::i18n::trf(
+                                "{count} icônes importées - {skipped} images non prises en charge.",
+                                &[("count", &count), ("skipped", &skipped)],
+                            )
+                        })
+                        .map_err(|e| e.to_string())
+                } else {
+                    std::fs::read(&path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|bytes| {
+                            crate::assets::import_image(
+                                &bytes,
+                                &assets,
+                                path.file_stem().and_then(|s| s.to_str()).unwrap_or("icone"),
+                            )
+                            .map(|_| crate::i18n::tr("Icône importée.").into())
+                            .map_err(|e| e.to_string())
+                        })
+                };
+                let icons = if result.is_ok() {
+                    Some(crate::assets::scan(&[assets]))
+                } else {
+                    None
+                };
+                let _ = tx.send(Some(Box::new(move |app: &mut App| match result {
+                    Ok(message) => {
+                        if let Some(icons) = icons {
+                            app.available_icons = icons;
+                        }
+                        app.log(message);
+                    }
+                    Err(e) => app.fail(crate::i18n::trf(
+                        "Import impossible : {error}",
+                        &[("error", &e)],
+                    )),
                 }) as DialogEffect));
             });
         }
     }
     /// Copie une image de l'utilisateur dans assets/mes-icones (sans écraser) et l'applique
     /// à la cible de la galerie. Les GIF déjà convertis depuis une vidéo sont repris tels quels.
-    pub(super) fn import_icon_from(&mut self, target: &Target, source: &std::path::Path) -> Result<PathBuf, String> {
+    pub(super) fn import_icon_from(
+        &mut self,
+        target: &Target,
+        source: &std::path::Path,
+    ) -> Result<PathBuf, String> {
         target.image(&self.config)?;
         let assets = self.path.parent().unwrap().join("assets/mes-icones");
-        let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("icone").to_owned();
+        let name = source
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("icone")
+            .to_owned();
         let stored = if source.starts_with(&assets) {
             source.to_path_buf()
         } else {
@@ -399,7 +548,10 @@ impl App {
         self.icon_selected = Some(stored.clone());
         self.edited();
         self.reload_icons();
-        self.icon_notice = crate::i18n::trf("Icône « {name} » importée et appliquée · {target}", &[("name", &name), ("target", &target.label(&self.config))]);
+        self.icon_notice = crate::i18n::trf(
+            "Icône « {name} » importée et appliquée · {target}",
+            &[("name", &name), ("target", &target.label(&self.config))],
+        );
         self.log(self.icon_notice.clone());
         Ok(stored)
     }
@@ -412,7 +564,10 @@ impl App {
         target.image(&self.config)?;
         let assigned = if crate::audio::builtin_kind(path).is_some() {
             if matches!(target.destination, Destination::Key) {
-                return Err(crate::i18n::tr("Les icônes d’état se choisissent depuis le bloc audio.").into());
+                return Err(crate::i18n::tr(
+                    "Les icônes d’état se choisissent depuis le bloc audio.",
+                )
+                .into());
             }
             path.into()
         } else {
@@ -431,7 +586,7 @@ impl App {
         self.edited();
         self.icon_notice = crate::i18n::trf(
             "Icône « {name} » appliquée · {target}",
-            &[("name", &name), ("target", &target.label(&self.config))]
+            &[("name", &name), ("target", &target.label(&self.config))],
         );
         self.log(self.icon_notice.clone());
         Ok(())
@@ -505,8 +660,12 @@ pub(super) fn audio_options(
         let palette = theme::palette(ui.ctx());
         ui.horizontal(|ui| {
             ui.label("Audio");
-            changed |= ui.selectable_value(input, false, crate::i18n::tr("Sortie")).changed();
-            changed |= ui.selectable_value(input, true, crate::i18n::tr("Micro / entrée")).changed();
+            changed |= ui
+                .selectable_value(input, false, crate::i18n::tr("Sortie"))
+                .changed();
+            changed |= ui
+                .selectable_value(input, true, crate::i18n::tr("Micro / entrée"))
+                .changed();
         });
         let active = if *input { &audio.input } else { &audio.output };
         ui.columns(2, |columns| {
@@ -550,12 +709,23 @@ pub(super) fn audio_options(
                                 if response.clicked() {
                                     *pick = Some(state);
                                 }
-                                response.on_hover_text(crate::i18n::tr("Choisir l’icône de cet état"));
+                                response
+                                    .on_hover_text(crate::i18n::tr("Choisir l’icône de cet état"));
                                 ui.vertical(|ui| {
                                     ui.label(
                                         RichText::new(crate::i18n::trf(
                                             "État {state}{active}",
-                                            &[("state", &(state + 1)), ("active", &(if !id.is_empty() && active == id { crate::i18n::tr(" · Actif") } else { "" }))]
+                                            &[
+                                                ("state", &(state + 1)),
+                                                (
+                                                    "active",
+                                                    &(if !id.is_empty() && active == id {
+                                                        crate::i18n::tr(" · Actif")
+                                                    } else {
+                                                        ""
+                                                    }),
+                                                ),
+                                            ],
                                         ))
                                         .small()
                                         .strong(),
@@ -591,18 +761,42 @@ pub(super) fn audio_options(
                                     *pick = Some(state);
                                 }
                                 if ui.small_button(crate::i18n::tr("Fichier…")).clicked() {
-                                    let tx=tx.clone();let target=target.clone();
+                                    let tx = tx.clone();
+                                    let target = target.clone();
                                     std::thread::spawn(move || {
-                                        let path=rfd::FileDialog::new().add_filter(crate::i18n::tr("Image"), &["png","jpg","jpeg"]).pick_file();
-                                        let _=tx.send(path.map(|path| Box::new(move |app: &mut App| {
-                                            let (profile,page,key,step_path)=target;
-                                            if let Some(Step::AudioSwitch {first_icon,second_icon,..})=
-                                                app.config.profiles.get_mut(profile).and_then(|p|p.keys_at_mut(&page))
-                                                .and_then(|keys|keys.get_mut(key)).and_then(|key|extras::step_mut(&mut key.steps,&step_path)) {
-                                                *(if state==0 {first_icon} else {second_icon})=path.to_string_lossy().into_owned();
-                                                app.edited();
-                                            }
-                                        }) as DialogEffect));
+                                        let path = rfd::FileDialog::new()
+                                            .add_filter(
+                                                crate::i18n::tr("Image"),
+                                                &["png", "jpg", "jpeg"],
+                                            )
+                                            .pick_file();
+                                        let _ = tx.send(path.map(|path| {
+                                            Box::new(move |app: &mut App| {
+                                                let (profile, page, key, step_path) = target;
+                                                if let Some(Step::AudioSwitch {
+                                                    first_icon,
+                                                    second_icon,
+                                                    ..
+                                                }) = app
+                                                    .config
+                                                    .profiles
+                                                    .get_mut(profile)
+                                                    .and_then(|p| p.keys_at_mut(&page))
+                                                    .and_then(|keys| keys.get_mut(key))
+                                                    .and_then(|key| {
+                                                        extras::step_mut(&mut key.steps, &step_path)
+                                                    })
+                                                {
+                                                    *(if state == 0 {
+                                                        first_icon
+                                                    } else {
+                                                        second_icon
+                                                    }) = path.to_string_lossy().into_owned();
+                                                    app.edited();
+                                                }
+                                            })
+                                                as DialogEffect
+                                        }));
                                     });
                                 }
                                 if ui.small_button(crate::i18n::tr("Par défaut")).clicked() {

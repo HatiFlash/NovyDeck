@@ -86,7 +86,9 @@ fn locate(c: &Config, name: &str, page: &str, key: usize) -> Result<(usize, usiz
     let Some(keys) = c.profiles[p].keys_at(page) else {
         return Err("Page ou dossier introuvable".into());
     };
-    if key > keys.len() { return Err(format!("Cette page contient {} touches", keys.len())); }
+    if key > keys.len() {
+        return Err(format!("Cette page contient {} touches", keys.len()));
+    }
     Ok((p, key - 1))
 }
 impl Proposals {
@@ -184,7 +186,8 @@ impl Proposals {
                     state_display: a.state_display.or_else(|| old.state_display.clone()),
                     long_steps: a.long_steps.unwrap_or_else(|| old.long_steps.clone()),
                     display_kind: None,
-                    runtime_badge: None, runtime_id: None,
+                    runtime_badge: None,
+                    runtime_id: None,
                 };
                 next.validate_structure().map_err(|e| e.to_string())?;
                 crate::model::validate_key_in_profile(

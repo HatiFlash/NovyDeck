@@ -116,8 +116,13 @@ pub fn read_json_object(path: &Path) -> Result<serde_json::Value> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(serde_json::json!({})),
         Err(e) => return Err(e).with_context(|| format!("{} illisible", path.display())),
     };
-    let value: serde_json::Value = serde_json::from_slice(&bytes).with_context(|| format!("{} n'est pas un JSON valide", path.display()))?;
-    anyhow::ensure!(value.is_object(), "{} ne contient pas un objet JSON", path.display());
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
+        .with_context(|| format!("{} n'est pas un JSON valide", path.display()))?;
+    anyhow::ensure!(
+        value.is_object(),
+        "{} ne contient pas un objet JSON",
+        path.display()
+    );
     Ok(value)
 }
 
@@ -133,7 +138,9 @@ pub fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<()> {
         let mut backup = tempfile::NamedTempFile::new_in(parent)?;
         backup.write_all(&old)?;
         backup.as_file().sync_all()?;
-        backup.persist(path.with_extension("json.bak")).map_err(|e| e.error)?;
+        backup
+            .persist(path.with_extension("json.bak"))
+            .map_err(|e| e.error)?;
     }
     tmp.persist(path).map_err(|e| e.error)?;
     Ok(())
@@ -294,17 +301,33 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plugin-settings.json");
         set_plugin_settings(&path, "a", &serde_json::json!({"x": 1})).unwrap();
-        assert!(!path.with_extension("json.bak").exists(), "pas d'ancien contenu à sauvegarder");
+        assert!(
+            !path.with_extension("json.bak").exists(),
+            "pas d'ancien contenu à sauvegarder"
+        );
         set_plugin_settings(&path, "b", &serde_json::json!({"y": 2})).unwrap();
         let all = read_json_object(&path).unwrap();
         assert_eq!(all, serde_json::json!({"a": {"x": 1}, "b": {"y": 2}}));
-        assert_eq!(read_json_object(&path.with_extension("json.bak")).unwrap(), serde_json::json!({"a": {"x": 1}}));
+        assert_eq!(
+            read_json_object(&path.with_extension("json.bak")).unwrap(),
+            serde_json::json!({"a": {"x": 1}})
+        );
         let truncated = b"{\"a\": {\"x\": 1".to_vec();
         fs::write(&path, &truncated).unwrap();
         assert!(set_plugin_settings(&path, "c", &serde_json::json!({})).is_err());
-        assert_eq!(fs::read(&path).unwrap(), truncated, "fichier tronqué intact");
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            truncated,
+            "fichier tronqué intact"
+        );
         fs::write(&path, b"[1,2]").unwrap();
-        assert!(read_json_object(&path).is_err() && set_plugin_settings(&path, "c", &serde_json::json!({})).is_err());
-        assert_eq!(read_json_object(&dir.path().join("absent.json")).unwrap(), serde_json::json!({}));
+        assert!(
+            read_json_object(&path).is_err()
+                && set_plugin_settings(&path, "c", &serde_json::json!({})).is_err()
+        );
+        assert_eq!(
+            read_json_object(&dir.path().join("absent.json")).unwrap(),
+            serde_json::json!({})
+        );
     }
 }

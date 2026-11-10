@@ -124,7 +124,11 @@ mod tests {
         let mut img = RgbaImage::new(100, 50);
         for y in 0..50 {
             for x in 0..100 {
-                let color = if x < 50 { [255, 0, 0, 255] } else { [0, 0, 255, 255] };
+                let color = if x < 50 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                };
                 img.put_pixel(x, y, Rgba(color));
             }
         }
@@ -155,7 +159,11 @@ mod tests {
         let mut img = RgbaImage::new(100, 50);
         for y in 0..50 {
             for x in 0..100 {
-                let color = if x < 30 { [255, 0, 0, 255] } else { [0, 255, 0, 255] };
+                let color = if x < 30 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 255, 0, 255]
+                };
                 img.put_pixel(x, y, Rgba(color));
             }
         }

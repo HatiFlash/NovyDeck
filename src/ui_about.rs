@@ -10,11 +10,18 @@ pub(super) enum UpdateEvent {
 }
 
 pub(super) fn hardware_report_button(ui: &mut egui::Ui, app: &mut App) {
-    if ui.button(crate::i18n::tr("Signaler un problème avec mon deck")).clicked() { app.open_hardware_report(); }
+    if ui
+        .button(crate::i18n::tr("Signaler un problème avec mon deck"))
+        .clicked()
+    {
+        app.open_hardware_report();
+    }
 }
 
 pub(super) fn hardware_report_window(ctx: &egui::Context, app: &mut App) {
-    let Some(report) = app.hardware_report.as_ref() else { return; };
+    let Some(report) = app.hardware_report.as_ref() else {
+        return;
+    };
     let mut preview = report.text.clone();
     let url = report.issue_url.clone();
     let mut open = true;
@@ -39,28 +46,51 @@ pub(super) fn hardware_report_window(ctx: &egui::Context, app: &mut App) {
                 // /select, must be a single argument to explorer.exe, never a shell command.
                 let selection = format!("/select,{}", path.display());
                 if let Err(e) = Command::new("explorer.exe").arg(selection).spawn() {
-                    app.fail(crate::i18n::trf("Rapport enregistré, sélection dans l’Explorateur impossible : {e}", &[("e", &e)]));
-                } else { app.log(crate::i18n::trf("Rapport enregistré : {path}", &[("path", &path.display())])); }
+                    app.fail(crate::i18n::trf(
+                        "Rapport enregistré, sélection dans l’Explorateur impossible : {e}",
+                        &[("e", &e)],
+                    ));
+                } else {
+                    app.log(crate::i18n::trf(
+                        "Rapport enregistré : {path}",
+                        &[("path", &path.display())],
+                    ));
+                }
                 ctx.open_url(egui::OpenUrl::new_tab(url));
                 app.hardware_report = None;
             }
-            Err(e) => app.fail(crate::i18n::trf("Enregistrement du rapport impossible : {e}", &[("e", &e)])),
+            Err(e) => app.fail(crate::i18n::trf(
+                "Enregistrement du rapport impossible : {e}",
+                &[("e", &e)],
+            )),
         }
-    } else if cancel || !open { app.hardware_report = None; }
+    } else if cancel || !open {
+        app.hardware_report = None;
+    }
 }
-
 
 pub(super) fn notes(ui: &mut egui::Ui, markdown: &str) {
     let text = crate::app_update::release_notes(markdown, crate::i18n::current());
-    if text.is_empty() { return; }
+    if text.is_empty() {
+        return;
+    }
     ui.label(RichText::new(crate::i18n::tr("Nouveautés")).strong());
-    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-        ui.add(egui::Label::new(text).wrap());
-    });
+    egui::ScrollArea::vertical()
+        .max_height(220.0)
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(text).wrap());
+        });
 }
 
 pub(super) const HASH: &str = env!("DECKFORGE_GIT_HASH");
 pub(super) const DATE: &str = env!("DECKFORGE_BUILD_DATE");
 pub(super) fn information() -> String {
-    crate::i18n::trf("NovyDeck {version}\nCompilation : {hash} ({date})", &[("version", &env!("CARGO_PKG_VERSION")), ("hash", &HASH), ("date", &DATE)])
+    crate::i18n::trf(
+        "NovyDeck {version}\nCompilation : {hash} ({date})",
+        &[
+            ("version", &env!("CARGO_PKG_VERSION")),
+            ("hash", &HASH),
+            ("date", &DATE),
+        ],
+    )
 }

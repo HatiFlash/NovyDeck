@@ -4,11 +4,25 @@
 //! La reconnaissance ne garantit pas la compatibilite du protocole sur materiel.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Family { Mirabox, Elgato }
+pub enum Family {
+    Mirabox,
+    Elgato,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImageFormat { Jpeg, Bmp }
+pub enum ImageFormat {
+    Jpeg,
+    Bmp,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Protocol { MiraboxV1, MiraboxV2, MiraboxV3, ElgatoV1, ElgatoV2, ElgatoMini, ElgatoModule }
+pub enum Protocol {
+    MiraboxV1,
+    MiraboxV2,
+    MiraboxV3,
+    ElgatoV1,
+    ElgatoV2,
+    ElgatoMini,
+    ElgatoModule,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceModel {
     pub id: &'static str,
@@ -64,9 +78,9 @@ pub const MODELS: &[DeviceModel] = &[
     DeviceModel { id: "elgato_module_32", name: "Elgato Module 32", family: Family::Elgato, vid: 0x0fd9, pid: 0x00ba, rows: 4, cols: 8, keys: 32, image_w: 96, image_h: 96, image_format: ImageFormat::Jpeg, rotation: 0, mirror_x: true, mirror_y: true, packet_len: 1024, protocol: Protocol::ElgatoModule, encoders: 0, verified: false, notes: "" },
  ];
 
-pub mod test_assistant;
-pub mod report;
 pub mod elgato;
+pub mod report;
+pub mod test_assistant;
 
 /// Descripteur HID reduit : construire depuis hidapi plus tard, sans ouvrir le materiel ici.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,37 +96,71 @@ pub struct HidInfo {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Detection {
-    Matched { info: HidInfo, model: &'static DeviceModel },
-    UnknownCandidate { info: HidInfo, reason: String },
+    Matched {
+        info: HidInfo,
+        model: &'static DeviceModel,
+    },
+    UnknownCandidate {
+        info: HidInfo,
+        reason: String,
+    },
 }
 
 pub fn detect(devices: &[HidInfo]) -> Vec<Detection> {
-    devices.iter().filter_map(|info| {
-        let known_vendor = matches!(info.vid, 0x0fd9 | 0x5548 | 0x0300 | 0x3142 | 0x6602 | 0x6603);
-        if let Some(model) = MODELS.iter().find(|m| (m.vid, m.pid) == (info.vid, info.pid)) {
-            let right_interface = match model.family {
-                Family::Mirabox => info.usage_page >= 0xff00,
-                Family::Elgato => info.interface == 0,
-            };
-            if right_interface { return Some(Detection::Matched { info: info.clone(), model }); }
-            return Some(Detection::UnknownCandidate {
+    devices
+        .iter()
+        .filter_map(|info| {
+            let known_vendor = matches!(
+                info.vid,
+                0x0fd9 | 0x5548 | 0x0300 | 0x3142 | 0x6602 | 0x6603
+            );
+            if let Some(model) = MODELS
+                .iter()
+                .find(|m| (m.vid, m.pid) == (info.vid, info.pid))
+            {
+                let right_interface = match model.family {
+                    Family::Mirabox => info.usage_page >= 0xff00,
+                    Family::Elgato => info.interface == 0,
+                };
+                if right_interface {
+                    return Some(Detection::Matched {
+                        info: info.clone(),
+                        model,
+                    });
+                }
+                return Some(Detection::UnknownCandidate {
+                    info: info.clone(),
+                    reason: format!(
+                        "Interface HID non retenue pour {} : usage_page=0x{:04x}, interface={}",
+                        model.name, info.usage_page, info.interface
+                    ),
+                });
+            }
+            known_vendor.then(|| Detection::UnknownCandidate {
                 info: info.clone(),
-                reason: format!("Interface HID non retenue pour {} : usage_page=0x{:04x}, interface={}", model.name, info.usage_page, info.interface),
-            });
-        }
-        known_vendor.then(|| Detection::UnknownCandidate {
-            info: info.clone(),
-            reason: format!("VID connu 0x{:04x}, PID inconnu 0x{:04x} : modele experimental a identifier", info.vid, info.pid),
+                reason: format!(
+                    "VID connu 0x{:04x}, PID inconnu 0x{:04x} : modele experimental a identifier",
+                    info.vid, info.pid
+                ),
+            })
         })
-    }).collect()
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     fn info(vid: u16, pid: u16, page: u16, interface: i32) -> HidInfo {
-        HidInfo { vid, pid, usage_page: page, usage: 1, interface,
-            product: None, manufacturer: None, path: "chemin fictif".into() }
+        HidInfo {
+            vid,
+            pid,
+            usage_page: page,
+            usage: 1,
+            interface,
+            product: None,
+            manufacturer: None,
+            path: "chemin fictif".into(),
+        }
     }
     #[test]
     fn table_is_consistent_and_unambiguous() {
@@ -121,7 +169,13 @@ mod tests {
             assert_eq!(m.keys as u16, m.rows as u16 * m.cols as u16, "{}", m.id);
             assert!(m.image_w > 0 && m.image_h > 0 && m.packet_len > 0);
             assert!([0, 90, 180, 270].contains(&m.rotation));
-            assert!(MODELS[..i].iter().all(|other| other.id != m.id && (other.vid, other.pid) != (m.vid, m.pid)), "{}", m.id);
+            assert!(
+                MODELS[..i]
+                    .iter()
+                    .all(|other| other.id != m.id && (other.vid, other.pid) != (m.vid, m.pid)),
+                "{}",
+                m.id
+            );
             assert_eq!(m.verified, m.id == "fifine_d6");
         }
     }
@@ -130,18 +184,34 @@ mod tests {
         for page in [0, 0xfeff, 0xff00, 0xffff] {
             for (vid, pid) in [(0x3142, 0x0060), (0x3142, 0x0061), (0x0300, 0x1001)] {
                 let dev = info(vid, pid, page, -1);
-                let matched = detect(&[dev]).iter().any(|d| matches!(d, Detection::Matched { model, .. } if model.id == "fifine_d6"));
+                let matched = detect(&[dev]).iter().any(
+                    |d| matches!(d, Detection::Matched { model, .. } if model.id == "fifine_d6"),
+                );
                 assert_eq!(matched, vid == 0x3142 && pid == 0x0060 && page >= 0xff00);
             }
         }
     }
     #[test]
     fn unknown_pid_and_interface_are_candidates() {
-        assert!(matches!(detect(&[info(0x0fd9, 0xdead, 0, 0)])[0], Detection::UnknownCandidate { .. }));
-        assert!(matches!(detect(&[info(0x3142, 0x0060, 0, 0)])[0], Detection::UnknownCandidate { .. }));
-        assert!(matches!(detect(&[info(0x0fd9, 0x0080, 0, 1)])[0], Detection::UnknownCandidate { .. }));
+        assert!(matches!(
+            detect(&[info(0x0fd9, 0xdead, 0, 0)])[0],
+            Detection::UnknownCandidate { .. }
+        ));
+        assert!(matches!(
+            detect(&[info(0x3142, 0x0060, 0, 0)])[0],
+            Detection::UnknownCandidate { .. }
+        ));
+        assert!(matches!(
+            detect(&[info(0x0fd9, 0x0080, 0, 1)])[0],
+            Detection::UnknownCandidate { .. }
+        ));
         assert!(detect(&[info(0x9999, 1, 0, 0)]).is_empty());
-        assert!(matches!(detect(&[info(0x0fd9, 0x0080, 0, 0)])[0], Detection::Matched { .. }));
-        assert!(matches!(detect(&[info(0x0300, 0x1001, 0xff00, 0)])[0], Detection::Matched { model, .. } if model.id == "akp03"));
+        assert!(matches!(
+            detect(&[info(0x0fd9, 0x0080, 0, 0)])[0],
+            Detection::Matched { .. }
+        ));
+        assert!(
+            matches!(detect(&[info(0x0300, 0x1001, 0xff00, 0)])[0], Detection::Matched { model, .. } if model.id == "akp03")
+        );
     }
 }

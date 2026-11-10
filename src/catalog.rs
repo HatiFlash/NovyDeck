@@ -65,7 +65,9 @@ pub fn display_name(name: &str) -> &str {
         "Onglet précédent" => crate::i18n::tr("Onglet précédent"),
         "Barre d’adresse" => crate::i18n::tr("Barre d’adresse"),
         "Actualiser" => crate::i18n::tr("Actualiser"),
-        "Copier → autre fenêtre → coller" => crate::i18n::tr("Copier → autre fenêtre → coller"),
+        "Copier → autre fenêtre → coller" => {
+            crate::i18n::tr("Copier → autre fenêtre → coller")
+        }
         "Enregistrer puis rechercher" => crate::i18n::tr("Enregistrer puis rechercher"),
         "Signature de message" => crate::i18n::tr("Signature de message"),
         "Condition sur une fenêtre" => crate::i18n::tr("Condition sur une fenêtre"),
@@ -196,10 +198,48 @@ pub fn presets() -> Vec<Preset> {
             },
         });
     };
-    add("Système", "Clic souris", "Clique sur le bouton gauche de la souris.", [73, 160, 217], vec![Step::MouseClick { button: "left".into(), double: false, x: None, y: None, relative_to: "screen".into() }]);
-    add("Système", "Déplacer la souris", "Déplace le curseur relativement à sa position.", [73, 160, 217], vec![Step::MouseMove { x: 10, y: 0, relative: false, relative_to: "cursor".into() }]);
-    add("Système", "Défiler", "Fait défiler la fenêtre active d'un cran.", [73, 160, 217], vec![Step::MouseScroll { amount: 1, horizontal: false }]);
-    add("Système", "Fermer la fenêtre", "Demande à Windows de fermer la fenêtre active, sauf NovyDeck.", [73, 160, 217], vec![Step::CloseWindow]);
+    add(
+        "Système",
+        "Clic souris",
+        "Clique sur le bouton gauche de la souris.",
+        [73, 160, 217],
+        vec![Step::MouseClick {
+            button: "left".into(),
+            double: false,
+            x: None,
+            y: None,
+            relative_to: "screen".into(),
+        }],
+    );
+    add(
+        "Système",
+        "Déplacer la souris",
+        "Déplace le curseur relativement à sa position.",
+        [73, 160, 217],
+        vec![Step::MouseMove {
+            x: 10,
+            y: 0,
+            relative: false,
+            relative_to: "cursor".into(),
+        }],
+    );
+    add(
+        "Système",
+        "Défiler",
+        "Fait défiler la fenêtre active d'un cran.",
+        [73, 160, 217],
+        vec![Step::MouseScroll {
+            amount: 1,
+            horizontal: false,
+        }],
+    );
+    add(
+        "Système",
+        "Fermer la fenêtre",
+        "Demande à Windows de fermer la fenêtre active, sauf NovyDeck.",
+        [73, 160, 217],
+        vec![Step::CloseWindow],
+    );
     for (label, command) in [
         ("Lecture / pause", "play_pause"),
         ("Piste suivante", "next"),
@@ -219,32 +259,133 @@ pub fn presets() -> Vec<Preset> {
             }],
         );
     }
-    for (label, op, monitor) in [("Fenêtre sur l'écran 2", "move_to_monitor", 2), ("Toujours au premier plan", "toggle_always_on_top", 2), ("Maximiser", "maximize", 2)] {
-        add("Fenêtres", label, "Opération sur la fenêtre active, sauf NovyDeck ; écran 1 = principal.", [73, 160, 217], vec![Step::WindowOp {
-            target: "foreground".into(), value: String::new(), op: op.into(), x: 0, y: 0, w: 800, h: 600, monitor,
-        }]);
+    for (label, op, monitor) in [
+        ("Fenêtre sur l'écran 2", "move_to_monitor", 2),
+        ("Toujours au premier plan", "toggle_always_on_top", 2),
+        ("Maximiser", "maximize", 2),
+    ] {
+        add(
+            "Fenêtres",
+            label,
+            "Opération sur la fenêtre active, sauf NovyDeck ; écran 1 = principal.",
+            [73, 160, 217],
+            vec![Step::WindowOp {
+                target: "foreground".into(),
+                value: String::new(),
+                op: op.into(),
+                x: 0,
+                y: 0,
+                w: 800,
+                h: 600,
+                monitor,
+            }],
+        );
     }
-    add("Clavier", "Maintenir Ctrl 500 ms", "Maintient Ctrl puis le relâche après une demi-seconde ; Arrêter relâche immédiatement.", [73, 160, 217], vec![Step::KeyHold { keys: "CTRL".into(), action: "down".into(), hold_ms: 500 }]);
-    add("Texte", "Coller sans mise en forme", "Lit le texte Unicode, le recopie sans formatage puis colle dans la fenêtre active.", [108, 135, 236], vec![
-        Step::Clipboard { op: "read_to_variable".into(), value: String::new(), name: "texte_colle".into() },
-        Step::Clipboard { op: "copy_text".into(), value: "{texte_colle}".into(), name: "texte".into() },
-        Step::Hotkey { keys: "CTRL+V".into() },
-    ]);
-    add("Variables", "Mettre en majuscules", "Met en majuscules la variable texte pendant cette macro.", [108, 135, 236], vec![Step::TextOp {
-        name: "texte".into(), op: "upper".into(), value: String::new(), find: String::new(),
-   persistent: false, }]);
-    for (label, op, value) in [("Compteur +1", "add", "1"), ("Compteur −1", "subtract", "1"), ("Compteur à 0", "set", "0")] {
-        add("Variables", label, "Calcule la valeur numérique du compteur pendant cette macro.", [108, 135, 236], vec![Step::Math { name: "compteur".into(), op: op.into(), value: value.into(), min: 0.0, max: 100.0, persistent: false, }]);
+    add(
+        "Clavier",
+        "Maintenir Ctrl 500 ms",
+        "Maintient Ctrl puis le relâche après une demi-seconde ; Arrêter relâche immédiatement.",
+        [73, 160, 217],
+        vec![Step::KeyHold {
+            keys: "CTRL".into(),
+            action: "down".into(),
+            hold_ms: 500,
+        }],
+    );
+    add(
+        "Texte",
+        "Coller sans mise en forme",
+        "Lit le texte Unicode, le recopie sans formatage puis colle dans la fenêtre active.",
+        [108, 135, 236],
+        vec![
+            Step::Clipboard {
+                op: "read_to_variable".into(),
+                value: String::new(),
+                name: "texte_colle".into(),
+            },
+            Step::Clipboard {
+                op: "copy_text".into(),
+                value: "{texte_colle}".into(),
+                name: "texte".into(),
+            },
+            Step::Hotkey {
+                keys: "CTRL+V".into(),
+            },
+        ],
+    );
+    add(
+        "Variables",
+        "Mettre en majuscules",
+        "Met en majuscules la variable texte pendant cette macro.",
+        [108, 135, 236],
+        vec![Step::TextOp {
+            name: "texte".into(),
+            op: "upper".into(),
+            value: String::new(),
+            find: String::new(),
+            persistent: false,
+        }],
+    );
+    for (label, op, value) in [
+        ("Compteur +1", "add", "1"),
+        ("Compteur −1", "subtract", "1"),
+        ("Compteur à 0", "set", "0"),
+    ] {
+        add(
+            "Variables",
+            label,
+            "Calcule la valeur numérique du compteur pendant cette macro.",
+            [108, 135, 236],
+            vec![Step::Math {
+                name: "compteur".into(),
+                op: op.into(),
+                value: value.into(),
+                min: 0.0,
+                max: 100.0,
+                persistent: false,
+            }],
+        );
     }
-    for (label, action, level) in [("App +5 %", "up", 0), ("App −5 %", "down", 0), ("App muette", "toggle_mute", 0), ("App à 50 %", "set", 50)] {
-        add("Audio", label, "Volume de l’application active, sans modifier le volume général.", [76, 166, 137], vec![Step::AppVolume {
-            target: "foreground".into(), action: action.into(), step: 5, level, include_children: true,
-        }]);
+    for (label, action, level) in [
+        ("App +5 %", "up", 0),
+        ("App −5 %", "down", 0),
+        ("App muette", "toggle_mute", 0),
+        ("App à 50 %", "set", 50),
+    ] {
+        add(
+            "Audio",
+            label,
+            "Volume de l’application active, sans modifier le volume général.",
+            [76, 166, 137],
+            vec![Step::AppVolume {
+                target: "foreground".into(),
+                action: action.into(),
+                step: 5,
+                level,
+                include_children: true,
+            }],
+        );
     }
-    for (label, input, action) in [("Micro muet / rétabli", true, "toggle_mute"), ("Micro +5 %", true, "up"), ("Micro −5 %", true, "down"), ("Sortie +5 %", false, "up"), ("Sortie −5 %", false, "down")] {
-        add("Audio", label, "Volume du périphérique audio par défaut, différent du volume d'une application.", [76, 166, 137], vec![Step::DeviceVolume {
-            input, device: "default".into(), action: action.into(), step: 5, level: 50,
-        }]);
+    for (label, input, action) in [
+        ("Micro muet / rétabli", true, "toggle_mute"),
+        ("Micro +5 %", true, "up"),
+        ("Micro −5 %", true, "down"),
+        ("Sortie +5 %", false, "up"),
+        ("Sortie −5 %", false, "down"),
+    ] {
+        add(
+            "Audio",
+            label,
+            "Volume du périphérique audio par défaut, différent du volume d'une application.",
+            [76, 166, 137],
+            vec![Step::DeviceVolume {
+                input,
+                device: "default".into(),
+                action: action.into(),
+                step: 5,
+                level: 50,
+            }],
+        );
     }
     for (label, keys, description) in [
         (
@@ -421,8 +562,8 @@ pub fn presets() -> Vec<Preset> {
             Step::SetVariable {
                 name: "mode".into(),
                 value: "travail".into(),
-                    persistent: false,
-                },
+                persistent: false,
+            },
             Step::IfVariable {
                 name: "mode".into(),
                 value: "travail".into(),
@@ -445,27 +586,146 @@ pub fn presets() -> Vec<Preset> {
         let category = if label.starts_with("Discord") { "Streaming" } else { "Système" };
         add(category, label, description, [108, 154, 218], vec![Step::Hotkey { keys: keys.into() }]);
     }
-    add("Système", "Basculer 1 / 2", "Alterner deux actions à chaque appui sur cette touche.", [73, 160, 217], vec![Step::Toggle { a: vec![Step::Delay { ms: 100 }], b: vec![Step::Delay { ms: 200 }] }]);
-    add("Streaming", "Envoyer en UDP", "Envoie un message à un service local (vMix).", [76, 166, 137], vec![Step::UdpSend { host: "127.0.0.1".into(), port: 8099, text: "message".into() }]);
-    add("Streaming", "Requête HTTP", "Appelle une API HTTP locale (sans HTTPS).", [76, 166, 137], vec![Step::HttpRequest { method: "GET".into(), url: "http://127.0.0.1:8088/api".into(), body: String::new(), content_type: "text/plain".into() }]);
-    add("Streaming", "Jouer un son", "Lit un fichier WAV ou MP3 sans interrompre la macro (8 sons maximum).", [76, 166, 137], vec![Step::PlaySound { path: "choisir.wav".into(), volume: 100 }]);
-    add("Streaming", "Arrêter les sons", "Arrête les sons lancés par NovyDeck.", [76, 166, 137], vec![Step::StopSounds]);
-    add("Automatisations", "Si… sinon", "Choisit ALORS ou SINON suivant une condition Windows en lecture seule.", [158,116,224], vec![Step::IfCondition { condition: crate::conditions::Condition::default(), then_steps: vec![], else_steps: vec![] }]);
-    add("Automatisations", "Attendre que…", "Attend une condition en lecture seule pendant 5 secondes au plus.", [158,116,224], vec![Step::WaitUntil { condition: crate::conditions::Condition::default(), timeout_ms: 5000, poll_ms: 200 }]);
-    add("Automatisations", "Notification", "Affiche un message Windows sans voler le focus.", [158,116,224], vec![Step::Notify { title: "NovyDeck".into(), message: "Bonjour {nom}".into() }]);
+    add(
+        "Système",
+        "Basculer 1 / 2",
+        "Alterner deux actions à chaque appui sur cette touche.",
+        [73, 160, 217],
+        vec![Step::Toggle {
+            a: vec![Step::Delay { ms: 100 }],
+            b: vec![Step::Delay { ms: 200 }],
+        }],
+    );
+    add(
+        "Streaming",
+        "Envoyer en UDP",
+        "Envoie un message à un service local (vMix).",
+        [76, 166, 137],
+        vec![Step::UdpSend {
+            host: "127.0.0.1".into(),
+            port: 8099,
+            text: "message".into(),
+        }],
+    );
+    add(
+        "Streaming",
+        "Requête HTTP",
+        "Appelle une API HTTP locale (sans HTTPS).",
+        [76, 166, 137],
+        vec![Step::HttpRequest {
+            method: "GET".into(),
+            url: "http://127.0.0.1:8088/api".into(),
+            body: String::new(),
+            content_type: "text/plain".into(),
+        }],
+    );
+    add(
+        "Streaming",
+        "Jouer un son",
+        "Lit un fichier WAV ou MP3 sans interrompre la macro (8 sons maximum).",
+        [76, 166, 137],
+        vec![Step::PlaySound {
+            path: "choisir.wav".into(),
+            volume: 100,
+        }],
+    );
+    add(
+        "Streaming",
+        "Arrêter les sons",
+        "Arrête les sons lancés par NovyDeck.",
+        [76, 166, 137],
+        vec![Step::StopSounds],
+    );
+    add(
+        "Automatisations",
+        "Si… sinon",
+        "Choisit ALORS ou SINON suivant une condition Windows en lecture seule.",
+        [158, 116, 224],
+        vec![Step::IfCondition {
+            condition: crate::conditions::Condition::default(),
+            then_steps: vec![],
+            else_steps: vec![],
+        }],
+    );
+    add(
+        "Automatisations",
+        "Attendre que…",
+        "Attend une condition en lecture seule pendant 5 secondes au plus.",
+        [158, 116, 224],
+        vec![Step::WaitUntil {
+            condition: crate::conditions::Condition::default(),
+            timeout_ms: 5000,
+            poll_ms: 200,
+        }],
+    );
+    add(
+        "Automatisations",
+        "Notification",
+        "Affiche un message Windows sans voler le focus.",
+        [158, 116, 224],
+        vec![Step::Notify {
+            title: "NovyDeck".into(),
+            message: "Bonjour {nom}".into(),
+        }],
+    );
     drop(add);
     for (label, description, condition, true_label, false_label, color) in [
-        ("Micro coupé = icône rouge", "Le microphone muet affiche un état rouge, même après un changement externe.", crate::conditions::Condition::DeviceMuted { input: true, device: "default".into() }, "Micro coupé", "Micro actif", [215, 58, 69]),
-        ("Application muette", "Lit l'état muet de l'application au premier plan.", crate::conditions::Condition::AppMuted { exe: "foreground".into() }, "App muette", "App audible", [215, 58, 69]),
-        ("Casque branché", "Détecte un périphérique de sortie actif dont le nom contient Casque.", crate::conditions::Condition::AudioDevicePresent { name_contains: "Casque".into(), input: false }, "Casque branché", "Casque absent", [67, 158, 124]),
+        (
+            "Micro coupé = icône rouge",
+            "Le microphone muet affiche un état rouge, même après un changement externe.",
+            crate::conditions::Condition::DeviceMuted {
+                input: true,
+                device: "default".into(),
+            },
+            "Micro coupé",
+            "Micro actif",
+            [215, 58, 69],
+        ),
+        (
+            "Application muette",
+            "Lit l'état muet de l'application au premier plan.",
+            crate::conditions::Condition::AppMuted {
+                exe: "foreground".into(),
+            },
+            "App muette",
+            "App audible",
+            [215, 58, 69],
+        ),
+        (
+            "Casque branché",
+            "Détecte un périphérique de sortie actif dont le nom contient Casque.",
+            crate::conditions::Condition::AudioDevicePresent {
+                name_contains: "Casque".into(),
+                input: false,
+            },
+            "Casque branché",
+            "Casque absent",
+            [67, 158, 124],
+        ),
     ] {
-        items.push(Preset { category: "Audio", description,
-            key: Key { label: label.into(), color: [76, 166, 137],
+        items.push(Preset {
+            category: "Audio",
+            description,
+            key: Key {
+                label: label.into(),
+                color: [76, 166, 137],
                 steps: vec![Step::Delay { ms: 1 }],
-                state_display: Some(crate::model::StateDisplay { condition,
-                    on: crate::model::StateFace { label: Some(true_label.into()), image: Some("builtin:microphone".into()), color: Some(color) },
-                    off: crate::model::StateFace { label: Some(false_label.into()), ..Default::default() },
-                    ..Default::default() }), ..Key::default() } });
+                state_display: Some(crate::model::StateDisplay {
+                    condition,
+                    on: crate::model::StateFace {
+                        label: Some(true_label.into()),
+                        image: Some("builtin:microphone".into()),
+                        color: Some(color),
+                    },
+                    off: crate::model::StateFace {
+                        label: Some(false_label.into()),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }),
+                ..Key::default()
+            },
+        });
     }
     items
 }
@@ -643,8 +903,12 @@ pub struct Preferences {
     #[serde(skip)]
     pub removed_ha_triggers: usize,
 }
-fn default_chat_mode() -> String { "auto".into() }
-fn default_true() -> bool { true }
+fn default_chat_mode() -> String {
+    "auto".into()
+}
+fn default_true() -> bool {
+    true
+}
 
 /// Réglages de l'IA locale : `ollama` (serveur installé à part) ou `integre` (moteur livré).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -707,7 +971,10 @@ impl Preferences {
         p.removed_ha_triggers = before - p.triggers.len();
         p.legacy_home_assistant = None;
         ensure!(
-            p.library.schema == 1 && p.library.binds.len() <= 128 && p.triggers.len() <= 256 && p.triggers.iter().all(|t| t.validate().is_ok()),
+            p.library.schema == 1
+                && p.library.binds.len() <= 128
+                && p.triggers.len() <= 256
+                && p.triggers.iter().all(|t| t.validate().is_ok()),
             "Bibliothèque invalide"
         );
         Ok(p)
@@ -727,7 +994,8 @@ impl Preferences {
 }
 
 #[cfg(test)]
-mod tests {    #[test]
+mod tests {
+    #[test]
     fn legacy_0190_home_assistant_preferences_load_without_panic() {
         let dir = tempfile::tempdir().unwrap();
         let mut value = serde_json::to_value(Preferences::default()).unwrap();
@@ -742,8 +1010,13 @@ mod tests {    #[test]
         assert_eq!(p.triggers.len(), 1);
         assert_eq!(p.triggers[0].kind, "hotkey");
         assert_eq!(p.removed_ha_triggers, 1);
-        assert!(!serde_json::to_string(&p).unwrap().contains("home_assistant"));
-        let cond: crate::conditions::Condition = serde_json::from_str(r#"{"kind":"home_assistant_state","entity":"light.salon","op":"equals","value":"on"}"#).unwrap();
+        assert!(!serde_json::to_string(&p)
+            .unwrap()
+            .contains("home_assistant"));
+        let cond: crate::conditions::Condition = serde_json::from_str(
+            r#"{"kind":"home_assistant_state","entity":"light.salon","op":"equals","value":"on"}"#,
+        )
+        .unwrap();
         assert!(cond.summary().contains("retirée"));
     }
 
@@ -754,7 +1027,8 @@ mod tests {    #[test]
         assert!(!legacy.allow_connected_ai);
         let mut enabled = legacy;
         enabled.allow_connected_ai = true;
-        let loaded: Preferences = serde_json::from_str(&serde_json::to_string(&enabled).unwrap()).unwrap();
+        let loaded: Preferences =
+            serde_json::from_str(&serde_json::to_string(&enabled).unwrap()).unwrap();
         assert!(loaded.allow_connected_ai);
     }
     use super::*;
@@ -773,11 +1047,20 @@ mod tests {    #[test]
     #[test]
     fn native_browser_and_discord_presets_are_serializable_and_valid() {
         let presets = presets();
-        for label in ["Discord : Micro", "Discord : Casque", "Navigateur : Retour", "Navigateur : Suivant", "Navigateur : Actualiser"] {
+        for label in [
+            "Discord : Micro",
+            "Discord : Casque",
+            "Navigateur : Retour",
+            "Navigateur : Suivant",
+            "Navigateur : Actualiser",
+        ] {
             let p = presets.iter().find(|p| p.key.label == label).unwrap();
             validate_key(&p.key, &Config::default()).unwrap();
             let json = serde_json::to_string(&p.key).unwrap();
-            assert_eq!(serde_json::from_str::<Key>(&json).unwrap().steps, p.key.steps);
+            assert_eq!(
+                serde_json::from_str::<Key>(&json).unwrap().steps,
+                p.key.steps
+            );
         }
     }
     #[test]
@@ -800,7 +1083,8 @@ mod tests {    #[test]
     #[test]
     fn workshop_mode_is_backward_compatible_and_does_not_change_the_key() {
         let old = serde_json::to_value(Preferences::default()).unwrap();
-        let mut old = old.as_object().unwrap().clone(); old.remove("workshop_advanced");
+        let mut old = old.as_object().unwrap().clone();
+        old.remove("workshop_advanced");
         let mut prefs: Preferences = serde_json::from_value(old.into()).unwrap();
         assert!(!prefs.workshop_advanced);
         let key = action(4, "Bureau");
@@ -837,8 +1121,13 @@ mod clipboard_preset_tests {
     use super::*;
     #[test]
     fn plain_paste_reads_copies_then_pastes() {
-        let preset = presets().into_iter().find(|p| p.key.label == "Coller sans mise en forme").unwrap();
-        assert!(matches!(&preset.key.steps[..], [Step::Clipboard { op: read, name, .. }, Step::Clipboard { op: copy, value, .. }, Step::Hotkey { keys }] if read == "read_to_variable" && name == "texte_colle" && copy == "copy_text" && value == "{texte_colle}" && keys == "CTRL+V"));
+        let preset = presets()
+            .into_iter()
+            .find(|p| p.key.label == "Coller sans mise en forme")
+            .unwrap();
+        assert!(
+            matches!(&preset.key.steps[..], [Step::Clipboard { op: read, name, .. }, Step::Clipboard { op: copy, value, .. }, Step::Hotkey { keys }] if read == "read_to_variable" && name == "texte_colle" && copy == "copy_text" && value == "{texte_colle}" && keys == "CTRL+V")
+        );
         validate_key(&preset.key, &Config::default()).unwrap();
     }
 }

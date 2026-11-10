@@ -15,8 +15,12 @@ jobs:
           node-version: '24'
       - name: Verify plugin fixture runtime
         run: node -e "if (typeof WebSocket !== 'function') process.exit(1)"
+      - name: Formatting (cargo fmt, C-02)
+        run: cargo fmt --check
       - name: Build native executables
         run: cargo build --release --locked
+      - name: Clippy (C-05 ; erreurs bloquantes, avertissements de style signalés)
+        run: cargo clippy --release --locked --all-targets
       - name: Rust and headless MCP tests
         timeout-minutes: 15
         env:

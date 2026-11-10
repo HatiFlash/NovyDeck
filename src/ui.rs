@@ -1,3 +1,6 @@
+use crate::i18n::{tr, trf};
+use crate::iconset::{self, Family, Ico};
+use crate::motion;
 use crate::{
     catalog::{self, Library, Preferences},
     control::{Decision, InputGate, LongPress},
@@ -8,9 +11,6 @@ use crate::{
     theme::{self, *},
     Event,
 };
-use crate::iconset::{self, Family, Ico};
-use crate::motion;
-use crate::i18n::{tr, trf};
 use eframe::egui::{self, Color32, RichText, Vec2};
 use std::{
     collections::{HashMap, VecDeque},
@@ -33,86 +33,152 @@ mod key_preview;
 #[path = "ui_appearance.rs"]
 mod appearance;
 
-#[path = "ui_plugin_store.rs"]
-mod plugin_store_ui;
-#[path = "ui_plugin_market.rs"]
-mod plugin_market_ui;
 #[path = "ui_plugin_management.rs"]
 mod plugin_management_ui;
+#[path = "ui_plugin_market.rs"]
+mod plugin_market_ui;
+#[path = "ui_plugin_store.rs"]
+mod plugin_store_ui;
 #[path = "ui_plugin_validation.rs"]
 mod plugin_validation_harness;
 pub(crate) use plugin_validation_harness::validate_oracle;
 #[cfg(test)]
 pub(crate) use plugin_validation_harness::{validate_restart_persistence, validate_witness};
 
-#[path = "ui_workshop_chat.rs"]
-mod workshop_chat_ui;
 #[path = "ui_plugin_blocks.rs"]
 mod plugin_blocks;
 #[path = "ui_plugin_state.rs"]
 mod ui_plugin_state;
+#[path = "ui_workshop_chat.rs"]
+mod workshop_chat_ui;
 
-#[derive(Default,Clone)]
-struct PluginFace { title:String, image_bytes:Option<Vec<u8>>, state:u8, flash:Option<(bool,Instant)>, version:u64 }
+#[derive(Default, Clone)]
+struct PluginFace {
+    title: String,
+    image_bytes: Option<Vec<u8>>,
+    state: u8,
+    flash: Option<(bool, Instant)>,
+    version: u64,
+}
 #[cfg(test)]
 #[test]
 fn plugin_image_formats_and_limits() {
-    assert_eq!(decode_plugin_image("").unwrap(),None);
+    assert_eq!(decode_plugin_image("").unwrap(), None);
     assert_eq!(decode_plugin_image("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16'/></svg>").unwrap().unwrap()[0],b'<');
     assert!(decode_plugin_image("data:image/png;base64,????").is_err());
     assert!(decode_plugin_image("data:text/html;base64,PHA+").is_err());
     assert!(decode_plugin_image(&"x".repeat(2_000_001)).is_err());
 }
-fn decode_plugin_image(value:&str)->anyhow::Result<Option<Vec<u8>>> {
+fn decode_plugin_image(value: &str) -> anyhow::Result<Option<Vec<u8>>> {
     use base64::Engine as _;
-    if value.is_empty() {return Ok(None);}
-    let bytes=if let Some((mime,payload))=value.split_once(",") {
-        anyhow::ensure!(matches!(mime,"data:image/png;base64"|"data:image/jpeg;base64"|"data:image/svg+xml;base64"),"Format d'image non pris en charge");
-        anyhow::ensure!(payload.len()<=2_000_000,"Image trop volumineuse");
+    if value.is_empty() {
+        return Ok(None);
+    }
+    let bytes = if let Some((mime, payload)) = value.split_once(",") {
+        anyhow::ensure!(
+            matches!(
+                mime,
+                "data:image/png;base64" | "data:image/jpeg;base64" | "data:image/svg+xml;base64"
+            ),
+            "Format d'image non pris en charge"
+        );
+        anyhow::ensure!(payload.len() <= 2_000_000, "Image trop volumineuse");
         base64::engine::general_purpose::STANDARD.decode(payload)?
-    }else{
-        anyhow::ensure!(value.trim_start().starts_with("<svg") && value.len()<=2_000_000,"SVG invalide");
+    } else {
+        anyhow::ensure!(
+            value.trim_start().starts_with("<svg") && value.len() <= 2_000_000,
+            "SVG invalide"
+        );
         value.as_bytes().to_vec()
     };
-    anyhow::ensure!(bytes.len()<=1_500_000,"Image trop volumineuse");
-    crate::assets::decode_image(&bytes,512)?;
+    anyhow::ensure!(bytes.len() <= 1_500_000, "Image trop volumineuse");
+    crate::assets::decode_image(&bytes, 512)?;
     Ok(Some(bytes))
 }
 type DialogEffect = Box<dyn FnOnce(&mut App) + Send>;
 type StepTarget = (usize, String, usize, Vec<usize>);
 fn choose_step_file(tx: Sender<Option<DialogEffect>>, target: StepTarget, executable: bool) {
     std::thread::spawn(move || {
-        let path = rfd::FileDialog::new().add_filter(if executable {"AutoHotkey"} else {"Application"},
-            if executable { &["exe"][..] } else { &["exe", "com"][..] }).pick_file();
-        let _ = tx.send(path.map(|path| Box::new(move |app: &mut App| {
-            let (profile,page,key,step_path)=target;
-            if let Some(step)=app.config.profiles.get_mut(profile)
-                .and_then(|p|p.keys_at_mut(&page)).and_then(|keys|keys.get_mut(key))
-                .and_then(|key|extras::step_mut(&mut key.steps,&step_path)) {
-                match step {
-                    Step::Launch {program,..} if !executable => *program=path.to_string_lossy().into_owned(),
-                    Step::AutoHotkey {executable: file,..} if executable => *file=path.to_string_lossy().into_owned(),
-                    _ => return,
+        let path = rfd::FileDialog::new()
+            .add_filter(
+                if executable {
+                    "AutoHotkey"
+                } else {
+                    "Application"
+                },
+                if executable {
+                    &["exe"][..]
+                } else {
+                    &["exe", "com"][..]
+                },
+            )
+            .pick_file();
+        let _ = tx.send(path.map(|path| {
+            Box::new(move |app: &mut App| {
+                let (profile, page, key, step_path) = target;
+                if let Some(step) = app
+                    .config
+                    .profiles
+                    .get_mut(profile)
+                    .and_then(|p| p.keys_at_mut(&page))
+                    .and_then(|keys| keys.get_mut(key))
+                    .and_then(|key| extras::step_mut(&mut key.steps, &step_path))
+                {
+                    match step {
+                        Step::Launch { program, .. } if !executable => {
+                            *program = path.to_string_lossy().into_owned()
+                        }
+                        Step::AutoHotkey {
+                            executable: file, ..
+                        } if executable => *file = path.to_string_lossy().into_owned(),
+                        _ => return,
+                    }
+                    app.edited();
                 }
-                app.edited();
-            }
-        }) as DialogEffect));
+            }) as DialogEffect
+        }));
     });
 }
 
 fn choose_profile(config: &Config, exe: Option<&str>, base: usize) -> usize {
-    if !config.auto_profile { return base; }
-    exe.and_then(|exe| config.profiles.iter().position(|profile|
-        profile.apps.iter().any(|name| !name.trim().is_empty() && name.trim().eq_ignore_ascii_case(exe))))
-        .unwrap_or(base)
+    if !config.auto_profile {
+        return base;
+    }
+    exe.and_then(|exe| {
+        config.profiles.iter().position(|profile| {
+            profile
+                .apps
+                .iter()
+                .any(|name| !name.trim().is_empty() && name.trim().eq_ignore_ascii_case(exe))
+        })
+    })
+    .unwrap_or(base)
 }
-struct SleepState { last: Instant, sleeping: bool }
+struct SleepState {
+    last: Instant,
+    sleeping: bool,
+}
 impl SleepState {
-    fn new(now: Instant) -> Self { Self { last: now, sleeping: false } }
-    fn activity(&mut self, now: Instant) { self.last = now; self.sleeping = false; }
+    fn new(now: Instant) -> Self {
+        Self {
+            last: now,
+            sleeping: false,
+        }
+    }
+    fn activity(&mut self, now: Instant) {
+        self.last = now;
+        self.sleeping = false;
+    }
     fn due(&mut self, now: Instant, minutes: u16) -> bool {
-        if minutes == 0 || self.sleeping || now.saturating_duration_since(self.last) < Duration::from_secs(u64::from(minutes) * 60) { return false; }
-        self.sleeping = true; true
+        if minutes == 0
+            || self.sleeping
+            || now.saturating_duration_since(self.last)
+                < Duration::from_secs(u64::from(minutes) * 60)
+        {
+            return false;
+        }
+        self.sleeping = true;
+        true
     }
     fn press(&mut self, now: Instant) -> bool {
         let wake = self.sleeping;
@@ -122,25 +188,59 @@ impl SleepState {
 }
 
 #[derive(Clone)]
-struct DeviceGrid { name: String, keys: usize, rows: usize, cols: usize, experimental: bool }
+struct DeviceGrid {
+    name: String,
+    keys: usize,
+    rows: usize,
+    cols: usize,
+    experimental: bool,
+}
 /// A video import that is waiting for FFmpeg to be installed.
 #[derive(Clone)]
-struct FfmpegOffer { video: PathBuf, assets: PathBuf, size: u32, profile: usize, page: String, index: usize }
+struct FfmpegOffer {
+    video: PathBuf,
+    assets: PathBuf,
+    size: u32,
+    profile: usize,
+    page: String,
+    index: usize,
+}
 impl Default for DeviceGrid {
-    fn default() -> Self { Self { name: "Aucun périphérique".into(), keys: 15, rows: 3, cols: 5, experimental: false } }
+    fn default() -> Self {
+        Self {
+            name: "Aucun périphérique".into(),
+            keys: 15,
+            rows: 3,
+            cols: 5,
+            experimental: false,
+        }
+    }
 }
 impl DeviceGrid {
     fn new(name: String, keys: u8, rows: u8, cols: u8, experimental: bool) -> Option<Self> {
         let (keys, rows, cols) = (keys as usize, rows as usize, cols as usize);
-        (keys > 0 && keys <= 32 && rows > 0 && cols > 0 && rows * cols == keys)
-            .then_some(Self { name, keys, rows, cols, experimental })
+        (keys > 0 && keys <= 32 && rows > 0 && cols > 0 && rows * cols == keys).then_some(Self {
+            name,
+            keys,
+            rows,
+            cols,
+            experimental,
+        })
     }
-    fn total_width(&self, width: f32) -> f32 { width * self.cols as f32 + 14.0 * (self.cols - 1) as f32 + 48.0 }
-    fn total_height(&self, width: f32) -> f32 { width * self.rows as f32 + 14.0 * (self.rows - 1) as f32 + 68.0 }
+    fn total_width(&self, width: f32) -> f32 {
+        width * self.cols as f32 + 14.0 * (self.cols - 1) as f32 + 48.0
+    }
+    fn total_height(&self, width: f32) -> f32 {
+        width * self.rows as f32 + 14.0 * (self.rows - 1) as f32 + 68.0
+    }
     fn key_width(&self, available_width: f32, available_height: f32) -> f32 {
         ((available_width - 48.0 - 14.0 * (self.cols - 1) as f32) / self.cols as f32)
-            .min((available_height - 68.0) / self.rows as f32 - 14.0 * (self.rows - 1) as f32 / self.rows as f32)
-            .floor().clamp(40.0, 320.0)
+            .min(
+                (available_height - 68.0) / self.rows as f32
+                    - 14.0 * (self.rows - 1) as f32 / self.rows as f32,
+            )
+            .floor()
+            .clamp(40.0, 320.0)
     }
 }
 pub struct App {
@@ -213,7 +313,7 @@ pub struct App {
     block_inspector_nonce: u64,
     plugin_faces: HashMap<String, PluginFace>,
     plugin_states: crate::plugin_state_display::Cache,
-    plugin_errors: HashMap<String,String>,
+    plugin_errors: HashMap<String, String>,
     /// Demandes externes capturées dans une App de validation ; jamais exécutées.
     plugin_external_effects: Option<Vec<String>>,
     plugin_report_cache: HashMap<String, Option<crate::plugin_validation::Report>>,
@@ -333,7 +433,9 @@ impl DragVisual {
     fn label(&self) -> String {
         match &self.item {
             DragItem::Bind(k) | DragItem::Action(k) => k.label.clone(),
-            DragItem::Position(_, _, i) => trf("Touche {key}", &[("key", &format!("{:02}", i + 1))]),
+            DragItem::Position(_, _, i) => {
+                trf("Touche {key}", &[("key", &format!("{:02}", i + 1))])
+            }
             DragItem::NewFolder => tr("Nouveau dossier").into(),
         }
     }
@@ -344,7 +446,9 @@ impl DragVisual {
         }
     }
     fn advance(&mut self, now: f64, enabled: bool) -> bool {
-        if !enabled { return false; }
+        if !enabled {
+            return false;
+        }
         let dt = (now - self.last).clamp(0.0, 0.05) as f32;
         self.last = now;
         if self.phase == 0 {
@@ -355,41 +459,99 @@ impl DragVisual {
         } else {
             let duration = if self.phase == 1 { 0.16 } else { 0.20 };
             let t = ((now - self.started) / duration) as f32;
-            self.center = self.center.lerp(self.goal, motion::ease_out(t).max(1.0 - (-dt * 30.0).exp()));
+            self.center = self
+                .center
+                .lerp(self.goal, motion::ease_out(t).max(1.0 - (-dt * 30.0).exp()));
             t < if self.phase == 1 { 3.0 } else { 1.0 }
         }
     }
     fn paint(&self, ctx: &egui::Context, now: f64) {
         let p = theme::palette(ctx);
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("drag_visual")));
-        let t = if self.phase == 0 { 0.0 } else { ((now - self.started) / if self.phase == 1 { 0.16 } else { 0.20 }) as f32 };
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new("drag_visual"),
+        ));
+        let t = if self.phase == 0 {
+            0.0
+        } else {
+            ((now - self.started) / if self.phase == 1 { 0.16 } else { 0.20 }) as f32
+        };
         let eased = motion::ease_out(t);
         let alpha = if self.phase == 2 { 1.0 - eased } else { 1.0 };
-        let scale = if self.phase == 1 { 1.05 - 0.65 * eased } else { 1.05 };
+        let scale = if self.phase == 1 {
+            1.05 - 0.65 * eased
+        } else {
+            1.05
+        };
         let size = Vec2::new(190.0, 56.0) * scale;
         let rect = egui::Rect::from_center_size(self.center, size);
         if self.phase != 1 || t < 1.0 {
             // Soft layered shadow, then a subtly tilted card.
             for (spread, opacity) in [(13.0, 0.045), (7.0, 0.09), (3.0, 0.13)] {
-                painter.rect_filled(rect.translate(Vec2::new(0.0, 6.0)).expand(spread), 13.0 + spread, Color32::BLACK.gamma_multiply(alpha * opacity));
+                painter.rect_filled(
+                    rect.translate(Vec2::new(0.0, 6.0)).expand(spread),
+                    13.0 + spread,
+                    Color32::BLACK.gamma_multiply(alpha * opacity),
+                );
             }
             let tilt = 0.070_f32;
             let c = self.center;
-            let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
-            let rotated: Vec<_> = corners.iter().map(|v| { let d = *v - c; c + Vec2::new(d.x - d.y * tilt, d.y + d.x * tilt) }).collect();
-            painter.add(egui::Shape::convex_polygon(rotated, p.raised.gamma_multiply(alpha), egui::Stroke::new(1.0, p.accent.gamma_multiply(alpha * 0.55))));
+            let corners = [
+                rect.left_top(),
+                rect.right_top(),
+                rect.right_bottom(),
+                rect.left_bottom(),
+            ];
+            let rotated: Vec<_> = corners
+                .iter()
+                .map(|v| {
+                    let d = *v - c;
+                    c + Vec2::new(d.x - d.y * tilt, d.y + d.x * tilt)
+                })
+                .collect();
+            painter.add(egui::Shape::convex_polygon(
+                rotated,
+                p.raised.gamma_multiply(alpha),
+                egui::Stroke::new(1.0, p.accent.gamma_multiply(alpha * 0.55)),
+            ));
             let icon = self.icon();
-            let badge = egui::Rect::from_center_size(self.center - Vec2::new(size.x * 0.36, 0.0), Vec2::splat(36.0 * scale));
-            painter.rect_filled(badge, 9.0, iconset::family_color(ctx, icon).gamma_multiply(alpha * 0.22));
-            iconset::paint(&painter, badge.center(), 23.0 * scale, icon, icon.family(), alpha, 15);
-            painter.text(self.center + Vec2::new(-size.x * 0.23, 0.0), egui::Align2::LEFT_CENTER, self.label(), egui::FontId::proportional(13.0 * scale), p.ink.gamma_multiply(alpha));
+            let badge = egui::Rect::from_center_size(
+                self.center - Vec2::new(size.x * 0.36, 0.0),
+                Vec2::splat(36.0 * scale),
+            );
+            painter.rect_filled(
+                badge,
+                9.0,
+                iconset::family_color(ctx, icon).gamma_multiply(alpha * 0.22),
+            );
+            iconset::paint(
+                &painter,
+                badge.center(),
+                23.0 * scale,
+                icon,
+                icon.family(),
+                alpha,
+                15,
+            );
+            painter.text(
+                self.center + Vec2::new(-size.x * 0.23, 0.0),
+                egui::Align2::LEFT_CENTER,
+                self.label(),
+                egui::FontId::proportional(13.0 * scale),
+                p.ink.gamma_multiply(alpha),
+            );
         }
         if self.phase == 1 {
             if let Some((_, target)) = self.target {
                 let pulse = ((now - self.started - 0.16) / 0.32) as f32;
                 if (0.0..1.0).contains(&pulse) {
                     let ring = target.expand(3.0 + 14.0 * motion::ease_out(pulse));
-                    painter.rect_stroke(ring, 12.0, egui::Stroke::new(2.0, p.accent.gamma_multiply(1.0 - pulse)), egui::StrokeKind::Outside);
+                    painter.rect_stroke(
+                        ring,
+                        12.0,
+                        egui::Stroke::new(2.0, p.accent.gamma_multiply(1.0 - pulse)),
+                        egui::StrokeKind::Outside,
+                    );
                 }
             }
         }
@@ -416,7 +578,11 @@ impl App {
     }
     /// `configure_variables=false` keeps the process-wide saved variables untouched; used by the
     /// background plugin validation, which runs while the real application is open.
-    fn init_with(ctx: &egui::Context, override_path: Option<PathBuf>, configure_variables: bool) -> Self {
+    fn init_with(
+        ctx: &egui::Context,
+        override_path: Option<PathBuf>,
+        configure_variables: bool,
+    ) -> Self {
         let isolated = override_path.is_some();
         let _ = motion::system_animations();
         theme::install(ctx);
@@ -430,7 +596,7 @@ impl App {
             store::load(&path).unwrap_or_else(|e| {
                 load_error = Some(trf(
                     "Configuration illisible : {error}. Importe une sauvegarde pour la récupérer.",
-                    &[("error", &e)]
+                    &[("error", &e)],
                 ));
                 Config::default()
             })
@@ -438,8 +604,13 @@ impl App {
             Config::default()
         };
         if !configure_variables {
-        } else if let Err(e) = crate::persistent_variables::configure(&path.with_file_name("variables.json")) {
-            load_error = Some(trf("Variables enregistrées illisibles : {error}", &[("error", &e)]));
+        } else if let Err(e) =
+            crate::persistent_variables::configure(&path.with_file_name("variables.json"))
+        {
+            load_error = Some(trf(
+                "Variables enregistrées illisibles : {error}",
+                &[("error", &e)],
+            ));
         }
         let smoke = !isolated && std::env::args().any(|a| a == "--ui-smoke");
         let preferences_path = path.with_file_name("preferences.json");
@@ -447,12 +618,16 @@ impl App {
         let preferences_result = Preferences::load(&preferences_path);
         let preferences_valid = preferences_result.is_ok();
         let mut preferences = preferences_result.unwrap_or_default();
-        let whats_new_notes = include_str!(concat!(env!("OUT_DIR"), "/release_notes.md")).to_owned();
+        let whats_new_notes =
+            include_str!(concat!(env!("OUT_DIR"), "/release_notes.md")).to_owned();
         let startup_prompts = !isolated && !smoke && !cfg!(test);
-        let whats_new = startup_prompts && Self::needs_whats_new(&preferences, preferences_existed, &whats_new_notes);
+        let whats_new = startup_prompts
+            && Self::needs_whats_new(&preferences, preferences_existed, &whats_new_notes);
         crate::i18n::set_language(crate::i18n::resolve(&preferences.language));
         #[cfg(test)]
-        if isolated && preferences.language.is_empty() { crate::i18n::set_language("fr"); }
+        if isolated && preferences.language.is_empty() {
+            crate::i18n::set_language("fr");
+        }
         if std::env::args().any(|a| a == "--light") {
             preferences.dark = false;
         }
@@ -470,7 +645,11 @@ impl App {
             crate::audio::spawn(tx.clone());
             Some(crate::desktop::spawn(tx.clone(), ctx.clone()))
         };
-        let state_monitor = if isolated || smoke { mpsc::channel().0 } else { crate::state_display::spawn(tx.clone()) };
+        let state_monitor = if isolated || smoke {
+            mpsc::channel().0
+        } else {
+            crate::state_display::spawn(tx.clone())
+        };
         let engine = Engine::new(tx);
         let mut gate = InputGate::default();
         let ui_test = isolated || std::env::args().any(|a| a == "--ui-test");
@@ -484,7 +663,9 @@ impl App {
             crate::mcp_server::Server::new(path.with_file_name("mcp-connection.json")).ok()
         };
         if preferences_valid && !isolated && preferences.allow_connected_ai {
-            if let Some(server) = &assistant { server.set_enabled(true); }
+            if let Some(server) = &assistant {
+                server.set_enabled(true);
+            }
         }
         let (dialog_tx, dialog_rx) = mpsc::channel();
         let mut app = Self {
@@ -502,7 +683,11 @@ impl App {
             engine,
             device,
             events,
-            state_monitor, state_generation: 0, state_values: [None; 32], toggle_faces: std::collections::HashMap::new(), device_model: None,
+            state_monitor,
+            state_generation: 0,
+            state_values: [None; 32],
+            toggle_faces: std::collections::HashMap::new(),
+            device_model: None,
             gate,
             long_press: LongPress::default(),
             physical_down: [false; 32],
@@ -557,7 +742,15 @@ impl App {
             plugin_real_confirmation: None,
             plugin_inventory: None,
             plugin_management: Default::default(),
-            plugins: if isolated || smoke { None } else { Some(crate::plugin_runtime::Manager::new(crate::plugin_import::installed_root().map(|root|crate::plugin_import::inventory(&root)).unwrap_or_default())) },
+            plugins: if isolated || smoke {
+                None
+            } else {
+                Some(crate::plugin_runtime::Manager::new(
+                    crate::plugin_import::installed_root()
+                        .map(|root| crate::plugin_import::inventory(&root))
+                        .unwrap_or_default(),
+                ))
+            },
             assistant,
             proposals: Default::default(),
             assistant_cache: HashMap::new(),
@@ -596,7 +789,11 @@ impl App {
             running_block: vec![],
             workshop_journal: Default::default(),
             open_requested: false,
-            hide_frames: if !cfg!(test) && std::env::args().any(|a| a == "--background") { 3 } else { 0 },
+            hide_frames: if !cfg!(test) && std::env::args().any(|a| a == "--background") {
+                3
+            } else {
+                0
+            },
             tray_ready: false,
             quitting: false,
             show_workflow: false,
@@ -634,10 +831,16 @@ impl App {
             icon_selected: None,
             icon_notice: String::new(),
             assistant_request: String::new(),
-            flicker: None, flicker_path: None, diagnostic_deck: None, diagnostic_inspector: None, diagnostic_key_width: 0.0,
+            flicker: None,
+            flicker_path: None,
+            diagnostic_deck: None,
+            diagnostic_inspector: None,
+            diagnostic_key_width: 0.0,
         };
         if let Some(desktop) = &app.desktop {
-            let _ = desktop.tx.send(crate::desktop::Command::Triggers(app.preferences.triggers.clone()));
+            let _ = desktop.tx.send(crate::desktop::Command::Triggers(
+                app.preferences.triggers.clone(),
+            ));
         }
         if let Some(e) = load_error {
             app.fail(e);
@@ -648,13 +851,18 @@ impl App {
         if !preferences_valid {
             app.fail(tr("Préférences illisibles : le fichier est conservé. Restaure preferences.json.bak avant d’enregistrer mes raccourcis enregistrés.").into());
         }
-        if app.startup_prompts && !app.whats_new && app.preferences.last_seen_version != env!("CARGO_PKG_VERSION") {
+        if app.startup_prompts
+            && !app.whats_new
+            && app.preferences.last_seen_version != env!("CARGO_PKG_VERSION")
+        {
             app.preferences.last_seen_version = env!("CARGO_PKG_VERSION").into();
             app.save_preferences();
         }
         if app.startup_prompts && !app.path.with_file_name("legacy-ha-notice.seen").exists() {
             app.legacy_ha_keys = crate::conditions::legacy_ha_keys(&app.config);
-            if !app.legacy_ha_keys.is_empty() { app.log(trf("{count} touche(s) utilisent encore une condition Home Assistant retirée : utilise le plugin Home Assistant.", &[("count", &app.legacy_ha_keys.len())])); }
+            if !app.legacy_ha_keys.is_empty() {
+                app.log(trf("{count} touche(s) utilisent encore une condition Home Assistant retirée : utilise le plugin Home Assistant.", &[("count", &app.legacy_ha_keys.len())]));
+            }
         }
         app.refresh_hotkeys();
         app.sync_state_display();
@@ -663,11 +871,14 @@ impl App {
     fn needs_whats_new(preferences: &Preferences, existed: bool, notes: &str) -> bool {
         preferences.last_seen_version != env!("CARGO_PKG_VERSION")
             && !(preferences.last_seen_version.is_empty() && !existed)
-            && !crate::app_update::release_notes(notes, crate::i18n::resolve(&preferences.language)).is_empty()
+            && !crate::app_update::release_notes(notes, crate::i18n::resolve(&preferences.language))
+                .is_empty()
     }
     fn start_update_check(&mut self, ctx: &egui::Context, startup: bool) {
         if startup {
-            if self.startup_checked { return; }
+            if self.startup_checked {
+                return;
+            }
             self.startup_checked = true;
             let (tx, rx) = mpsc::channel();
             self.startup_rx = Some(rx);
@@ -685,7 +896,8 @@ impl App {
             self.update_rx = Some(rx);
             let context = ctx.clone();
             std::thread::spawn(move || {
-                let result = crate::app_update::check().map_err(|e| trf("Vérification impossible : {error}", &[("error", &e)]));
+                let result = crate::app_update::check()
+                    .map_err(|e| trf("Vérification impossible : {error}", &[("error", &e)]));
                 let _ = tx.send(about::UpdateEvent::Checked(result));
                 context.request_repaint();
             });
@@ -693,7 +905,12 @@ impl App {
     }
     fn open_hardware_report(&mut self) {
         self.hardware_report = Some(crate::hardware_report::collect(
-            &self.path, &self.status, &self.device_label(), self.gate.connected, &self.logs));
+            &self.path,
+            &self.status,
+            &self.device_label(),
+            self.gate.connected,
+            &self.logs,
+        ));
     }
     fn log(&mut self, s: String) {
         while self.logs.len() >= 300 {
@@ -711,26 +928,49 @@ impl App {
         self.error = true;
     }
     fn toggle_face_id(&self, index: usize) -> String {
-        crate::engine::identity(&self.config.profiles[self.config.active].name, &self.config.page, index)
+        crate::engine::identity(
+            &self.config.profiles[self.config.active].name,
+            &self.config.page,
+            index,
+        )
     }
     fn sync_state_display(&mut self) {
         self.state_generation = self.state_generation.wrapping_add(1);
         self.state_values = [None; 32];
         for index in 0..self.config.keys().len().min(self.state_values.len()) {
-            if self.config.keys()[index].plugin_state.is_none() && self.config.keys()[index].state_display.as_ref().is_some_and(|s| s.toggle) {
-                self.state_values[index] = Some(*self.toggle_faces.get(&self.toggle_face_id(index)).unwrap_or(&false));
+            if self.config.keys()[index].plugin_state.is_none()
+                && self.config.keys()[index]
+                    .state_display
+                    .as_ref()
+                    .is_some_and(|s| s.toggle)
+            {
+                self.state_values[index] = Some(
+                    *self
+                        .toggle_faces
+                        .get(&self.toggle_face_id(index))
+                        .unwrap_or(&false),
+                );
             }
         }
         let _ = self.state_monitor.send(crate::state_display::Command::Page(
-            self.state_generation, self.config.keys().clone()));
+            self.state_generation,
+            self.config.keys().clone(),
+        ));
     }
-    fn state_key(&self,index:usize,key:Key)->Key {self.state_key_in(&self.config,index,key)}
+    fn state_key(&self, index: usize, key: Key) -> Key {
+        self.state_key_in(&self.config, index, key)
+    }
     fn state_key_in(&self, config: &Config, index: usize, key: Key) -> Key {
         if key.plugin_state.is_some() {
             return self.plugin_states.apply(config, index, &key);
         }
-        match (key.state_display.clone(), self.state_values.get(index).copied().flatten()) {
-            (Some(display), active) if display.toggle => display.apply(&key, active.unwrap_or(false)),
+        match (
+            key.state_display.clone(),
+            self.state_values.get(index).copied().flatten(),
+        ) {
+            (Some(display), active) if display.toggle => {
+                display.apply(&key, active.unwrap_or(false))
+            }
             (Some(display), Some(active)) => display.apply(&key, active),
             _ => key,
         }
@@ -738,43 +978,91 @@ impl App {
     fn toggle_key_face(&mut self, index: usize) {
         if let Some(key) = self.applied.keys().get(index) {
             if key.plugin_state.is_some() {
-                if self.plugin_states.toggle_local(&self.applied, index, key).is_some() {
+                if self
+                    .plugin_states
+                    .toggle_local(&self.applied, index, key)
+                    .is_some()
+                {
                     self.send_state_face(index);
                 }
                 return;
             }
         }
-        if self.applied.keys().get(index).is_some_and(|key| key.plugin_state.is_none() && key.state_display.as_ref().is_some_and(|state| state.toggle)) {
+        if self.applied.keys().get(index).is_some_and(|key| {
+            key.plugin_state.is_none()
+                && key.state_display.as_ref().is_some_and(|state| state.toggle)
+        }) {
             self.state_values[index] = Some(!self.state_values[index].unwrap_or(false));
-            self.toggle_faces.insert(self.toggle_face_id(index), self.state_values[index].unwrap());
+            self.toggle_faces.insert(
+                self.toggle_face_id(index),
+                self.state_values[index].unwrap(),
+            );
             self.send_state_face(index);
         }
     }
     fn send_state_face(&self, index: usize) {
-        if !self.wanted || !self.gate.connected || self.gate.dirty || self.pending.is_some()
-            || self.sleep.sleeping || index >= self.device_keys() || index >= self.applied.keys().len() { return; }
+        if !self.wanted
+            || !self.gate.connected
+            || self.gate.dirty
+            || self.pending.is_some()
+            || self.sleep.sleeping
+            || index >= self.device_keys()
+            || index >= self.applied.keys().len()
+        {
+            return;
+        }
         let key = self.state_key_in(&self.applied, index, self.applied.keys()[index].clone());
         let face = self.plugin_face(index);
-        let key = if let Some(face)=face {self.plugin_render_key(index,key,face,&self.applied)} else {key};
+        let key = if let Some(face) = face {
+            self.plugin_render_key(index, key, face, &self.applied)
+        } else {
+            key
+        };
         if let Ok(font) = crate::key_render::font() {
-            if let Ok(jpeg) = crate::key_render::for_plugin(&key, self.applied.image_size, &font, self.plugin_image_bytes(index, face, &self.applied), None) {
+            if let Ok(jpeg) = crate::key_render::for_plugin(
+                &key,
+                self.applied.image_size,
+                &font,
+                self.plugin_image_bytes(index, face, &self.applied),
+                None,
+            ) {
                 let _ = self.device.send(Command::KeyImage(index, jpeg));
             }
         }
     }
     fn send_edited_plugin_face(&self, index: usize) {
-        if !self.wanted || !self.gate.connected || self.pending.is_some() || self.sleep.sleeping
-            || self.config.active != self.applied.active || self.config.page != self.applied.page
-            || index >= self.device_keys() { return; }
-        let Some(key) = self.config.keys().get(index) else { return };
-        let Some(target) = key.plugin_state.as_ref() else { return };
-        let Some(applied) = self.applied.keys().get(index) else { return };
+        if !self.wanted
+            || !self.gate.connected
+            || self.pending.is_some()
+            || self.sleep.sleeping
+            || self.config.active != self.applied.active
+            || self.config.page != self.applied.page
+            || index >= self.device_keys()
+        {
+            return;
+        }
+        let Some(key) = self.config.keys().get(index) else {
+            return;
+        };
+        let Some(target) = key.plugin_state.as_ref() else {
+            return;
+        };
+        let Some(applied) = self.applied.keys().get(index) else {
+            return;
+        };
         if key.state_display == applied.state_display
             || crate::plugin_state_display::source(&self.config, index, target)
-                != applied.plugin_state.as_ref().and_then(|target| crate::plugin_state_display::source(&self.applied, index, target)) { return; }
+                != applied.plugin_state.as_ref().and_then(|target| {
+                    crate::plugin_state_display::source(&self.applied, index, target)
+                })
+        {
+            return;
+        }
         let presented = self.state_key_in(&self.config, index, key.clone());
         if let Ok(font) = crate::key_render::font() {
-            if let Ok(jpeg) = crate::key_render::for_plugin(&presented, self.config.image_size, &font, None, None) {
+            if let Ok(jpeg) =
+                crate::key_render::for_plugin(&presented, self.config.image_size, &font, None, None)
+            {
                 let _ = self.device.send(Command::KeyImage(index, jpeg));
             }
         }
@@ -788,7 +1076,9 @@ impl App {
         self.last_edit = Instant::now();
         let was_sleeping = self.sleep.sleeping;
         self.sleep.activity(self.last_edit);
-        if was_sleeping { self.wake_display(); }
+        if was_sleeping {
+            self.wake_display();
+        }
     }
     fn upload(&mut self, connect: bool) {
         self.long_press.clear();
@@ -801,9 +1091,14 @@ impl App {
             }
         };
         for p in &mut deployed.profiles {
-            for keys in std::iter::once(&mut p.keys).chain(p.pages.iter_mut().map(|page| &mut page.keys)) {
+            for keys in
+                std::iter::once(&mut p.keys).chain(p.pages.iter_mut().map(|page| &mut page.keys))
+            {
                 for key in keys.iter_mut() {
-                    *key = crate::obs_monitor::present_key(&crate::audio::present_key(key, &self.audio), &self.obs_state);
+                    *key = crate::obs_monitor::present_key(
+                        &crate::audio::present_key(key, &self.audio),
+                        &self.obs_state,
+                    );
                 }
             }
         }
@@ -851,7 +1146,10 @@ impl App {
                     self.upload(false);
                 }
                 self.log(if self.config.binding_errors().is_empty() {
-                    trf("Modifications enregistrées, envoi au {device}…", &[("device", &self.device_name())])
+                    trf(
+                        "Modifications enregistrées, envoi au {device}…",
+                        &[("device", &self.device_name())],
+                    )
                 } else {
                     tr("Brouillons enregistrés. Synchronisation des touches valides…").into()
                 });
@@ -882,20 +1180,33 @@ impl App {
                 label: String::new(),
             });
         }
-        self.engine.start(key, dry, if delayed { 3000 } else { 0 }, config.obs.clone());
+        self.engine
+            .start(key, dry, if delayed { 3000 } else { 0 }, config.obs.clone());
     }
     fn grid(&self) -> DeviceGrid {
-        self.device_model.clone().unwrap_or_else(DeviceGrid::default)
+        self.device_model
+            .clone()
+            .unwrap_or_else(DeviceGrid::default)
     }
-    fn device_keys(&self) -> usize { self.grid().keys }
+    fn device_keys(&self) -> usize {
+        self.grid().keys
+    }
     /// Name of the connected model, or a neutral word when nothing is plugged in.
     fn device_name(&self) -> String {
-        self.device_model.as_ref().map_or_else(|| tr("périphérique").into(), |d| d.name.clone())
+        self.device_model
+            .as_ref()
+            .map_or_else(|| tr("périphérique").into(), |d| d.name.clone())
     }
-    fn is_d6(&self) -> bool { self.device_model.as_ref().is_none_or(|d| d.name.contains("D6")) }
+    fn is_d6(&self) -> bool {
+        self.device_model
+            .as_ref()
+            .is_none_or(|d| d.name.contains("D6"))
+    }
     /// Animations d'interface actives si l'utilisateur et Windows les autorisent.
     fn animations(&self) -> bool {
-        self.preferences.interface_animations && !self.preferences.reduce_motion && motion::system_animations()
+        self.preferences.interface_animations
+            && !self.preferences.reduce_motion
+            && motion::system_animations()
     }
     /// État résumé des deux IA (locale et connectée) pour un seul bouton.
     fn ai_status_label(&self) -> &'static str {
@@ -909,25 +1220,56 @@ impl App {
         }
     }
     fn device_label(&self) -> String {
-        self.device_model.as_ref().map_or_else(|| tr("Aucun périphérique").into(), |d| {
-            trf("{name} · {keys} touches{experimental}", &[("name", &d.name), ("keys", &d.keys), ("experimental", &if d.experimental { tr(" · expérimental") } else { "" })])
-        })
+        self.device_model.as_ref().map_or_else(
+            || tr("Aucun périphérique").into(),
+            |d| {
+                trf(
+                    "{name} · {keys} touches{experimental}",
+                    &[
+                        ("name", &d.name),
+                        ("keys", &d.keys),
+                        (
+                            "experimental",
+                            &if d.experimental {
+                                tr(" · expérimental")
+                            } else {
+                                ""
+                            },
+                        ),
+                    ],
+                )
+            },
+        )
     }
     fn preview(&mut self, dry: bool) {
         let mut key = self.config.keys()[self.selected].clone();
-        key.runtime_id = Some(crate::engine::identity(&self.config.profiles[self.config.active].name, &self.config.page, self.selected));
+        key.runtime_id = Some(crate::engine::identity(
+            &self.config.profiles[self.config.active].name,
+            &self.config.page,
+            self.selected,
+        ));
         let c = self.config.clone();
         self.execute_key(key, dry, !dry, &c);
     }
     fn execute_physical(&mut self, index: usize, long: bool) {
-        if self.gate.decision() != Decision::Execute { return; }
+        if self.gate.decision() != Decision::Execute {
+            return;
+        }
         let c = self.applied.clone();
         // Only the short action toggles: for long-press keys this happens on release,
         // never at press time or when a long action has been selected.
-        if !long { self.toggle_key_face(index); }
+        if !long {
+            self.toggle_key_face(index);
+        }
         let mut key = c.keys()[index].clone();
-        key.runtime_id = Some(crate::engine::identity(&c.profiles[c.active].name, &c.page, index));
-        if long { key.steps = std::mem::take(&mut key.long_steps); }
+        key.runtime_id = Some(crate::engine::identity(
+            &c.profiles[c.active].name,
+            &c.page,
+            index,
+        ));
+        if long {
+            key.steps = std::mem::take(&mut key.long_steps);
+        }
         self.execute_key(key, false, false, &c);
     }
     fn events(&mut self) {
@@ -936,20 +1278,38 @@ impl App {
                 break;
             };
             match event {
-                Event::Log(s) => { self.workshop_journal.log(&s); self.log(s); },
+                Event::Log(s) => {
+                    self.workshop_journal.log(&s);
+                    self.log(s);
+                }
                 Event::Notification(title, message) => {
                     self.log(format!("Notification — {title} : {message}"));
                     if self.tray_ready {
-                        if let Some(desktop) = &self.desktop { let _ = desktop.tx.send(crate::desktop::Command::Notify(title, message)); }
+                        if let Some(desktop) = &self.desktop {
+                            let _ = desktop
+                                .tx
+                                .send(crate::desktop::Command::Notify(title, message));
+                        }
                     }
                 }
                 Event::Block(path) => self.running_block = path,
-                Event::WorkshopStep { path, name, elapsed } => self.workshop_journal.step(path, name, elapsed),
-                Event::WorkshopFinished { ok, elapsed, message } => self.workshop_journal.finish(ok, elapsed, message),
+                Event::WorkshopStep {
+                    path,
+                    name,
+                    elapsed,
+                } => self.workshop_journal.step(path, name, elapsed),
+                Event::WorkshopFinished {
+                    ok,
+                    elapsed,
+                    message,
+                } => self.workshop_journal.finish(ok, elapsed, message),
                 Event::D6Brightness(mode, value) => {
-                    self.config.brightness = crate::model::d6_brightness(self.config.brightness, &mode, value);
+                    self.config.brightness =
+                        crate::model::d6_brightness(self.config.brightness, &mode, value);
                     if self.wanted && self.gate.connected && !self.sleep.sleeping {
-                        let _ = self.device.send(Command::Brightness(self.config.brightness));
+                        let _ = self
+                            .device
+                            .send(Command::Brightness(self.config.brightness));
                     }
                     self.edited();
                 }
@@ -963,10 +1323,20 @@ impl App {
                 Event::ToggleVisual => {}
                 Event::D6Sleep => {
                     self.sleep.sleeping = true;
-                    if self.wanted && self.gate.connected { let _ = self.device.send(Command::Brightness(self.config.sleep_brightness)); }
+                    if self.wanted && self.gate.connected {
+                        let _ = self
+                            .device
+                            .send(Command::Brightness(self.config.sleep_brightness));
+                    }
                 }
-                Event::Foreground(exe) => { self.foreground = exe; self.update_auto_profile(); }
-                Event::Open => { self.open_requested = true; self.hide_frames = 0; }
+                Event::Foreground(exe) => {
+                    self.foreground = exe;
+                    self.update_auto_profile();
+                }
+                Event::Open => {
+                    self.open_requested = true;
+                    self.hide_frames = 0;
+                }
                 Event::TrayReady(ready) => {
                     self.tray_ready = ready;
                     if !ready {
@@ -993,16 +1363,38 @@ impl App {
                     }
                 }
                 Event::Automatic(trigger, at) => {
-                    if at.elapsed() < Duration::from_secs(3) && self.gate.enabled
-                        && !self.gate.invalid && !self.gate.dirty && !self.trigger_recording
-                        && self.recording.is_none() && self.engine.allows_global_press(at)
+                    if at.elapsed() < Duration::from_secs(3)
+                        && self.gate.enabled
+                        && !self.gate.invalid
+                        && !self.gate.dirty
+                        && !self.trigger_recording
+                        && self.recording.is_none()
+                        && self.engine.allows_global_press(at)
                         && self.preferences.triggers.contains(&trigger)
                     {
-                        if let Some(profile) = self.config.profiles.iter().find(|p| p.name == trigger.profile) {
-                            if let Some(key) = profile.keys_at(&trigger.page).and_then(|keys| keys.get(trigger.key)) {
+                        if let Some(profile) = self
+                            .config
+                            .profiles
+                            .iter()
+                            .find(|p| p.name == trigger.profile)
+                        {
+                            if let Some(key) = profile
+                                .keys_at(&trigger.page)
+                                .and_then(|keys| keys.get(trigger.key))
+                            {
                                 let mut key = key.clone();
-                                key.runtime_id = Some(crate::engine::identity(&trigger.profile, &trigger.page, trigger.key));
-                                self.log(trf("Déclencheur : {trigger} → touche {key}", &[("trigger", &trigger.description()), ("key", &(trigger.key + 1))]));
+                                key.runtime_id = Some(crate::engine::identity(
+                                    &trigger.profile,
+                                    &trigger.page,
+                                    trigger.key,
+                                ));
+                                self.log(trf(
+                                    "Déclencheur : {trigger} → touche {key}",
+                                    &[
+                                        ("trigger", &trigger.description()),
+                                        ("key", &(trigger.key + 1)),
+                                    ],
+                                ));
                                 let config = self.config.clone();
                                 self.execute_key(key, false, false, &config);
                             }
@@ -1022,37 +1414,86 @@ impl App {
                     {
                         let c = self.config.clone();
                         let mut key = c.keys()[index].clone();
-                        key.runtime_id = Some(crate::engine::identity(&c.profiles[c.active].name, &c.page, index));
+                        key.runtime_id = Some(crate::engine::identity(
+                            &c.profiles[c.active].name,
+                            &c.page,
+                            index,
+                        ));
                         self.execute_key(key, false, false, &c);
                     }
                 }
                 Event::HardwareTestPress(raw, index) => {
-                    if let Some(test)=&mut self.hardware_test {
-                        test.press(&raw,index);
-                        let next=test.next;
-                        let finished=test.next == test.keys;
-                        self.log(trf("Test : brut [{raw}] ; décodé {decoded} ; attendu {expected}", &[("raw", &raw), ("decoded", &(index+1)), ("expected", &next)]));
-                        if finished { let _=self.device.send(Command::TestBrightness); }
+                    if let Some(test) = &mut self.hardware_test {
+                        test.press(&raw, index);
+                        let next = test.next;
+                        let finished = test.next == test.keys;
+                        self.log(trf(
+                            "Test : brut [{raw}] ; décodé {decoded} ; attendu {expected}",
+                            &[
+                                ("raw", &raw),
+                                ("decoded", &(index + 1)),
+                                ("expected", &next),
+                            ],
+                        ));
+                        if finished {
+                            let _ = self.device.send(Command::TestBrightness);
+                        }
                     }
                 }
                 Event::HardwareTestStatus(message) => {
-                    if let Some(test)=&mut self.hardware_test {
-                        if message.starts_with("Images numérotées") { test.image=message.clone(); }
-                        if message.starts_with("Luminosité") || message.starts_with("ÉCHEC luminosité") { test.brightness=message.clone(); }
-                        if message.starts_with("ÉCHEC") || message.starts_with("Images numérotées : ÉCHEC") || message.starts_with("Test arrêté") { test.active=false; }
+                    if let Some(test) = &mut self.hardware_test {
+                        if message.starts_with("Images numérotées") {
+                            test.image = message.clone();
+                        }
+                        if message.starts_with("Luminosité")
+                            || message.starts_with("ÉCHEC luminosité")
+                        {
+                            test.brightness = message.clone();
+                        }
+                        if message.starts_with("ÉCHEC")
+                            || message.starts_with("Images numérotées : ÉCHEC")
+                            || message.starts_with("Test arrêté")
+                        {
+                            test.active = false;
+                        }
                     }
-                    self.log(trf("Assistant périphérique : {message}", &[("message", &message)]));
+                    self.log(trf(
+                        "Assistant périphérique : {message}",
+                        &[("message", &message)],
+                    ));
                 }
-                Event::DeviceModel { name, keys, rows, cols, experimental } => {
-                    if let Some(grid) = DeviceGrid::new(name.clone(), keys, rows, cols, experimental) {
+                Event::DeviceModel {
+                    name,
+                    keys,
+                    rows,
+                    cols,
+                    experimental,
+                } => {
+                    if let Some(grid) =
+                        DeviceGrid::new(name.clone(), keys, rows, cols, experimental)
+                    {
                         crate::model::extend_for_device(&mut self.config, grid.keys);
                         crate::model::extend_for_device(&mut self.applied, grid.keys);
                         self.selected = self.selected.min(grid.keys - 1);
-                        if let Some(plugins)=&self.plugins {plugins.device(crate::plugin_runtime::Device::from_grid(grid.name.clone(),grid.cols,grid.rows));}
+                        if let Some(plugins) = &self.plugins {
+                            plugins.device(crate::plugin_runtime::Device::from_grid(
+                                grid.name.clone(),
+                                grid.cols,
+                                grid.rows,
+                            ));
+                        }
                         self.device_model = Some(grid);
                         self.sync_state_display();
                     } else {
-                        self.fail(trf("Grille HID invalide : {name}, {keys} touches ({rows} × {cols})", &[("name", &name), ("keys", &keys), ("rows", &rows), ("cols", &cols)]));
+                        self.fail(trf(
+                            "Grille HID invalide : {name}, {keys} touches ({rows} × {cols})",
+                            &[
+                                ("name", &name),
+                                ("keys", &keys),
+                                ("rows", &rows),
+                                ("cols", &cols),
+                            ],
+                        ));
                     }
                     self.log(trf("Modèle HID détecté : {name} · {keys} touches ({rows} × {cols}){verification}",
                         &[("name", &name), ("keys", &keys), ("rows", &rows), ("cols", &cols), ("verification", &if experimental { tr(" · EXPÉRIMENTAL, non vérifié sur matériel") } else { tr(" · vérifié") })]));
@@ -1063,8 +1504,13 @@ impl App {
                     }
                     self.status = message;
                     if !connected {
-                        if let Some(test)=&mut self.hardware_test { test.active=false; test.brightness=tr("ÉCHEC : périphérique déconnecté").into(); }
-                        if let Some(plugins)=&self.plugins {plugins.device(crate::plugin_runtime::Device::virtual_device());}
+                        if let Some(test) = &mut self.hardware_test {
+                            test.active = false;
+                            test.brightness = tr("ÉCHEC : périphérique déconnecté").into();
+                        }
+                        if let Some(plugins) = &self.plugins {
+                            plugins.device(crate::plugin_runtime::Device::virtual_device());
+                        }
                         self.device_model = None;
                         self.selected = self.selected.min(14);
                         self.long_press.clear();
@@ -1084,32 +1530,56 @@ impl App {
                             if r == revision {
                                 self.applied = c;
                                 self.plugin_states.retain(&self.applied);
-                                if let Some(plugins)=&mut self.plugins { plugins.sync(&self.applied); }
+                                if let Some(plugins) = &mut self.plugins {
+                                    plugins.sync(&self.applied);
+                                }
                                 if self.sleep.sleeping {
-                                    let _ = self.device.send(Command::Brightness(self.config.sleep_brightness));
+                                    let _ = self
+                                        .device
+                                        .send(Command::Brightness(self.config.sleep_brightness));
                                 }
                             }
                         }
                         // A full HID apply overwrites every runtime face; replay even when
                         // there was no pending UI edit (USB reconnect / wake / profile refresh).
                         for index in 0..self.device_keys() {
-                            if self.state_values[index].is_some() || self.plugin_face(index).is_some() || self.applied.keys().get(index).is_some_and(|k| k.plugin_state.is_some() || k.state_display.as_ref().is_some_and(|s| s.toggle)) {
+                            if self.state_values[index].is_some()
+                                || self.plugin_face(index).is_some()
+                                || self.applied.keys().get(index).is_some_and(|k| {
+                                    k.plugin_state.is_some()
+                                        || k.state_display.as_ref().is_some_and(|s| s.toggle)
+                                })
+                            {
                                 self.send_state_face(index);
                             }
                         }
-                        self.log(
-                            trf("{device} synchronisé. Les touches suivent le mode affiché en haut.", &[("device", &self.device_name())]),
-                        );
+                        self.log(trf(
+                            "{device} synchronisé. Les touches suivent le mode affiché en haut.",
+                            &[("device", &self.device_name())],
+                        ));
                     }
                 }
                 Event::Key(index, at) => {
-                    if index >= self.device_keys() || index >= self.applied.keys().len() || index >= self.physical_down.len() { continue; }
-                    if self.physical_down[index] { continue; }
+                    if index >= self.device_keys()
+                        || index >= self.applied.keys().len()
+                        || index >= self.physical_down.len()
+                    {
+                        continue;
+                    }
+                    if self.physical_down[index] {
+                        continue;
+                    }
                     self.physical_down[index] = true;
                     self.plugin_presses[index] = None;
-                    if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
+                    if self.hardware_test.as_ref().is_some_and(|t| t.active) {
+                        continue;
+                    }
                     let wake = self.sleep.press(Instant::now());
-                    if wake { self.wake_display(); self.long_press.clear(); continue; }
+                    if wake {
+                        self.wake_display();
+                        self.long_press.clear();
+                        continue;
+                    }
                     self.last_key = Some((index, Instant::now()));
                     match if self.trigger_recording {
                         Decision::Blocked(tr("Enregistrement du raccourci en cours"))
@@ -1118,17 +1588,27 @@ impl App {
                     } {
                         Decision::Inspect => {
                             self.selected = index;
-                            self.log(trf("Diagnostic : touche {key} reçue, aucune action exécutée.", &[("key", &format!("{:02}", index + 1))]));
+                            self.log(trf(
+                                "Diagnostic : touche {key} reçue, aucune action exécutée.",
+                                &[("key", &format!("{:02}", index + 1))],
+                            ));
                         }
-                        Decision::Blocked(reason) => {
-                            self.log(trf("Touche {key} : {reason}", &[("key", &format!("{:02}", index + 1)), ("reason", &reason)]))
-                        }
+                        Decision::Blocked(reason) => self.log(trf(
+                            "Touche {key} : {reason}",
+                            &[("key", &format!("{:02}", index + 1)), ("reason", &reason)],
+                        )),
                         Decision::Execute => {
                             if self.applied.keys()[index].plugin.is_some() {
                                 if let Some(plugins) = &self.plugins {
-                                    if let Some(visible) = plugins.visible().values().find(|v| v.index == index).cloned() {
+                                    if let Some(visible) = plugins
+                                        .visible()
+                                        .values()
+                                        .find(|v| v.index == index)
+                                        .cloned()
+                                    {
                                         plugins.key(index, true);
-                                        self.plugin_presses[index] = Some((self.plugin_generation, visible));
+                                        self.plugin_presses[index] =
+                                            Some((self.plugin_generation, visible));
                                     }
                                 }
                             }
@@ -1140,22 +1620,34 @@ impl App {
                     }
                 }
                 Event::KeyRelease(index, at) => {
-                    if index >= self.physical_down.len() || !self.physical_down[index] { continue; }
+                    if index >= self.physical_down.len() || !self.physical_down[index] {
+                        continue;
+                    }
                     self.physical_down[index] = false;
                     let plugin_press = self.plugin_presses[index].take();
-                    if self.hardware_test.as_ref().is_some_and(|t| t.active) { continue; }
+                    if self.hardware_test.as_ref().is_some_and(|t| t.active) {
+                        continue;
+                    }
                     if index < self.device_keys() && index < self.applied.keys().len() {
                         if self.gate.decision() == Decision::Execute {
-                            if let (Some((generation, pressed)), Some(plugins)) = (plugin_press, &self.plugins) {
+                            if let (Some((generation, pressed)), Some(plugins)) =
+                                (plugin_press, &self.plugins)
+                            {
                                 if generation == self.plugin_generation
-                                    && plugins.visible().get(&pressed.context).is_some_and(|now|
-                                        now.index == index && now.plugin == pressed.plugin && now.action == pressed.action)
+                                    && plugins.visible().get(&pressed.context).is_some_and(|now| {
+                                        now.index == index
+                                            && now.plugin == pressed.plugin
+                                            && now.action == pressed.action
+                                    })
                                 {
                                     plugins.key(index, false);
                                 }
                             }
                         }
-                        if let Some(long) = self.long_press.release(index, at, self.applied.long_press_ms) {
+                        if let Some(long) =
+                            self.long_press
+                                .release(index, at, self.applied.long_press_ms)
+                        {
                             self.execute_physical(index, long);
                         }
                     }
@@ -1164,7 +1656,9 @@ impl App {
                     self.navigate(step);
                 }
                 Event::Profile(name) => {
-                    if let Some(index) = self.config.profiles.iter().position(|p| p.name == name) { self.select_profile(index); }
+                    if let Some(index) = self.config.profiles.iter().position(|p| p.name == name) {
+                        self.select_profile(index);
+                    }
                 }
             }
         }
@@ -1305,7 +1799,9 @@ impl App {
         }
     }
     fn update_auto_profile(&mut self) {
-        if self.engine.running.load(Ordering::SeqCst) { return; }
+        if self.engine.running.load(Ordering::SeqCst) {
+            return;
+        }
         let target = choose_profile(&self.config, self.foreground.as_deref(), self.base_profile);
         self.auto_active = self.config.auto_profile && target != self.base_profile;
         if target != self.config.active {
@@ -1318,13 +1814,20 @@ impl App {
     }
     fn wake_display(&mut self) {
         if self.wanted && self.gate.connected {
-            let _ = self.device.send(Command::Brightness(self.config.brightness));
+            let _ = self
+                .device
+                .send(Command::Brightness(self.config.brightness));
         }
     }
     fn housekeeping(&mut self) {
         self.update_auto_profile();
-        if self.wanted && self.gate.connected && self.sleep.due(Instant::now(), self.config.sleep_after_min) {
-            let _ = self.device.send(Command::Brightness(self.config.sleep_brightness));
+        if self.wanted
+            && self.gate.connected
+            && self.sleep.due(Instant::now(), self.config.sleep_after_min)
+        {
+            let _ = self
+                .device
+                .send(Command::Brightness(self.config.sleep_brightness));
         }
     }
     fn add_profile(&mut self, duplicate: bool) {
@@ -1356,12 +1859,35 @@ impl App {
         let dir = self.path.parent().unwrap().join("assets").join("demo");
         let profile = match crate::demo_profile::write_media(&dir) {
             Ok((photo, animation)) => crate::demo_profile::profile(&photo, &animation),
-            Err(e) => { self.fail(trf("Profil de démonstration non créé : {error}", &[("error", &e)])); return; }
+            Err(e) => {
+                self.fail(trf(
+                    "Profil de démonstration non créé : {error}",
+                    &[("error", &e)],
+                ));
+                return;
+            }
         };
-        let index = match self.config.profiles.iter().position(|p| p.name == crate::demo_profile::NAME) {
-            Some(i) => { self.config.profiles[i] = profile; i }
-            None if self.config.profiles.len() < 64 => { self.config.profiles.push(profile); self.config.profiles.len() - 1 }
-            None => { self.fail(tr("64 profils au maximum : supprime un profil pour ajouter la démonstration.").into()); return; }
+        let index = match self
+            .config
+            .profiles
+            .iter()
+            .position(|p| p.name == crate::demo_profile::NAME)
+        {
+            Some(i) => {
+                self.config.profiles[i] = profile;
+                i
+            }
+            None if self.config.profiles.len() < 64 => {
+                self.config.profiles.push(profile);
+                self.config.profiles.len() - 1
+            }
+            None => {
+                self.fail(
+                    tr("64 profils au maximum : supprime un profil pour ajouter la démonstration.")
+                        .into(),
+                );
+                return;
+            }
         };
         self.config.active = index;
         self.base_profile = index;
@@ -1371,15 +1897,21 @@ impl App {
         self.edited();
     }
     fn start_dialog(&mut self, task: impl FnOnce() -> Option<DialogEffect> + Send + 'static) {
-        if self.dialog_pending { return; }
+        if self.dialog_pending {
+            return;
+        }
         self.dialog_pending = true;
         let tx = self.dialog_tx.clone();
-        std::thread::spawn(move || { let _ = tx.send(task()); });
+        std::thread::spawn(move || {
+            let _ = tx.send(task());
+        });
     }
     fn dialog_results(&mut self) {
         while let Ok(result) = self.dialog_rx.try_recv() {
             self.dialog_pending = false;
-            if let Some(effect) = result { effect(self); }
+            if let Some(effect) = result {
+                effect(self);
+            }
         }
     }
     fn import(&mut self) {
@@ -1448,13 +1980,21 @@ impl App {
     fn export(&mut self) {
         self.gate.enabled = false;
         // S-07 : « Exporter sans secrets » (coché par défaut) retire le mot de passe OBS et les réglages de plugin.
-        let config = if self.export_without_secrets { self.config.without_secrets() } else { self.config.clone() };
+        let config = if self.export_without_secrets {
+            self.config.without_secrets()
+        } else {
+            self.config.clone()
+        };
         self.start_dialog(move || {
-            let path = rfd::FileDialog::new().set_file_name("deckforge-profils.json")
-                .add_filter("JSON", &["json"]).save_file()?;
+            let path = rfd::FileDialog::new()
+                .set_file_name("deckforge-profils.json")
+                .add_filter("JSON", &["json"])
+                .save_file()?;
             let result = store::save(&path, &config);
             Some(Box::new(move |app| match result {
-                Ok(()) => app.log(tr("Profils exportés. Réactive les touches quand tu es prêt.").into()),
+                Ok(()) => {
+                    app.log(tr("Profils exportés. Réactive les touches quand tu es prêt.").into())
+                }
                 Err(e) => app.fail(trf("Export impossible : {error}", &[("error", &e)])),
             }))
         });
@@ -1466,7 +2006,9 @@ impl App {
             .is_some_and(|child| child.try_wait().ok().flatten().is_some())
         {
             self.http_child = None;
-            self.fail(tr("Mode HTTP arrêté. Vérifie que le port local 9846 est disponible.").into());
+            self.fail(
+                tr("Mode HTTP arrêté. Vérifie que le port local 9846 est disponible.").into(),
+            );
         }
         loop {
             let call = match self
@@ -1489,7 +2031,9 @@ impl App {
                 self.assistant_cache.insert(call.id.clone(), result.clone());
                 result
             };
-            let _ = call.reply.send(result.map(|v| crate::mcp_protocol::redact_json(&v)));
+            let _ = call
+                .reply
+                .send(result.map(|v| crate::mcp_protocol::redact_json(&v)));
         }
     }
     fn assistant_call(
@@ -1499,10 +2043,16 @@ impl App {
     ) -> Result<serde_json::Value, String> {
         use serde_json::json;
         let tools = crate::mcp_protocol::tools();
-        if matches!(name, "deckforge_configure_key" | "deckforge_simulate_macro" | "deckforge_request_run") {
+        if matches!(
+            name,
+            "deckforge_configure_key" | "deckforge_simulate_macro" | "deckforge_request_run"
+        ) {
             let key = args["key"].as_u64().ok_or("Numéro de touche requis")?;
             if key == 0 || key > self.device_keys() as u64 {
-                return Err(format!("Touche hors grille : 1 à {} pour le modèle actif", self.device_keys()));
+                return Err(format!(
+                    "Touche hors grille : 1 à {} pour le modèle actif",
+                    self.device_keys()
+                ));
             }
         }
         let schema = tools["tools"]
@@ -1559,11 +2109,14 @@ impl App {
             }
             "deckforge_get_state" => {
                 let scope = (self.config.active, self.config.page.clone(), self.selected);
-                let pending_request = workshop_chat_ui::mcp_request(&mut self.workshop_chat, &scope);
+                let pending_request =
+                    workshop_chat_ui::mcp_request(&mut self.workshop_chat, &scope);
                 let mut state = json!({"connected":self.gate.connected,"physical_keys":format!("{:?}",self.gate.decision()),"current_profile":self.config.profiles[self.config.active].name,"current_page":self.config.page,"trail":self.config.trail,"profiles":self.config.profiles.iter().map(|p|json!({"name":p.name,"pages":p.pages.iter().map(|page|json!({"id":page.id,"name":page.name,"folder":page.folder})).collect::<Vec<_>>(),"keys":p.keys.iter().enumerate().map(|(i,k)|json!({"key":i+1,"label":k.label,"steps":k.steps.len()})).collect::<Vec<_>>()})).collect::<Vec<_>>(),"pending_proposals":self.proposals.pending.len(),"configuration_invalid":self.gate.invalid});
-                if let Some(request) = pending_request { state["pending_request"] = request; }
+                if let Some(request) = pending_request {
+                    state["pending_request"] = request;
+                }
                 Ok(state)
-            },
+            }
             "deckforge_get_audio_devices" => Ok(serde_json::to_value(&self.audio).unwrap()),
             "deckforge_get_profile" => {
                 let name = args["profile"].as_str().ok_or("Nom de profil requis")?;
@@ -1573,7 +2126,8 @@ impl App {
                     .iter()
                     .find(|p| p.name == name)
                     .ok_or("Profil introuvable")?;
-                let value = crate::mcp_protocol::redact_json(&serde_json::to_value(profile).unwrap());
+                let value =
+                    crate::mcp_protocol::redact_json(&serde_json::to_value(profile).unwrap());
                 if value.to_string().len() > crate::mcp_protocol::MAX_FRAME - 1024 {
                     return Err("Ce profil est trop volumineux pour le connecteur".into());
                 }
@@ -1588,7 +2142,9 @@ impl App {
                 }
                 let result = self.proposals.propose(name, args, &self.config);
                 if result.is_ok() && self.workshop_chat.awaiting.take().is_some() {
-                    self.workshop_chat.say(tr("Proposition de ton IA reçue. Vérifie-la dans la fenêtre de validation."));
+                    self.workshop_chat.say(tr(
+                        "Proposition de ton IA reçue. Vérifie-la dans la fenêtre de validation.",
+                    ));
                 }
                 result
             }
@@ -1639,8 +2195,10 @@ impl App {
         }
     }
     fn connect_ai_window(&mut self, ctx: &egui::Context) {
-        if !self.connect_window { return; }
-        let mut open=true;
+        if !self.connect_window {
+            return;
+        }
+        let mut open = true;
         theme::fixed_window(tr("Connecter une IA")).open(&mut open).default_width(530.0).resizable(true).vscroll(true).show(ctx,|ui|{
             ui.label(tr("Choisis ton application IA. NovyDeck n'écrit jamais de clé dans ses réglages."));
             let locations=crate::mcp_connect::Locations::system();
@@ -1677,7 +2235,7 @@ impl App {
             }
             ui.label(&self.notice);
         });
-        self.connect_window=open;
+        self.connect_window = open;
     }
     fn assistant_window(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
@@ -2043,7 +2601,10 @@ impl App {
             });
     }
     fn header(&mut self, ctx: &egui::Context) {
-        if !self.show_workflow { self.header_standard(ctx); return; }
+        if !self.show_workflow {
+            self.header_standard(ctx);
+            return;
+        }
         let p = theme::palette(ctx);
         egui::TopBottomPanel::top("header")
             .frame(
@@ -2430,12 +2991,17 @@ impl App {
         {
             Ok(()) => {
                 if let Some(desktop) = &self.desktop {
-                    let _ = desktop.tx.send(crate::desktop::Command::Triggers(self.preferences.triggers.clone()));
+                    let _ = desktop.tx.send(crate::desktop::Command::Triggers(
+                        self.preferences.triggers.clone(),
+                    ));
                 }
                 true
-            },
+            }
             Err(e) => {
-                self.fail(trf("Enregistrement de mes raccourcis enregistrés impossible : {error}", &[("error", &e)]));
+                self.fail(trf(
+                    "Enregistrement de mes raccourcis enregistrés impossible : {error}",
+                    &[("error", &e)],
+                ));
                 false
             }
         }
@@ -2499,22 +3065,57 @@ impl App {
         self.edited();
         let audio_unset = self.config.keys()[target].steps.iter().any(|s| matches!(s, Step::AudioSwitch { first, second, .. } if first.is_empty() || second.is_empty()));
 
-        self.log(trf("Touche {key} mise à jour.{hint} Ctrl+Z pour annuler.", &[("key", &format!("{:02}", target + 1)), ("hint", &if audio_unset { tr(" Choisis maintenant les deux périphériques audio dans l'inspecteur.") } else { "" })]));
+        self.log(trf(
+            "Touche {key} mise à jour.{hint} Ctrl+Z pour annuler.",
+            &[
+                ("key", &format!("{:02}", target + 1)),
+                (
+                    "hint",
+                    &if audio_unset {
+                        tr(" Choisis maintenant les deux périphériques audio dans l'inspecteur.")
+                    } else {
+                        ""
+                    },
+                ),
+            ],
+        ));
     }
     fn record_history(&mut self, before: Config, ctx: &egui::Context) {
-        if self.replaying || before.same_as(&self.config) { return; }
+        if self.replaying || before.same_as(&self.config) {
+            return;
+        }
         let field = ctx.memory(|m| m.focused());
-        let grouped = field.is_some() && field == self.last_field && self.history_at.elapsed() < Duration::from_millis(800) && self.future.is_empty();
-        if !grouped { self.history.push(before); if self.history.len() > 50 { self.history.remove(0); } }
-        self.future.clear(); self.last_field = field; self.history_at = Instant::now();
+        let grouped = field.is_some()
+            && field == self.last_field
+            && self.history_at.elapsed() < Duration::from_millis(800)
+            && self.future.is_empty();
+        if !grouped {
+            self.history.push(before);
+            if self.history.len() > 50 {
+                self.history.remove(0);
+            }
+        }
+        self.future.clear();
+        self.last_field = field;
+        self.history_at = Instant::now();
     }
     fn migrate_focus_audio_now(&mut self) {
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_default();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or_default();
         for name in ["config", "preferences"] {
             let source = self.path.with_file_name(format!("{name}.json"));
             if source.exists() {
-                if let Err(e) = std::fs::copy(&source, self.path.with_file_name(format!("{name}.avant-migration-{stamp}.json"))) {
-                    self.fail(trf("Conversion annulée : sauvegarde de {name}.json impossible ({error}).", &[("name", &name), ("error", &e)]));
+                if let Err(e) = std::fs::copy(
+                    &source,
+                    self.path
+                        .with_file_name(format!("{name}.avant-migration-{stamp}.json")),
+                ) {
+                    self.fail(trf(
+                        "Conversion annulée : sauvegarde de {name}.json impossible ({error}).",
+                        &[("name", &name), ("error", &e)],
+                    ));
                     return;
                 }
             }
@@ -2522,32 +3123,83 @@ impl App {
         self.history.push(self.config.clone());
         self.future.clear();
         let keys = self.config.migrate_focus_audio();
-        let binds: usize = self.preferences.library.binds.iter_mut().map(|b| crate::model::migrate_focus_audio_key(&mut b.key)).sum();
+        let binds: usize = self
+            .preferences
+            .library
+            .binds
+            .iter_mut()
+            .map(|b| crate::model::migrate_focus_audio_key(&mut b.key))
+            .sum();
         self.edited();
         self.save();
-        if binds > 0 { self.save_preferences(); }
+        if binds > 0 {
+            self.save_preferences();
+        }
         self.log(trf("{keys} action(s) de touches et {binds} de mes raccourcis enregistrés converties en blocs natifs. Sauvegardes : *.avant-migration-{stamp}.json (Ctrl+Z annule côté touches).", &[("keys", &keys), ("binds", &binds), ("stamp", &stamp)]));
     }
     fn undo_edit(&mut self) {
-        if let Some(previous) = self.history.pop() { self.future.push(self.config.clone()); self.config = previous; self.replaying = true; self.edited(); self.log(tr("Modification annulée.").into()); }
+        if let Some(previous) = self.history.pop() {
+            self.future.push(self.config.clone());
+            self.config = previous;
+            self.replaying = true;
+            self.edited();
+            self.log(tr("Modification annulée.").into());
+        }
     }
     fn redo_edit(&mut self) {
-        if let Some(next) = self.future.pop() { self.history.push(self.config.clone()); self.config = next; self.replaying = true; self.edited(); self.log(tr("Modification rétablie.").into()); }
+        if let Some(next) = self.future.pop() {
+            self.history.push(self.config.clone());
+            self.config = next;
+            self.replaying = true;
+            self.edited();
+            self.log(tr("Modification rétablie.").into());
+        }
     }
-    fn copy_key(&mut self) { self.clipboard = Some(self.config.keys()[self.selected].clone()); self.log(tr("Touche copiée.").into()); }
-    fn paste_key(&mut self, target: usize) { if let Some(key) = self.clipboard.clone() { self.assign(DragItem::Bind(key), target); } }
+    fn copy_key(&mut self) {
+        self.clipboard = Some(self.config.keys()[self.selected].clone());
+        self.log(tr("Touche copiée.").into());
+    }
+    fn paste_key(&mut self, target: usize) {
+        if let Some(key) = self.clipboard.clone() {
+            self.assign(DragItem::Bind(key), target);
+        }
+    }
     fn duplicate_key(&mut self, from: usize) {
-        let Some(target) = ((from+1)..self.device_keys()).find(|&i| Self::empty_key(&self.config.keys()[i])) else { self.log(tr("Aucune touche vide après celle-ci sur cette page.").into()); return; };
+        let Some(target) =
+            ((from + 1)..self.device_keys()).find(|&i| Self::empty_key(&self.config.keys()[i]))
+        else {
+            self.log(tr("Aucune touche vide après celle-ci sur cette page.").into());
+            return;
+        };
         self.assign(DragItem::Bind(self.config.keys()[from].clone()), target);
     }
-    fn empty_key(key: &Key) -> bool { key.label.is_empty() && key.image.is_empty() && key.steps.is_empty() }
+    fn empty_key(key: &Key) -> bool {
+        key.label.is_empty() && key.image.is_empty() && key.steps.is_empty()
+    }
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        if self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some()||ctx.wants_keyboard_input() { return; }
-        let pressed = |key| ctx.input(|i| i.modifiers.ctrl && !i.modifiers.alt && !i.modifiers.shift && i.key_pressed(key));
-        if pressed(egui::Key::Z) { self.undo_edit(); } else if pressed(egui::Key::Y) { self.redo_edit(); }
-        else if self.show_workflow { }
-        else if pressed(egui::Key::C) { self.copy_key(); } else if pressed(egui::Key::V) { self.paste_key(self.selected); }
-        else if ctx.input(|i| !i.modifiers.ctrl && i.key_pressed(egui::Key::Delete)) { self.assign(DragItem::Bind(Key::default()), self.selected); }
+        if self.plugin_management.confirmation.is_some()
+            || self.plugin_management.working.is_some()
+            || ctx.wants_keyboard_input()
+        {
+            return;
+        }
+        let pressed = |key| {
+            ctx.input(|i| {
+                i.modifiers.ctrl && !i.modifiers.alt && !i.modifiers.shift && i.key_pressed(key)
+            })
+        };
+        if pressed(egui::Key::Z) {
+            self.undo_edit();
+        } else if pressed(egui::Key::Y) {
+            self.redo_edit();
+        } else if self.show_workflow {
+        } else if pressed(egui::Key::C) {
+            self.copy_key();
+        } else if pressed(egui::Key::V) {
+            self.paste_key(self.selected);
+        } else if ctx.input(|i| !i.modifiers.ctrl && i.key_pressed(egui::Key::Delete)) {
+            self.assign(DragItem::Bind(Key::default()), self.selected);
+        }
     }
     fn import_elgato(&mut self) {
         self.gate.enabled = false;
@@ -2570,7 +3222,10 @@ impl App {
             let result = crate::elgato::load_all(&path);
             Some(Box::new(move |app| match result {
                 Ok(reports) => app.import_reports = reports,
-                Err(e) => app.fail(trf("Import Stream Deck impossible : {error}", &[("error", &e)])),
+                Err(e) => app.fail(trf(
+                    "Import Stream Deck impossible : {error}",
+                    &[("error", &e)],
+                )),
             }))
         });
     }
@@ -2582,7 +3237,10 @@ impl App {
         if self.config.profiles.len() + reports.len() > 64 {
             self.fail(trf(
                 "64 profils maximum (actuels: {current}, importés: {imported}).",
-                &[("current", &self.config.profiles.len()), ("imported", &reports.len())]
+                &[
+                    ("current", &self.config.profiles.len()),
+                    ("imported", &reports.len()),
+                ],
             ));
             self.import_reports = reports;
             return;
@@ -2608,9 +3266,12 @@ impl App {
                     suffix += 1;
                 }
                 if !report.icons.is_empty() {
-                    let dir = self.path.parent().unwrap().join("assets").join(format!(
-                        "import-{base_time}-{r_idx}"
-                    ));
+                    let dir = self
+                        .path
+                        .parent()
+                        .unwrap()
+                        .join("assets")
+                        .join(format!("import-{base_time}-{r_idx}"));
                     std::fs::create_dir_all(&dir)?;
                     for (i, (page, key, bytes)) in report.icons.iter().enumerate() {
                         let path = dir.join(format!("icon-{i}.png"));
@@ -2644,14 +3305,24 @@ impl App {
             }
         }
     }
-    fn open_crop_editor(&mut self, profile: usize, page: String, index: usize, path: std::path::PathBuf, size: u32) {
+    fn open_crop_editor(
+        &mut self,
+        profile: usize,
+        page: String,
+        index: usize,
+        path: std::path::PathBuf,
+        size: u32,
+    ) {
         let assets = self.path.parent().unwrap().join("assets/mes-icones");
         match crate::ui_media_crop::CropSession::open(path, profile, page, index, size, assets) {
             Ok(session) => {
                 self.crop_session = Some(session);
             }
             Err(e) => {
-                self.fail(trf("Impossible d'ouvrir le média pour recadrage : {error}", &[("error", &e)]));
+                self.fail(trf(
+                    "Impossible d'ouvrir le média pour recadrage : {error}",
+                    &[("error", &e)],
+                ));
             }
         }
     }
@@ -2659,7 +3330,9 @@ impl App {
         self.gate.enabled = false;
         self.engine.stop();
         self.start_dialog(|| {
-            let path = rfd::FileDialog::new().add_filter(tr("Pack NovyDeck"), &["json"]).pick_file()?;
+            let path = rfd::FileDialog::new()
+                .add_filter(tr("Pack NovyDeck"), &["json"])
+                .pick_file()?;
             let pack = (|| -> anyhow::Result<Library> {
                 let bytes = std::fs::read(path)?;
                 anyhow::ensure!(bytes.len() <= 8_000_000, "Pack trop volumineux");
@@ -2678,7 +3351,10 @@ impl App {
                         Ok(count)
                     })();
                     match result {
-                        Ok(n) => app.log(trf("{n} raccourcis importés. Les touches sont en pause.", &[("n", &n)])),
+                        Ok(n) => app.log(trf(
+                            "{n} raccourcis importés. Les touches sont en pause.",
+                            &[("n", &n)],
+                        )),
                         Err(e) => app.fail(trf("Import refusé : {error}", &[("error", &e)])),
                     }
                 }
@@ -2691,8 +3367,10 @@ impl App {
         self.engine.stop();
         let library = self.preferences.library.clone();
         self.start_dialog(move || {
-            let path = rfd::FileDialog::new().set_file_name("mes-binds-novydeck.json")
-                .add_filter(tr("Pack NovyDeck"), &["json"]).save_file()?;
+            let path = rfd::FileDialog::new()
+                .set_file_name("mes-binds-novydeck.json")
+                .add_filter(tr("Pack NovyDeck"), &["json"])
+                .save_file()?;
             let result = serde_json::to_vec_pretty(&library)
                 .map_err(anyhow::Error::from)
                 .and_then(|b| std::fs::write(path, b).map_err(Into::into));
@@ -3082,7 +3760,10 @@ impl App {
             None
         };
         let message = if let Some(e) = &validation {
-            trf("Brouillon · {error} · Les autres touches restent disponibles.", &[("error", &e)])
+            trf(
+                "Brouillon · {error} · Les autres touches restent disponibles.",
+                &[("error", &e)],
+            )
         } else if self.gate.dirty {
             tr("Sauvegarde automatique…").into()
         } else if self.notice == "Tout est prêt." || self.notice == "All set." {
@@ -3100,25 +3781,43 @@ impl App {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // Icône seulement quand il faut agir : l'état normal reste discret.
-                    let state = if self.error { Some(Ico::Error) } else if validation.is_some() { Some(Ico::Warning) } else { None };
+                    let state = if self.error {
+                        Some(Ico::Error)
+                    } else if validation.is_some() {
+                        Some(Ico::Warning)
+                    } else {
+                        None
+                    };
                     if let Some(image) = state.and_then(|ico| iconset::image(ctx, ico, 14.0)) {
                         ui.add(image);
                     }
-                    ui.add_sized([ (ui.available_width() - 230.0).max(80.0), 20.0 ], egui::Label::new(RichText::new(&message).size(11.0).color(
-                        if self.error || validation.is_some() {
-                            Color32::from_rgb(233, 119, 109)
-                        } else {
-                            p.muted
-                        },
-                    )).truncate()).on_hover_text(&message);
+                    ui.add_sized(
+                        [(ui.available_width() - 230.0).max(80.0), 20.0],
+                        egui::Label::new(RichText::new(&message).size(11.0).color(
+                            if self.error || validation.is_some() {
+                                Color32::from_rgb(233, 119, 109)
+                            } else {
+                                p.muted
+                            },
+                        ))
+                        .truncate(),
+                    )
+                    .on_hover_text(&message);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
-                            .add(iconset::button(ctx, Ico::Log, if self.show_logs {
-                                tr("Masquer le journal")
-                            } else {
-                                tr("Journal")
-                            }).small())
+                            .add(
+                                iconset::button(
+                                    ctx,
+                                    Ico::Log,
+                                    if self.show_logs {
+                                        tr("Masquer le journal")
+                                    } else {
+                                        tr("Journal")
+                                    },
+                                )
+                                .small(),
+                            )
                             .clicked()
                         {
                             self.show_logs = !self.show_logs;
@@ -3133,23 +3832,47 @@ impl App {
             });
         if self.show_logs {
             let collapsed = self.preferences.activity_collapsed;
-            let activity_t = ctx.animate_bool_with_time(egui::Id::new("activity_height"), !collapsed, if self.animations() { 0.26 } else { 0.0 });
+            let activity_t = ctx.animate_bool_with_time(
+                egui::Id::new("activity_height"),
+                !collapsed,
+                if self.animations() { 0.26 } else { 0.0 },
+            );
             let activity_height = 36.0 + 129.0 * motion::ease_out(activity_t);
             egui::TopBottomPanel::bottom("logs")
                 .default_height(activity_height)
-                .height_range(if activity_t < 1.0 || collapsed { activity_height..=activity_height } else { 100.0..=320.0 })
+                .height_range(if activity_t < 1.0 || collapsed {
+                    activity_height..=activity_height
+                } else {
+                    100.0..=320.0
+                })
                 .resizable(!collapsed && activity_t >= 1.0)
-                .frame(egui::Frame::new().fill(p.surface).inner_margin(egui::Margin::symmetric(16, if collapsed { 4 } else { 12 })))
+                .frame(
+                    egui::Frame::new()
+                        .fill(p.surface)
+                        .inner_margin(egui::Margin::symmetric(16, if collapsed { 4 } else { 12 })),
+                )
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        let chevron = if self.preferences.activity_collapsed { "▸" } else { "▾" };
-                        if ui.button(format!("{chevron} {}", tr("Activité récente"))).clicked() {
-                            self.preferences.activity_collapsed = !self.preferences.activity_collapsed;
+                        let chevron = if self.preferences.activity_collapsed {
+                            "▸"
+                        } else {
+                            "▾"
+                        };
+                        if ui
+                            .button(format!("{chevron} {}", tr("Activité récente")))
+                            .clicked()
+                        {
+                            self.preferences.activity_collapsed =
+                                !self.preferences.activity_collapsed;
                             self.save_preferences();
                         }
                         if self.preferences.activity_collapsed {
                             let last = self.logs.back().map(String::as_str).unwrap_or("—");
-                            ui.add(egui::Label::new(format!("{} · {last}", self.logs.len())).truncate()).on_hover_text(last);
+                            ui.add(
+                                egui::Label::new(format!("{} · {last}", self.logs.len()))
+                                    .truncate(),
+                            )
+                            .on_hover_text(last);
                         } else if ui.small_button(tr("Effacer")).clicked() {
                             self.logs.clear();
                         }
@@ -3159,7 +3882,9 @@ impl App {
                             .stick_to_bottom(true)
                             .show(ui, |ui| {
                                 for s in &self.logs {
-                                    ui.label(RichText::new(s).monospace().size(11.0).color(p.muted));
+                                    ui.label(
+                                        RichText::new(s).monospace().size(11.0).color(p.muted),
+                                    );
                                 }
                             });
                     }
@@ -3629,182 +4354,231 @@ impl App {
     /// Une touche de la grille : face, aperçu LCD, repères et interactions.
     /// Commun au châssis SVG (5 × 3, `chassis` = échelle) et à l'ancien habillage (autres formats).
     #[allow(clippy::too_many_arguments)]
-    fn deck_key(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, i: usize, r: egui::Rect, response: egui::Response, width: f32, chassis: Option<f32>) {
+    fn deck_key(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        i: usize,
+        r: egui::Rect,
+        response: egui::Response,
+        width: f32,
+        chassis: Option<f32>,
+    ) {
         let p = theme::palette(ctx);
 
-                                            let mut key = self.presented_key(i);
-                                            let mut face = self.plugin_face(i).cloned();
-                                            if let Some(value) = &mut face {
-                                                let rendered = self.plugin_render_key(i, key, value, &self.config);
-                                                if self.plugin_image_bytes(i, Some(value), &self.config).is_none() { value.image_bytes = None; }
-                                                key = rendered;
-                                            }
-                                            let selected = i == self.selected;
-                                            let flashing = self.last_key.is_some_and(|(idx, t)| {
-                                                idx == i && t.elapsed() < Duration::from_millis(350)
-                                            });
-                                            let hovering = response.hovered() || (self.drag.moving()
-                                                && self.drag.position.is_some_and(|pos| r.contains(pos)));
-                                            let enabled = self.animations();
-                                            let hover = ctx.animate_bool_with_time(egui::Id::new(("deck_face_hover", r.min.x.to_bits(), r.min.y.to_bits())), hovering, if enabled { 0.12 } else { 0.0 });
-                                            let drag_over = enabled && self.drag.moving() && self.drag.position.is_some_and(|pos| r.contains(pos));
-                                            let magnetic = ctx.animate_bool_with_time(egui::Id::new(("drag_magnet", i)), drag_over, if enabled { 0.12 } else { 0.0 });
-                                            let pop = self.drag_visual.as_ref().filter(|v| v.phase == 1 && v.target.is_some_and(|(idx, _)| idx == i))
-                                                .map_or(1.0, |v| {
-                                                    let t = ((ctx.input(|input| input.time) - v.started - 0.16) / 0.32) as f32;
-                                                    if t <= 0.0 || t >= 1.0 { 1.0 }
-                                                    else if t < 0.38 { 1.0 + 0.14 * motion::ease_out(t / 0.38) }
-                                                    else if t < 0.72 { 1.14 - 0.17 * motion::ease_out((t - 0.38) / 0.34) }
-                                                    else { 0.97 + 0.03 * motion::ease_out((t - 0.72) / 0.28) }
-                                                });
-                                            let bounce_id = egui::Id::new(("deck_key_bounce", i));
-                                            // Lire le clic AVANT data_mut : clicked() lit ctx.input, ce qui bloquerait sous le verrou.
-                                            let clicked = response.clicked();
-                                            let clicks = ctx.data_mut(|d| {
-                                                let count = d.get_temp_mut_or_default::<u64>(bounce_id);
-                                                if clicked { *count += 1; }
-                                                *count
-                                            });
-                                            let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.26, enabled);
-                                            let shrink = if clicks == 0 || !enabled { 1.0 } else { motion::bounce(phase) };
-                                            let painted = egui::Rect::from_center_size(r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)), r.size() * shrink * (1.0 + 0.06 * magnetic) * pop);
-                                            if magnetic > 0.0 {
-                                                ui.painter().rect_filled(painted.expand(5.0), 15.0, p.accent.gamma_multiply(0.30 * magnetic));
-                                                ui.painter().rect_stroke(painted.expand(3.0), 12.0, egui::Stroke::new(2.0, p.accent.gamma_multiply(magnetic)), egui::StrokeKind::Outside);
-                                            }
-                                            match chassis {
-                                                Some(s) => crate::deck_chassis::paint_face(ui.painter(), painted, s, selected, hover, flashing, motion::deck_color(ctx, self.preferences.deck_color, enabled)),
-                                                None => theme::key_face(ui.painter(), painted, selected || hovering, flashing),
-                                            }
-                                            let lcd = chassis.map_or(painted.shrink(5.0), |s| crate::deck_chassis::lcd(painted, s));
-                                            let lcd_radius = chassis.map_or(theme::KEY_LCD_RADIUS, |s| crate::deck_chassis::lcd_radius(r, s));
-                                            match self.key_previews.texture(
-                                                ctx,
-                                                i,
-                                                &key,
-                                                self.config.image_size,
-                                                face.as_ref(),
-                                            ) {
-                                                Ok(texture) => theme::rounded_image(ui.painter(), texture.id(), lcd, lcd_radius),
-                                                Err(error) => {
-                                                    ui.painter().text(
-                                                        lcd.center(),
-                                                        egui::Align2::CENTER_CENTER,
-                                                        tr("Aperçu indisponible"),
-                                                        egui::FontId::proportional(9.0),
-                                                        p.muted,
-                                                    );
-                                                    ui.painter().text(
-                                                        lcd.left_top(),
-                                                        egui::Align2::LEFT_TOP,
-                                                        "!",
-                                                        egui::FontId::proportional(12.0),
-                                                        Color32::LIGHT_RED,
-                                                    );
-                                                    let _ = error;
-                                                }
-                                            }
-                                            // Editing hints never alter the image sent to the LCD.
-                                            if !key.long_steps.is_empty() {
-                                                ui.painter().rect_filled(
-                                                    egui::Rect::from_min_size(
-                                                        lcd.right_top() - Vec2::new(17.0, 0.0),
-                                                        Vec2::new(17.0, 16.0),
-                                                    ),
-                                                    3.0,
-                                                    p.surface,
-                                                );
-                                                ui.painter().text(
-                                                    lcd.right_top() + Vec2::new(-8.0, 8.0),
-                                                    egui::Align2::CENTER_CENTER,
-                                                    "L",
-                                                    egui::FontId::proportional(11.0),
-                                                    p.ink,
-                                                );
-                                            }
-                                            if key.steps.is_empty()
-                                                && key.image.is_empty()
-                                                && key.label.is_empty()
-                                            {
-                                                theme::symbol(
-                                                    ui.painter(),
-                                                    r.center(),
-                                                    r.width().min(r.height()) * 0.22,
-                                                    8,
-                                                    p.muted,
-                                                );
-                                            }
-                                            if crate::model::validate_key_in_profile(
-                                                &self.config.keys()[i],
-                                                &self.config,
-                                                &self.config.profiles[self.config.active],
-                                            )
-                                            .is_err()
-                                            {
-                                                ui.painter().circle_filled(
-                                                    r.left_top() + Vec2::new(10.0, 10.0),
-                                                    4.0,
-                                                    Color32::from_rgb(242, 126, 106),
-                                                );
-                                            }
-                                            ui.painter().text(
-                                                r.right_bottom() + Vec2::new(0.0, chassis.map_or(2.0, |s| s)),
-                                                egui::Align2::RIGHT_TOP,
-                                                format!("{:02}", i + 1),
-                                                egui::FontId::proportional(chassis.map_or(10.0, |s| (10.0 * s).clamp(3.0, 10.0))),
-                                                if crate::deck_chassis::light(self.preferences.deck_color) && chassis.is_some() { Color32::from_rgb(32, 40, 53) } else { p.text_tertiary },
-                                            );
-                                            self.drag_sources.push((
-                                                r.intersect(ui.clip_rect()),
-                                                DragItem::Position(
-                                                    self.config.active,
-                                                    self.config.page.clone(),
-                                                    i,
-                                                ),
-                                            ));
-                                            self.drop_targets
-                                                .push((r.intersect(ui.clip_rect()), i));
-                                            if response.clicked() {
-                                                self.selected = i;
-                                                self.retarget_gallery();
-                                            }
-                                            response.context_menu(|ui| {
-                                                if ui.button(tr("Copier")).clicked() {
-                                                    self.selected = i;
-                                                    self.copy_key();
-                                                    ui.close_menu();
-                                                }
-                                                if ui
-                                                    .add_enabled(
-                                                        self.clipboard.is_some(),
-                                                        egui::Button::new("Coller"),
-                                                    )
-                                                    .clicked()
-                                                {
-                                                    self.paste_key(i);
-                                                    ui.close_menu();
-                                                }
-                                                if ui
-                                                    .button(tr("Dupliquer vers la prochaine touche vide"))
-                                                    .clicked()
-                                                {
-                                                    self.duplicate_key(i);
-                                                    ui.close_menu();
-                                                }
-                                                if ui.button(tr("Vider")).clicked() {
-                                                    self.assign(DragItem::Bind(Key::default()), i);
-                                                    ui.close_menu();
-                                                }
-                                            });
-                                            if response.double_clicked() {
-                                                if let Some(step @ Step::Folder { .. }) =
-                                                    key.steps.first()
-                                                {
-                                                    self.navigate(step.clone());
-                                                }
-                                            }
+        let mut key = self.presented_key(i);
+        let mut face = self.plugin_face(i).cloned();
+        if let Some(value) = &mut face {
+            let rendered = self.plugin_render_key(i, key, value, &self.config);
+            if self
+                .plugin_image_bytes(i, Some(value), &self.config)
+                .is_none()
+            {
+                value.image_bytes = None;
+            }
+            key = rendered;
+        }
+        let selected = i == self.selected;
+        let flashing = self
+            .last_key
+            .is_some_and(|(idx, t)| idx == i && t.elapsed() < Duration::from_millis(350));
+        let hovering = response.hovered()
+            || (self.drag.moving() && self.drag.position.is_some_and(|pos| r.contains(pos)));
+        let enabled = self.animations();
+        let hover = ctx.animate_bool_with_time(
+            egui::Id::new(("deck_face_hover", r.min.x.to_bits(), r.min.y.to_bits())),
+            hovering,
+            if enabled { 0.12 } else { 0.0 },
+        );
+        let drag_over =
+            enabled && self.drag.moving() && self.drag.position.is_some_and(|pos| r.contains(pos));
+        let magnetic = ctx.animate_bool_with_time(
+            egui::Id::new(("drag_magnet", i)),
+            drag_over,
+            if enabled { 0.12 } else { 0.0 },
+        );
+        let pop = self
+            .drag_visual
+            .as_ref()
+            .filter(|v| v.phase == 1 && v.target.is_some_and(|(idx, _)| idx == i))
+            .map_or(1.0, |v| {
+                let t = ((ctx.input(|input| input.time) - v.started - 0.16) / 0.32) as f32;
+                if t <= 0.0 || t >= 1.0 {
+                    1.0
+                } else if t < 0.38 {
+                    1.0 + 0.14 * motion::ease_out(t / 0.38)
+                } else if t < 0.72 {
+                    1.14 - 0.17 * motion::ease_out((t - 0.38) / 0.34)
+                } else {
+                    0.97 + 0.03 * motion::ease_out((t - 0.72) / 0.28)
+                }
+            });
+        let bounce_id = egui::Id::new(("deck_key_bounce", i));
+        // Lire le clic AVANT data_mut : clicked() lit ctx.input, ce qui bloquerait sous le verrou.
+        let clicked = response.clicked();
+        let clicks = ctx.data_mut(|d| {
+            let count = d.get_temp_mut_or_default::<u64>(bounce_id);
+            if clicked {
+                *count += 1;
+            }
+            *count
+        });
+        let phase = motion::progress(ctx, bounce_id.with("phase"), clicks, 0.26, enabled);
+        let shrink = if clicks == 0 || !enabled {
+            1.0
+        } else {
+            motion::bounce(phase)
+        };
+        let painted = egui::Rect::from_center_size(
+            r.center() - Vec2::new(0.0, 2.0 * hover * chassis.unwrap_or(1.0)),
+            r.size() * shrink * (1.0 + 0.06 * magnetic) * pop,
+        );
+        if magnetic > 0.0 {
+            ui.painter().rect_filled(
+                painted.expand(5.0),
+                15.0,
+                p.accent.gamma_multiply(0.30 * magnetic),
+            );
+            ui.painter().rect_stroke(
+                painted.expand(3.0),
+                12.0,
+                egui::Stroke::new(2.0, p.accent.gamma_multiply(magnetic)),
+                egui::StrokeKind::Outside,
+            );
+        }
+        match chassis {
+            Some(s) => crate::deck_chassis::paint_face(
+                ui.painter(),
+                painted,
+                s,
+                selected,
+                hover,
+                flashing,
+                motion::deck_color(ctx, self.preferences.deck_color, enabled),
+            ),
+            None => theme::key_face(ui.painter(), painted, selected || hovering, flashing),
+        }
+        let lcd = chassis.map_or(painted.shrink(5.0), |s| {
+            crate::deck_chassis::lcd(painted, s)
+        });
+        let lcd_radius = chassis.map_or(theme::KEY_LCD_RADIUS, |s| {
+            crate::deck_chassis::lcd_radius(r, s)
+        });
+        match self
+            .key_previews
+            .texture(ctx, i, &key, self.config.image_size, face.as_ref())
+        {
+            Ok(texture) => theme::rounded_image(ui.painter(), texture.id(), lcd, lcd_radius),
+            Err(error) => {
+                ui.painter().text(
+                    lcd.center(),
+                    egui::Align2::CENTER_CENTER,
+                    tr("Aperçu indisponible"),
+                    egui::FontId::proportional(9.0),
+                    p.muted,
+                );
+                ui.painter().text(
+                    lcd.left_top(),
+                    egui::Align2::LEFT_TOP,
+                    "!",
+                    egui::FontId::proportional(12.0),
+                    Color32::LIGHT_RED,
+                );
+                let _ = error;
+            }
+        }
+        // Editing hints never alter the image sent to the LCD.
+        if !key.long_steps.is_empty() {
+            ui.painter().rect_filled(
+                egui::Rect::from_min_size(
+                    lcd.right_top() - Vec2::new(17.0, 0.0),
+                    Vec2::new(17.0, 16.0),
+                ),
+                3.0,
+                p.surface,
+            );
+            ui.painter().text(
+                lcd.right_top() + Vec2::new(-8.0, 8.0),
+                egui::Align2::CENTER_CENTER,
+                "L",
+                egui::FontId::proportional(11.0),
+                p.ink,
+            );
+        }
+        if key.steps.is_empty() && key.image.is_empty() && key.label.is_empty() {
+            theme::symbol(
+                ui.painter(),
+                r.center(),
+                r.width().min(r.height()) * 0.22,
+                8,
+                p.muted,
+            );
+        }
+        if crate::model::validate_key_in_profile(
+            &self.config.keys()[i],
+            &self.config,
+            &self.config.profiles[self.config.active],
+        )
+        .is_err()
+        {
+            ui.painter().circle_filled(
+                r.left_top() + Vec2::new(10.0, 10.0),
+                4.0,
+                Color32::from_rgb(242, 126, 106),
+            );
+        }
+        ui.painter().text(
+            r.right_bottom() + Vec2::new(0.0, chassis.map_or(2.0, |s| s)),
+            egui::Align2::RIGHT_TOP,
+            format!("{:02}", i + 1),
+            egui::FontId::proportional(chassis.map_or(10.0, |s| (10.0 * s).clamp(3.0, 10.0))),
+            if crate::deck_chassis::light(self.preferences.deck_color) && chassis.is_some() {
+                Color32::from_rgb(32, 40, 53)
+            } else {
+                p.text_tertiary
+            },
+        );
+        self.drag_sources.push((
+            r.intersect(ui.clip_rect()),
+            DragItem::Position(self.config.active, self.config.page.clone(), i),
+        ));
+        self.drop_targets.push((r.intersect(ui.clip_rect()), i));
+        if response.clicked() {
+            self.selected = i;
+            self.retarget_gallery();
+        }
+        response.context_menu(|ui| {
+            if ui.button(tr("Copier")).clicked() {
+                self.selected = i;
+                self.copy_key();
+                ui.close_menu();
+            }
+            if ui
+                .add_enabled(self.clipboard.is_some(), egui::Button::new("Coller"))
+                .clicked()
+            {
+                self.paste_key(i);
+                ui.close_menu();
+            }
+            if ui
+                .button(tr("Dupliquer vers la prochaine touche vide"))
+                .clicked()
+            {
+                self.duplicate_key(i);
+                ui.close_menu();
+            }
+            if ui.button(tr("Vider")).clicked() {
+                self.assign(DragItem::Bind(Key::default()), i);
+                ui.close_menu();
+            }
+        });
+        if response.double_clicked() {
+            if let Some(step @ Step::Folder { .. }) = key.steps.first() {
+                self.navigate(step.clone());
+            }
+        }
 
-                                            response.on_hover_text(trf("Touche {key} · {label}\nGlisse depuis la bibliothèque pour affecter un raccourci. Glisse une touche sur une autre pour les échanger.", &[("key", &format!("{:02}", i + 1)), ("label", &key.label)]));
+        response.on_hover_text(trf("Touche {key} · {label}\nGlisse depuis la bibliothèque pour affecter un raccourci. Glisse une touche sur une autre pour les échanger.", &[("key", &format!("{:02}", i + 1)), ("label", &key.label)]));
     }
     fn deck(&mut self, ctx: &egui::Context) {
         let p = theme::palette(ctx);
@@ -4231,7 +5005,13 @@ impl App {
                         let page = session.page.clone();
                         let index = session.index;
                         let is_vid = session.is_video;
-                        if let Some(key) = self.config.profiles.get_mut(profile).and_then(|p| p.keys_at_mut(&page)).and_then(|keys| keys.get_mut(index)) {
+                        if let Some(key) = self
+                            .config
+                            .profiles
+                            .get_mut(profile)
+                            .and_then(|p| p.keys_at_mut(&page))
+                            .and_then(|keys| keys.get_mut(index))
+                        {
                             key.image = saved_path.to_string_lossy().into_owned();
                             self.edited();
                             if is_vid {
@@ -4258,17 +5038,21 @@ impl App {
                 .resizable(false)
                 .default_width(380.0)
                 .show(ctx, |ui| {
-                    ui.label(tr("Conserve une copie de cette touche et de toutes ses actions."));
+                    ui.label(tr(
+                        "Conserve une copie de cette touche et de toutes ses actions.",
+                    ));
                     ui.label(
-                        RichText::new(tr("Tu pourras ensuite la glisser sur n’importe quelle touche."))
-                            .small()
-                            .color(p.muted),
+                        RichText::new(tr(
+                            "Tu pourras ensuite la glisser sur n’importe quelle touche.",
+                        ))
+                        .small()
+                        .color(p.muted),
                     );
                     ui.text_edit_singleline(&mut self.bind_name);
                     let key = &self.config.keys()[self.selected];
                     ui.label(trf(
                         "{actions} action(s) · répétée(s) {repeat} fois",
-                        &[("actions", &key.steps.len()), ("repeat", &key.repeat)]
+                        &[("actions", &key.steps.len()), ("repeat", &key.repeat)],
                     ));
                     if ui
                         .add_enabled(
@@ -4301,7 +5085,9 @@ impl App {
                             self.preferences.library = previous;
                         }
                     }
-                    Err(e) => self.fail(trf("Raccourci non enregistré : {error}", &[("error", &e)])),
+                    Err(e) => {
+                        self.fail(trf("Raccourci non enregistré : {error}", &[("error", &e)]))
+                    }
                 }
             }
             self.save_bind = open;
@@ -4320,14 +5106,22 @@ impl App {
                         // Keep the last reported phase so a failure marks the correct step.
                         finished = true;
                         match result {
-                            Err(error) => self.update_result = Some(Err(trf("Mise à jour impossible : {error}", &[("error", &error)]))),
+                            Err(error) => {
+                                self.update_result = Some(Err(trf(
+                                    "Mise à jour impossible : {error}",
+                                    &[("error", &error)],
+                                )))
+                            }
                             Ok(setup) => {
                                 self.update_phase = Some(tr("Installation…"));
                                 // Failure to persist must never silently discard edits on restart.
                                 if self.gate.invalid || self.config.validate_structure().is_err() {
                                     self.update_result = Some(Err(tr("Configuration invalide : enregistrez-la avant de mettre à jour").into()));
                                 } else if let Err(error) = store::save(&self.path, &self.config) {
-                                    self.update_result = Some(Err(trf("Sauvegarde impossible : {error}", &[("error", &error)])));
+                                    self.update_result = Some(Err(trf(
+                                        "Sauvegarde impossible : {error}",
+                                        &[("error", &error)],
+                                    )));
                                 } else {
                                     self.gate.dirty = false;
                                     match crate::app_update::launch(&setup) {
@@ -4335,21 +5129,34 @@ impl App {
                                             self.quitting = true; // évite la minimisation dans la barre système
                                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                                         }
-                                        Err(error) => self.update_result = Some(Err(trf("Démarrage de l'installateur impossible : {error}", &[("error", &error)]))),
+                                        Err(error) => {
+                                            self.update_result = Some(Err(trf(
+                                                "Démarrage de l'installateur impossible : {error}",
+                                                &[("error", &error)],
+                                            )))
+                                        }
                                     }
                                 }
                                 if self.update_result.as_ref().is_some_and(Result::is_err) {
                                     let _ = std::fs::remove_file(&setup);
-                                    if let Some(parent) = setup.parent() { let _ = std::fs::remove_dir(parent); }
+                                    if let Some(parent) = setup.parent() {
+                                        let _ = std::fs::remove_dir(parent);
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            if finished { self.update_rx = None; }
+            if finished {
+                self.update_rx = None;
+            }
         }
-        if self.startup_prompts && !self.whats_new && self.preferences.update_check == Some(true) && !self.startup_checked {
+        if self.startup_prompts
+            && !self.whats_new
+            && self.preferences.update_check == Some(true)
+            && !self.startup_checked
+        {
             self.start_update_check(ctx, true);
         }
         let startup_result = self.startup_rx.as_ref().and_then(|rx| rx.try_recv().ok());
@@ -4357,7 +5164,10 @@ impl App {
             self.startup_rx = None;
             match result {
                 Ok(crate::app_update::Status::New(latest)) => self.startup_offer = Some(latest),
-                Err(error) => self.log(trf("Vérification au démarrage impossible : {error}", &[("error", &error)])),
+                Err(error) => self.log(trf(
+                    "Vérification au démarrage impossible : {error}",
+                    &[("error", &error)],
+                )),
                 _ => {}
             }
         }
@@ -4372,7 +5182,11 @@ impl App {
                 });
             if !open || close {
                 self.legacy_ha_keys.clear();
-                if let Err(e) = std::fs::write(self.path.with_file_name("legacy-ha-notice.seen"), b"1") { self.log(format!("legacy-ha-notice.seen : {e}")); }
+                if let Err(e) =
+                    std::fs::write(self.path.with_file_name("legacy-ha-notice.seen"), b"1")
+                {
+                    self.log(format!("legacy-ha-notice.seen : {e}"));
+                }
             }
         }
         if self.startup_prompts && self.whats_new {
@@ -4396,7 +5210,9 @@ impl App {
             if let Some(enabled) = choice {
                 self.preferences.update_check = Some(enabled);
                 self.save_preferences();
-                if enabled { self.start_update_check(ctx, true); }
+                if enabled {
+                    self.start_update_check(ctx, true);
+                }
             } else if !open {
                 self.preferences.update_check = Some(false);
                 self.save_preferences();
@@ -4490,7 +5306,8 @@ impl App {
                         let result = crate::app_update::download_with_progress(&latest, || {
                             let _ = signal.send(about::UpdateEvent::Verifying);
                             context.request_repaint();
-                        }).map_err(|e| e.to_string());
+                        })
+                        .map_err(|e| e.to_string());
                         let _ = tx.send(about::UpdateEvent::Downloaded(result));
                         context.request_repaint();
                     });
@@ -4520,59 +5337,94 @@ impl App {
                 let tx = self.dialog_tx.clone();
                 std::thread::spawn(move || {
                     let result = crate::assets::install_ffmpeg()
-                        .and_then(|_| crate::assets::import_video(&offer.video, &offer.assets, offer.size))
+                        .and_then(|_| {
+                            crate::assets::import_video(&offer.video, &offer.assets, offer.size)
+                        })
                         .map_err(|e| e.to_string());
                     let _ = tx.send(Some(Box::new(move |app: &mut App| {
                         app.ffmpeg_installing = false;
                         app.ffmpeg_offer = None;
                         match result {
                             Ok(path) => {
-                                if let Some(key) = app.config.profiles.get_mut(offer.profile).and_then(|p| p.keys_at_mut(&offer.page)).and_then(|keys| keys.get_mut(offer.index)) {
+                                if let Some(key) = app
+                                    .config
+                                    .profiles
+                                    .get_mut(offer.profile)
+                                    .and_then(|p| p.keys_at_mut(&offer.page))
+                                    .and_then(|keys| keys.get_mut(offer.index))
+                                {
                                     key.image = path.to_string_lossy().into_owned();
                                     app.edited();
                                 }
-                                app.log(tr("Module vidéo installé, vidéo convertie en GIF animé.").into());
+                                app.log(
+                                    tr("Module vidéo installé, vidéo convertie en GIF animé.")
+                                        .into(),
+                                );
                             }
-                            Err(e) => app.fail(trf("Import vidéo impossible : {error}", &[("error", &e)])),
+                            Err(e) => {
+                                app.fail(trf("Import vidéo impossible : {error}", &[("error", &e)]))
+                            }
                         }
                     }) as DialogEffect));
                 });
             }
-            if !open && !self.ffmpeg_installing { self.ffmpeg_offer = None; }
+            if !open && !self.ffmpeg_installing {
+                self.ffmpeg_offer = None;
+            }
         }
         if self.show_apps {
             let mut open = true;
-            theme::fixed_window(tr("Applications associées")).open(&mut open).show(ctx, |ui| {
-                ui.label(tr("Noms d'exécutables (ex. obs64.exe) associés à ce profil."));
-                let apps = &mut self.config.profiles[self.config.active].apps;
-                let mut changed = false;
-                let mut remove = None;
-                for (i, name) in apps.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        changed |= ui.text_edit_singleline(name).changed();
-                        if ui.small_button(tr("Supprimer")).clicked() { remove = Some(i); }
-                    });
-                }
-                if let Some(i) = remove { apps.remove(i); changed = true; }
-                if ui.button(tr("Ajouter une application")).clicked() { apps.push(String::new()); changed = true; }
-                if ui.button(tr("Ajouter l'application au premier plan dans 3 s")).clicked() {
-                    let profile = self.config.active;
-                    self.start_dialog(move || {
-                        std::thread::sleep(Duration::from_secs(3));
-                        let exe = crate::desktop::foreground_exe()?;
-                        Some(Box::new(move |app: &mut App| {
-                            if let Some(p) = app.config.profiles.get_mut(profile) {
-                                if !p.apps.iter().any(|name| name.eq_ignore_ascii_case(&exe)) { p.apps.push(exe); app.edited(); }
+            theme::fixed_window(tr("Applications associées"))
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label(tr(
+                        "Noms d'exécutables (ex. obs64.exe) associés à ce profil.",
+                    ));
+                    let apps = &mut self.config.profiles[self.config.active].apps;
+                    let mut changed = false;
+                    let mut remove = None;
+                    for (i, name) in apps.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            changed |= ui.text_edit_singleline(name).changed();
+                            if ui.small_button(tr("Supprimer")).clicked() {
+                                remove = Some(i);
                             }
-                        }))
-                    });
-                }
-                if changed { self.edited(); }
-            });
+                        });
+                    }
+                    if let Some(i) = remove {
+                        apps.remove(i);
+                        changed = true;
+                    }
+                    if ui.button(tr("Ajouter une application")).clicked() {
+                        apps.push(String::new());
+                        changed = true;
+                    }
+                    if ui
+                        .button(tr("Ajouter l'application au premier plan dans 3 s"))
+                        .clicked()
+                    {
+                        let profile = self.config.active;
+                        self.start_dialog(move || {
+                            std::thread::sleep(Duration::from_secs(3));
+                            let exe = crate::desktop::foreground_exe()?;
+                            Some(Box::new(move |app: &mut App| {
+                                if let Some(p) = app.config.profiles.get_mut(profile) {
+                                    if !p.apps.iter().any(|name| name.eq_ignore_ascii_case(&exe)) {
+                                        p.apps.push(exe);
+                                        app.edited();
+                                    }
+                                }
+                            }))
+                        });
+                    }
+                    if changed {
+                        self.edited();
+                    }
+                });
             self.show_apps = open;
         }
         if self.show_hardware_test {
-            let mut open=true;
+            let mut open = true;
             theme::fixed_window(tr("Tester mon périphérique")).open(&mut open).default_width(540.0).resizable(true).show(ctx,|ui| {
                 let p=theme::palette(ui.ctx());
                 ui.label(RichText::new(self.device_label()).strong());
@@ -4613,40 +5465,98 @@ impl App {
                 egui::ScrollArea::vertical().max_height(180.0).show(ui,|ui|{ui.monospace(&text);});
             });
             if !open {
-                if self.hardware_test.as_ref().is_some_and(|t|t.active) { let _=self.device.send(Command::TestStop); if let Some(t)=&mut self.hardware_test { t.active=false; } }
-                self.show_hardware_test=false;
+                if self.hardware_test.as_ref().is_some_and(|t| t.active) {
+                    let _ = self.device.send(Command::TestStop);
+                    if let Some(t) = &mut self.hardware_test {
+                        t.active = false;
+                    }
+                }
+                self.show_hardware_test = false;
             }
         }
         if self.show_device_report {
             let mut open = true;
-            theme::fixed_window(tr("Rapport périphérique")).open(&mut open)
-                .default_width(750.0).default_height(500.0).resizable(true).show(ctx, |ui| {
+            theme::fixed_window(tr("Rapport périphérique"))
+                .open(&mut open)
+                .default_width(750.0)
+                .default_height(500.0)
+                .resizable(true)
+                .show(ctx, |ui| {
                     let folder = crate::devices::report::directory(&self.path);
                     match crate::devices::report::latest(&self.path) {
                         Ok(Some(path)) => match std::fs::read_to_string(&path) {
                             Ok(text) => {
                                 ui.horizontal(|ui| {
-                                    if ui.add(theme::secondary_button(tr("Copier"))).clicked() { ui.ctx().copy_text(text.clone()); }
-                                    if ui.add(theme::secondary_button(tr("Ouvrir le dossier"))).clicked() {
-                                        if let Err(e) = std::process::Command::new("explorer.exe").arg(&folder).spawn() { self.fail(trf("Dossier inaccessible : {error}", &[("error", &e)])); }
+                                    if ui.add(theme::secondary_button(tr("Copier"))).clicked() {
+                                        ui.ctx().copy_text(text.clone());
                                     }
-                                    if ui.add(theme::secondary_button(tr("Enregistrer sous…"))).clicked() {
-                                        if let Some(dest) = rfd::FileDialog::new().add_filter("Texte", &["txt"]).set_file_name("rapport-peripherique.txt").save_file() {
-                                            if let Err(e) = std::fs::write(dest.with_extension("txt"), &text) { self.fail(trf("Enregistrement impossible : {error}", &[("error", &e)])); }
+                                    if ui
+                                        .add(theme::secondary_button(tr("Ouvrir le dossier")))
+                                        .clicked()
+                                    {
+                                        if let Err(e) = std::process::Command::new("explorer.exe")
+                                            .arg(&folder)
+                                            .spawn()
+                                        {
+                                            self.fail(trf(
+                                                "Dossier inaccessible : {error}",
+                                                &[("error", &e)],
+                                            ));
+                                        }
+                                    }
+                                    if ui
+                                        .add(theme::secondary_button(tr("Enregistrer sous…")))
+                                        .clicked()
+                                    {
+                                        if let Some(dest) = rfd::FileDialog::new()
+                                            .add_filter("Texte", &["txt"])
+                                            .set_file_name("rapport-peripherique.txt")
+                                            .save_file()
+                                        {
+                                            if let Err(e) =
+                                                std::fs::write(dest.with_extension("txt"), &text)
+                                            {
+                                                self.fail(trf(
+                                                    "Enregistrement impossible : {error}",
+                                                    &[("error", &e)],
+                                                ));
+                                            }
                                         }
                                     }
                                 });
-                                egui::ScrollArea::vertical().show(ui, |ui| { ui.monospace(&text); });
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    ui.monospace(&text);
+                                });
                             }
-                            Err(e) => { ui.label(trf("Lecture du rapport impossible : {error}", &[("error", &e)])); }
+                            Err(e) => {
+                                ui.label(trf(
+                                    "Lecture du rapport impossible : {error}",
+                                    &[("error", &e)],
+                                ));
+                            }
                         },
-                        Ok(None) => { ui.label(tr("Aucun rapport disponible. Lance une connexion du périphérique.")); },
-                        Err(e) => { ui.label(trf("Recherche du rapport impossible : {error}", &[("error", &e)])); }
+                        Ok(None) => {
+                            ui.label(tr(
+                                "Aucun rapport disponible. Lance une connexion du périphérique.",
+                            ));
+                        }
+                        Err(e) => {
+                            ui.label(trf(
+                                "Recherche du rapport impossible : {error}",
+                                &[("error", &e)],
+                            ));
+                        }
                     }
                 });
             self.show_device_report = open;
         }
-        let _ = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
+        let _ = motion::progress(
+            ctx,
+            egui::Id::new("settings_visibility"),
+            self.settings,
+            0.22,
+            self.animations(),
+        );
         if self.settings {
             let mut open = true;
             let d6 = self.is_d6();
@@ -4862,14 +5772,23 @@ impl App {
                     motion::end_slide(ui, settings_slide);
                 });
             if let Some(window) = settings_window {
-                let appear = motion::progress(ctx, egui::Id::new("settings_visibility"), self.settings, 0.22, self.animations());
+                let appear = motion::progress(
+                    ctx,
+                    egui::Id::new("settings_visibility"),
+                    self.settings,
+                    0.22,
+                    self.animations(),
+                );
                 if appear < 1.0 {
                     let scale = 0.96 + 0.04 * appear;
                     let center = window.response.rect.center();
-                    ctx.transform_layer_shapes(window.response.layer_id, egui::emath::TSTransform {
-                        scaling: scale,
-                        translation: center.to_vec2() * (1.0 - scale),
-                    });
+                    ctx.transform_layer_shapes(
+                        window.response.layer_id,
+                        egui::emath::TSTransform {
+                            scaling: scale,
+                            translation: center.to_vec2() * (1.0 - scale),
+                        },
+                    );
                 }
             }
             self.settings = open;
@@ -4929,8 +5848,14 @@ impl App {
         self.plugin_events();
         self.housekeeping();
         self.assistant_events();
-        let management_modal=self.plugin_management.confirmation.is_some()||self.plugin_management.working.is_some();
-        let modal = management_modal || self.whats_new || self.startup_offer.is_some() || self.update_confirm.is_some() || self.update_rx.is_some() || self.show_workflow
+        let management_modal = self.plugin_management.confirmation.is_some()
+            || self.plugin_management.working.is_some();
+        let modal = management_modal
+            || self.whats_new
+            || self.startup_offer.is_some()
+            || self.update_confirm.is_some()
+            || self.update_rx.is_some()
+            || self.show_workflow
             || plugin_market_ui::is_open()
             || self.show_assets
             || self.show_desktop_settings
@@ -4952,50 +5877,93 @@ impl App {
             || ctx.memory(|m| m.any_popup_open());
         let now = ctx.input(|i| i.time);
         let was_moving = self.drag.moving();
-        let prior = self.drag.active.as_ref().map(|(item, start)| (item.clone(), *start));
+        let prior = self
+            .drag
+            .active
+            .as_ref()
+            .map(|(item, start)| (item.clone(), *start));
         let previous_pos = self.drag.position;
         let mut dropped = None;
         if modal {
             self.drag.cancel();
         } else {
             let events = ctx.input(|i| i.events.clone());
-            dropped = self.drag.update(&events, &self.drag_sources, &self.drop_targets);
+            dropped = self
+                .drag
+                .update(&events, &self.drag_sources, &self.drop_targets);
         }
-        if let Some((item, target)) = &dropped { self.assign(item.clone(), *target); }
+        if let Some((item, target)) = &dropped {
+            self.assign(item.clone(), *target);
+        }
         let enabled = self.animations();
-        if !enabled || modal { self.drag_visual = None; }
-        else {
+        if !enabled || modal {
+            self.drag_visual = None;
+        } else {
             if self.drag.moving() && self.drag_visual.as_ref().is_none_or(|v| v.phase != 0) {
                 if let Some((item, start)) = &self.drag.active {
-                    let source = self.drag_sources.iter().find(|(r, _)| r.contains(*start)).map(|(r, _)| *r)
+                    let source = self
+                        .drag_sources
+                        .iter()
+                        .find(|(r, _)| r.contains(*start))
+                        .map(|(r, _)| *r)
                         .unwrap_or_else(|| egui::Rect::from_center_size(*start, Vec2::splat(48.0)));
-                    self.drag_visual = Some(DragVisual { item: item.clone(), source, center: *start,
-                        goal: self.drag.position.unwrap_or(*start), target: None, phase: 0, started: now, last: now });
+                    self.drag_visual = Some(DragVisual {
+                        item: item.clone(),
+                        source,
+                        center: *start,
+                        goal: self.drag.position.unwrap_or(*start),
+                        target: None,
+                        phase: 0,
+                        started: now,
+                        last: now,
+                    });
                 }
             }
             // A press, move and release may all arrive in a single input frame.
             if self.drag_visual.is_none() && was_moving && dropped.is_some() {
                 if let Some((item, start)) = prior {
-                    let source = self.drag_sources.iter().find(|(r, _)| r.contains(start)).map(|(r, _)| *r)
+                    let source = self
+                        .drag_sources
+                        .iter()
+                        .find(|(r, _)| r.contains(start))
+                        .map(|(r, _)| *r)
                         .unwrap_or_else(|| egui::Rect::from_center_size(start, Vec2::splat(48.0)));
-                    self.drag_visual = Some(DragVisual { item, source, center: previous_pos.unwrap_or(start),
-                        goal: previous_pos.unwrap_or(start), target: None, phase: 0, started: now, last: now });
+                    self.drag_visual = Some(DragVisual {
+                        item,
+                        source,
+                        center: previous_pos.unwrap_or(start),
+                        goal: previous_pos.unwrap_or(start),
+                        target: None,
+                        phase: 0,
+                        started: now,
+                        last: now,
+                    });
                 }
             }
             if let Some(v) = &mut self.drag_visual {
                 if v.phase == 0 {
                     if let Some((_, target)) = &dropped {
-                        v.target = self.drop_targets.iter().find(|(_, i)| i == target).map(|(r, i)| (*i, *r));
+                        v.target = self
+                            .drop_targets
+                            .iter()
+                            .find(|(_, i)| i == target)
+                            .map(|(r, i)| (*i, *r));
                         v.goal = v.target.map_or(v.goal, |(_, r)| r.center());
-                        v.phase = 1; v.started = now;
+                        v.phase = 1;
+                        v.started = now;
                     } else if !self.drag.moving() {
-                        v.goal = v.source.center(); v.phase = 2; v.started = now;
+                        v.goal = v.source.center();
+                        v.phase = 2;
+                        v.started = now;
                     } else if let Some(pos) = self.drag.position {
                         v.goal = pos + Vec2::new(15.0, -18.0);
                     }
                 }
-                if !v.advance(now, enabled) { self.drag_visual = None; }
-                else { ctx.request_repaint(); }
+                if !v.advance(now, enabled) {
+                    self.drag_visual = None;
+                } else {
+                    ctx.request_repaint();
+                }
             }
         }
         self.drag_sources.clear();
@@ -5021,9 +5989,16 @@ impl App {
         let logo = theme::intro_logo_texture(ctx);
         motion::intro(ctx, &logo, self.animations());
         if let Some(v) = &self.drag_visual {
-            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drag_source_dim")));
+            let painter = ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Foreground,
+                egui::Id::new("drag_source_dim"),
+            ));
             if v.phase == 0 {
-                painter.rect_filled(v.source, 8.0, theme::palette(ctx).surface.gamma_multiply(0.50));
+                painter.rect_filled(
+                    v.source,
+                    8.0,
+                    theme::palette(ctx).surface.gamma_multiply(0.50),
+                );
             }
             v.paint(ctx, now);
         }
@@ -5041,15 +6016,30 @@ impl App {
             self.save();
         }
     }
-    fn diagnostic_sample(&mut self, ctx:&egui::Context, start:Instant) {
-        if self.flicker.as_ref().is_some_and(|s|s.active()) {
-            let screen=ctx.screen_rect();
-            let (pointer,focused,ppp)=ctx.input(|i|(i.pointer.hover_pos(),i.viewport().focused.unwrap_or(false),i.pixels_per_point()));
-            let zone=match pointer {Some(pos) if self.diagnostic_inspector.is_some_and(|r|r.contains(pos))=>"inspector",Some(pos) if self.diagnostic_deck.is_some_and(|r|r.contains(pos))=>"preview",Some(_)=>"other",None=>"outside"};
-            let rect=|r:Option<egui::Rect>|r.map(|r|[r.min.x,r.min.y,r.width(),r.height()]);
-            let stats=self.key_previews.diagnostic_stats();
-            let details=serde_json::json!({"mouse":pointer.map(|p|[p.x-screen.min.x,p.y-screen.min.y]),"viewport":[screen.width(),screen.height()],"pixels_per_point":ppp,"focused":focused,"preview_rect":rect(self.diagnostic_deck),"inspector_rect":rect(self.diagnostic_inspector),"key_width":self.diagnostic_key_width,"cache_hits":stats.0,"cache_misses":stats.1,"texture_recreates":stats.2,"animation_frames":stats.3,"repaint_animation_ms":stats.4});
-            if let Some(session)=&mut self.flicker {session.frame(zone,details,start.elapsed().as_secs_f64()*1000.0);}
+    fn diagnostic_sample(&mut self, ctx: &egui::Context, start: Instant) {
+        if self.flicker.as_ref().is_some_and(|s| s.active()) {
+            let screen = ctx.screen_rect();
+            let (pointer, focused, ppp) = ctx.input(|i| {
+                (
+                    i.pointer.hover_pos(),
+                    i.viewport().focused.unwrap_or(false),
+                    i.pixels_per_point(),
+                )
+            });
+            let zone = match pointer {
+                Some(pos) if self.diagnostic_inspector.is_some_and(|r| r.contains(pos)) => {
+                    "inspector"
+                }
+                Some(pos) if self.diagnostic_deck.is_some_and(|r| r.contains(pos)) => "preview",
+                Some(_) => "other",
+                None => "outside",
+            };
+            let rect = |r: Option<egui::Rect>| r.map(|r| [r.min.x, r.min.y, r.width(), r.height()]);
+            let stats = self.key_previews.diagnostic_stats();
+            let details = serde_json::json!({"mouse":pointer.map(|p|[p.x-screen.min.x,p.y-screen.min.y]),"viewport":[screen.width(),screen.height()],"pixels_per_point":ppp,"focused":focused,"preview_rect":rect(self.diagnostic_deck),"inspector_rect":rect(self.diagnostic_inspector),"key_width":self.diagnostic_key_width,"cache_hits":stats.0,"cache_misses":stats.1,"texture_recreates":stats.2,"animation_frames":stats.3,"repaint_animation_ms":stats.4});
+            if let Some(session) = &mut self.flicker {
+                session.frame(zone, details, start.elapsed().as_secs_f64() * 1000.0);
+            }
         }
     }
 }
@@ -5072,21 +6062,28 @@ impl eframe::App for App {
             self.hide_frames -= 1;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
-        let start=Instant::now();
+        let start = Instant::now();
         self.frame(ctx);
-        self.diagnostic_sample(ctx,start);
+        self.diagnostic_sample(ctx, start);
     }
     fn on_exit(&mut self, _: Option<&eframe::glow::Context>) {
-        if let Some(session)=&self.flicker {session.stop();}
+        if let Some(session) = &self.flicker {
+            session.stop();
+        }
         self.stop_http();
         self.plugins.take();
-        if self.plugin_save_pending && !self.gate.invalid { self.flush_plugin_save(Instant::now(), true); }
+        if self.plugin_save_pending && !self.gate.invalid {
+            self.flush_plugin_save(Instant::now(), true);
+        }
         if self.gate.dirty && !self.gate.invalid {
             if let Err(e) = store::save(&self.path, &self.config) {
                 let message = format!("Échec de sauvegarde à la fermeture : {e}\n");
                 eprintln!("{message}");
                 let log = self.path.with_file_name("deckforge-error.log");
-                let _ = std::fs::OpenOptions::new().create(true).append(true).open(log)
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(log)
                     .and_then(|mut file| std::io::Write::write_all(&mut file, message.as_bytes()));
             }
         }
@@ -5118,260 +6115,728 @@ impl Runner {
     }
 }
 impl App {
-    fn plugin_face(&self,index:usize)->Option<&PluginFace>{
-        let manager=self.plugins.as_ref()?;
-        let id=manager.visible().values().find(|v|v.index==index)?.context.as_str();
+    fn plugin_face(&self, index: usize) -> Option<&PluginFace> {
+        let manager = self.plugins.as_ref()?;
+        let id = manager
+            .visible()
+            .values()
+            .find(|v| v.index == index)?
+            .context
+            .as_str();
         self.plugin_faces.get(id)
     }
-    fn plugin_image_bytes<'a>(&self, index: usize, face: Option<&'a PluginFace>, config: &Config) -> Option<&'a [u8]> {
-        let original=config.keys().get(index)?;
-        if original.plugin_state.is_some() {return None;}
-        let binding=original.plugin.as_ref()?;
-        self.plugins.as_ref()?.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)?;
-        let key=self.state_key_in(config,index,original.clone());
-        if !key.image.is_empty() || key.display_kind.is_some() || self.explicit_state_face(config, index) {return None;}
-        face.and_then(|face|face.image_bytes.as_deref())
+    fn plugin_image_bytes<'a>(
+        &self,
+        index: usize,
+        face: Option<&'a PluginFace>,
+        config: &Config,
+    ) -> Option<&'a [u8]> {
+        let original = config.keys().get(index)?;
+        if original.plugin_state.is_some() {
+            return None;
+        }
+        let binding = original.plugin.as_ref()?;
+        self.plugins.as_ref()?.visible().values().find(|v| {
+            v.index == index
+                && v.plugin == binding.plugin
+                && v.action == binding.action
+                && v.settings == binding.settings
+        })?;
+        let key = self.state_key_in(config, index, original.clone());
+        if !key.image.is_empty()
+            || key.display_kind.is_some()
+            || self.explicit_state_face(config, index)
+        {
+            return None;
+        }
+        face.and_then(|face| face.image_bytes.as_deref())
     }
     fn explicit_state_face(&self, config: &Config, index: usize) -> bool {
-        let Some(key) = config.keys().get(index) else { return false };
-        let Some(display) = key.state_display.as_ref() else { return false };
+        let Some(key) = config.keys().get(index) else {
+            return false;
+        };
+        let Some(display) = key.state_display.as_ref() else {
+            return false;
+        };
         let active = if key.plugin_state.is_some() {
-            self.plugin_states.lookup(config, index, key).active().unwrap_or(false)
+            self.plugin_states
+                .lookup(config, index, key)
+                .active()
+                .unwrap_or(false)
         } else {
-            self.state_values.get(index).copied().flatten().unwrap_or(false)
+            self.state_values
+                .get(index)
+                .copied()
+                .flatten()
+                .unwrap_or(false)
         };
         let face = if active { &display.on } else { &display.off };
         face.image.is_some() || face.label.is_some()
     }
-    fn plugin_render_key(&self,index:usize,mut key:Key,face:&PluginFace,config:&Config)->Key {
-        if key.plugin_state.is_some() {return key;}
-        let Some(binding)=config.keys().get(index).and_then(|key|key.plugin.as_ref()) else {return key};
-        let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().values().find(|v|v.index==index && v.plugin==binding.plugin && v.action==binding.action && v.settings==binding.settings)) else {return key};
+    fn plugin_render_key(
+        &self,
+        index: usize,
+        mut key: Key,
+        face: &PluginFace,
+        config: &Config,
+    ) -> Key {
+        if key.plugin_state.is_some() {
+            return key;
+        }
+        let Some(binding) = config.keys().get(index).and_then(|key| key.plugin.as_ref()) else {
+            return key;
+        };
+        let Some(v) = self.plugins.as_ref().and_then(|m| {
+            m.visible().values().find(|v| {
+                v.index == index
+                    && v.plugin == binding.plugin
+                    && v.action == binding.action
+                    && v.settings == binding.settings
+            })
+        }) else {
+            return key;
+        };
         // The configured title (including a two-state face title) always wins.
         let explicit = self.explicit_state_face(config, index);
-        if key.label.is_empty() && !explicit && key.image.is_empty() && key.display_kind.is_none() && !face.title.is_empty() {key.label=face.title.clone();}
-        if !explicit && key.image.is_empty() && key.display_kind.is_none() && face.image_bytes.is_none() {
-            if let Some(action)=self.plugins.as_ref().and_then(|m|m.catalog.iter().find(|p|p.uuid==v.plugin)).and_then(|p|p.actions.iter().find(|a|a.uuid==v.action)) {
-                if key.label.is_empty() {if let Some(title)=action.titles.get(face.state as usize).and_then(Option::as_ref){key.label=title.clone();}}
-                if let Some(icon)=action.states.get(face.state as usize).and_then(Option::as_ref).or(action.icon.as_ref()) {key.image=icon.to_string_lossy().into_owned();}
+        if key.label.is_empty()
+            && !explicit
+            && key.image.is_empty()
+            && key.display_kind.is_none()
+            && !face.title.is_empty()
+        {
+            key.label = face.title.clone();
+        }
+        if !explicit
+            && key.image.is_empty()
+            && key.display_kind.is_none()
+            && face.image_bytes.is_none()
+        {
+            if let Some(action) = self
+                .plugins
+                .as_ref()
+                .and_then(|m| m.catalog.iter().find(|p| p.uuid == v.plugin))
+                .and_then(|p| p.actions.iter().find(|a| a.uuid == v.action))
+            {
+                if key.label.is_empty() {
+                    if let Some(title) = action
+                        .titles
+                        .get(face.state as usize)
+                        .and_then(Option::as_ref)
+                    {
+                        key.label = title.clone();
+                    }
+                }
+                if let Some(icon) = action
+                    .states
+                    .get(face.state as usize)
+                    .and_then(Option::as_ref)
+                    .or(action.icon.as_ref())
+                {
+                    key.image = icon.to_string_lossy().into_owned();
+                }
             }
         }
         key
     }
-    fn send_plugin_face(&self,index:usize){
-        if !self.wanted || !self.gate.connected || self.gate.dirty || self.pending.is_some()
-            || self.sleep.sleeping || index >= self.device_keys() || index >= self.applied.keys().len() { return; }
-        let Some(face)=self.plugin_face(index) else {return};
-        let key=self.state_key_in(&self.applied,index,self.applied.keys()[index].clone());
-        let key=self.plugin_render_key(index,key,face,&self.applied);
-        if let Ok(font)=crate::key_render::font(){
-            if let Ok(jpeg)=crate::key_render::for_plugin(&key,self.applied.image_size,&font,self.plugin_image_bytes(index,Some(face),&self.applied),face.flash.filter(|(_,when)|when.elapsed()<Duration::from_secs(1)).map(|(ok,_)|ok)){
-                let _=self.device.send(Command::KeyImage(index,jpeg));
+    fn send_plugin_face(&self, index: usize) {
+        if !self.wanted
+            || !self.gate.connected
+            || self.gate.dirty
+            || self.pending.is_some()
+            || self.sleep.sleeping
+            || index >= self.device_keys()
+            || index >= self.applied.keys().len()
+        {
+            return;
+        }
+        let Some(face) = self.plugin_face(index) else {
+            return;
+        };
+        let key = self.state_key_in(&self.applied, index, self.applied.keys()[index].clone());
+        let key = self.plugin_render_key(index, key, face, &self.applied);
+        if let Ok(font) = crate::key_render::font() {
+            if let Ok(jpeg) = crate::key_render::for_plugin(
+                &key,
+                self.applied.image_size,
+                &font,
+                self.plugin_image_bytes(index, Some(face), &self.applied),
+                face.flash
+                    .filter(|(_, when)| when.elapsed() < Duration::from_secs(1))
+                    .map(|(ok, _)| ok),
+            ) {
+                let _ = self.device.send(Command::KeyImage(index, jpeg));
             }
         }
     }
-    fn plugin_events(&mut self){
-        let mut messages=Vec::new();
-        if let Some(manager)=&self.plugins {while let Ok(message)=manager.rx.try_recv(){messages.push(message);if messages.len()>=100 {break;}}}
-        for message in messages {match message {
-            crate::plugin_runtime::Reply::Error(plugin,error)=>{
-                self.plugin_states.clear_plugin(&plugin);
-                for index in 0..self.applied.keys().len() {
-                    if self.applied.keys()[index].plugin_state.as_ref().and_then(|target|crate::plugin_state_display::source(&self.applied,index,target)).is_some_and(|source|source.plugin==plugin) {self.send_state_face(index);}
+    fn plugin_events(&mut self) {
+        let mut messages = Vec::new();
+        if let Some(manager) = &self.plugins {
+            while let Ok(message) = manager.rx.try_recv() {
+                messages.push(message);
+                if messages.len() >= 100 {
+                    break;
                 }
-                self.plugin_errors.insert(plugin.clone(),error.clone());self.log(format!("Plugin {plugin} : {error}"));
-            },
-            crate::plugin_runtime::Reply::Message(plugin,message)=>{
-                let (accepted,log)=self.plugin_rate.entry(plugin.clone()).or_insert_with(crate::plugin_host::RateWindow::new).check(Instant::now());
-                if log {self.log(trf("Plugin {plugin} : plus de {limit} messages par seconde, messages en trop ignorés",&[("plugin",&plugin),("limit",&crate::plugin_host::RateWindow::LIMIT)]));}
-                if accepted {self.plugin_message(&plugin,&message);}
-            },
-        }}
+            }
+        }
+        for message in messages {
+            match message {
+                crate::plugin_runtime::Reply::Error(plugin, error) => {
+                    self.plugin_states.clear_plugin(&plugin);
+                    for index in 0..self.applied.keys().len() {
+                        if self.applied.keys()[index]
+                            .plugin_state
+                            .as_ref()
+                            .and_then(|target| {
+                                crate::plugin_state_display::source(&self.applied, index, target)
+                            })
+                            .is_some_and(|source| source.plugin == plugin)
+                        {
+                            self.send_state_face(index);
+                        }
+                    }
+                    self.plugin_errors.insert(plugin.clone(), error.clone());
+                    self.log(format!("Plugin {plugin} : {error}"));
+                }
+                crate::plugin_runtime::Reply::Message(plugin, message) => {
+                    let (accepted, log) = self
+                        .plugin_rate
+                        .entry(plugin.clone())
+                        .or_insert_with(crate::plugin_host::RateWindow::new)
+                        .check(Instant::now());
+                    if log {
+                        self.log(trf("Plugin {plugin} : plus de {limit} messages par seconde, messages en trop ignorés",&[("plugin",&plugin),("limit",&crate::plugin_host::RateWindow::LIMIT)]));
+                    }
+                    if accepted {
+                        self.plugin_message(&plugin, &message);
+                    }
+                }
+            }
+        }
     }
     /// `novydeckTrigger` (plugin → hôte) : exécute la touche portant le contexte du plugin émetteur.
     /// Refusé hors contexte du plugin, en pause globale, pendant un enregistrement, et au-delà de 4/s par contexte.
-    fn plugin_trigger(&mut self,plugin:&str,message:&serde_json::Value){
-        let context=message["context"].as_str().unwrap_or("");
-        let action=message["action"].as_str();
-        let index=if context.starts_with("novydeck-block-") {
-            let Some((index,path))=crate::plugin_runtime::virtual_step_path(&self.applied,context) else {return self.trigger_refused(plugin,context,"contexte inconnu")};
-            let Some(crate::model::Step::PluginAction { plugin: owner, action: step_action, .. })=extras::step_mut(&mut self.applied.keys_mut()[index].steps,&path) else {return self.trigger_refused(plugin,context,"contexte inconnu")};
-            if owner!=plugin || action.is_some_and(|a|a!=step_action.as_str()) {return self.trigger_refused(plugin,context,"plugin ou action différents");}
+    fn plugin_trigger(&mut self, plugin: &str, message: &serde_json::Value) {
+        let context = message["context"].as_str().unwrap_or("");
+        let action = message["action"].as_str();
+        let index = if context.starts_with("novydeck-block-") {
+            let Some((index, path)) =
+                crate::plugin_runtime::virtual_step_path(&self.applied, context)
+            else {
+                return self.trigger_refused(plugin, context, "contexte inconnu");
+            };
+            let Some(crate::model::Step::PluginAction {
+                plugin: owner,
+                action: step_action,
+                ..
+            }) = extras::step_mut(&mut self.applied.keys_mut()[index].steps, &path)
+            else {
+                return self.trigger_refused(plugin, context, "contexte inconnu");
+            };
+            if owner != plugin || action.is_some_and(|a| a != step_action.as_str()) {
+                return self.trigger_refused(plugin, context, "plugin ou action différents");
+            }
             index
         } else {
-            let Some(v)=self.plugins.as_ref().and_then(|m|m.visible().get(context)).cloned() else {return self.trigger_refused(plugin,context,"contexte inconnu")};
-            if v.plugin!=plugin || action.is_some_and(|a|a!=v.action) {return self.trigger_refused(plugin,context,"plugin ou action différents");}
+            let Some(v) = self
+                .plugins
+                .as_ref()
+                .and_then(|m| m.visible().get(context))
+                .cloned()
+            else {
+                return self.trigger_refused(plugin, context, "contexte inconnu");
+            };
+            if v.plugin != plugin || action.is_some_and(|a| a != v.action) {
+                return self.trigger_refused(plugin, context, "plugin ou action différents");
+            }
             v.index
         };
-        if !self.gate.enabled {return self.trigger_refused(plugin,context,"pause globale");}
-        if self.gate.invalid || self.gate.dirty {return self.trigger_refused(plugin,context,"édition en cours");}
-        if self.trigger_recording || self.recording.is_some() {return self.trigger_refused(plugin,context,"enregistrement en cours");}
-        if index>=self.applied.keys().len() || index>=self.device_keys() {return self.trigger_refused(plugin,context,"index hors limites");}
-        let now=Instant::now();
+        if !self.gate.enabled {
+            return self.trigger_refused(plugin, context, "pause globale");
+        }
+        if self.gate.invalid || self.gate.dirty {
+            return self.trigger_refused(plugin, context, "édition en cours");
+        }
+        if self.trigger_recording || self.recording.is_some() {
+            return self.trigger_refused(plugin, context, "enregistrement en cours");
+        }
+        if index >= self.applied.keys().len() || index >= self.device_keys() {
+            return self.trigger_refused(plugin, context, "index hors limites");
+        }
+        let now = Instant::now();
         // Anti-boucle : une touche lancée par un novydeckTrigger ne peut pas être redéclenchée tant qu'elle s'exécute (ni 2 s après).
-        if let Some(at)=self.plugin_trigger_running.get(&index).copied() {
-            if now.duration_since(at)<Duration::from_secs(2) || self.engine.running.load(Ordering::SeqCst) {return self.trigger_refused(plugin,context,"boucle détectée");}
+        if let Some(at) = self.plugin_trigger_running.get(&index).copied() {
+            if now.duration_since(at) < Duration::from_secs(2)
+                || self.engine.running.load(Ordering::SeqCst)
+            {
+                return self.trigger_refused(plugin, context, "boucle détectée");
+            }
             self.plugin_trigger_running.remove(&index);
         }
-        let log=self.plugin_trigger_log.entry(context.to_owned()).or_default();
-        while log.front().is_some_and(|t|now.duration_since(*t)>=Duration::from_secs(1)) {log.pop_front();}
-        if log.len()>=4 {return self.trigger_refused(plugin,context,"limite de 4 par seconde dépassée");}
+        let log = self
+            .plugin_trigger_log
+            .entry(context.to_owned())
+            .or_default();
+        while log
+            .front()
+            .is_some_and(|t| now.duration_since(*t) >= Duration::from_secs(1))
+        {
+            log.pop_front();
+        }
+        if log.len() >= 4 {
+            return self.trigger_refused(plugin, context, "limite de 4 par seconde dépassée");
+        }
         log.push_back(now);
-        self.plugin_trigger_running.insert(index,now);
-        let c=self.config.clone();
-        let mut key=c.keys()[index].clone();
-        key.runtime_id=Some(crate::engine::identity(&c.profiles[c.active].name,&c.page,index));
-        self.execute_key(key,false,false,&c);
+        self.plugin_trigger_running.insert(index, now);
+        let c = self.config.clone();
+        let mut key = c.keys()[index].clone();
+        key.runtime_id = Some(crate::engine::identity(
+            &c.profiles[c.active].name,
+            &c.page,
+            index,
+        ));
+        self.execute_key(key, false, false, &c);
     }
     /// Journalise un refus de `novydeckTrigger` (au plus une ligne par contexte et par raison toutes les 5 s).
-    fn trigger_refused(&mut self,plugin:&str,context:&str,reason:&'static str) {
-        let context:String=context.chars().take(60).collect();
-        self.throttled_log(&context,reason,format!("Plugin {plugin} : novydeckTrigger refusé ({reason}) — contexte {context}"));
+    fn trigger_refused(&mut self, plugin: &str, context: &str, reason: &'static str) {
+        let context: String = context.chars().take(60).collect();
+        self.throttled_log(
+            &context,
+            reason,
+            format!("Plugin {plugin} : novydeckTrigger refusé ({reason}) — contexte {context}"),
+        );
     }
     /// Une ligne de journal au plus par contexte et par raison toutes les 5 s (anti-bruit partagé par F-04/F-06).
-    fn throttled_log(&mut self,context:&str,reason:&'static str,line:String) {
-        let now=Instant::now();
-        if self.plugin_trigger_refusals.get(&(context.to_owned(),reason)).is_some_and(|at|now.duration_since(*at)<Duration::from_secs(5)) {return;}
-        if self.plugin_trigger_refusals.len()>=256 {self.plugin_trigger_refusals.retain(|_,at|now.duration_since(*at)<Duration::from_secs(5));}
-        self.plugin_trigger_refusals.insert((context.to_owned(),reason),now);
+    fn throttled_log(&mut self, context: &str, reason: &'static str, line: String) {
+        let now = Instant::now();
+        if self
+            .plugin_trigger_refusals
+            .get(&(context.to_owned(), reason))
+            .is_some_and(|at| now.duration_since(*at) < Duration::from_secs(5))
+        {
+            return;
+        }
+        if self.plugin_trigger_refusals.len() >= 256 {
+            self.plugin_trigger_refusals
+                .retain(|_, at| now.duration_since(*at) < Duration::from_secs(5));
+        }
+        self.plugin_trigger_refusals
+            .insert((context.to_owned(), reason), now);
         self.log(line);
     }
     /// F-01 : écrit la configuration si une sauvegarde plugin est en attente et que 500 ms se sont écoulées (ou `force`).
     /// Ne sauvegarde pas par-dessus une modification utilisateur non validée : `save()` s'en charge alors.
-    fn flush_plugin_save(&mut self,now:Instant,force:bool) {
-        if !self.plugin_save_pending || (self.gate.dirty && !force) || self.gate.invalid {return;}
-        if !force && self.plugin_save_at.is_some_and(|at|now.saturating_duration_since(at)<Duration::from_millis(500)) {return;}
-        self.plugin_save_pending=false;self.plugin_save_at=Some(now);self.plugin_saves+=1;
-        if let Err(e)=store::save_light(&self.path,&self.config){self.fail(trf("Réglages du plugin non sauvegardés : {error}", &[("error", &e)]));}
+    fn flush_plugin_save(&mut self, now: Instant, force: bool) {
+        if !self.plugin_save_pending || (self.gate.dirty && !force) || self.gate.invalid {
+            return;
+        }
+        if !force
+            && self
+                .plugin_save_at
+                .is_some_and(|at| now.saturating_duration_since(at) < Duration::from_millis(500))
+        {
+            return;
+        }
+        self.plugin_save_pending = false;
+        self.plugin_save_at = Some(now);
+        self.plugin_saves += 1;
+        if let Err(e) = store::save_light(&self.path, &self.config) {
+            self.fail(trf(
+                "Réglages du plugin non sauvegardés : {error}",
+                &[("error", &e)],
+            ));
+        }
     }
     /// F-04 : met en file un setSettings reçu pendant une modification en cours ou sur une autre page ; rejoué par `replay_plugin_settings`.
-    fn defer_plugin_settings(&mut self,plugin:&str,message:&serde_json::Value,reason:&'static str) {
-        let context:String=message["context"].as_str().unwrap_or("").chars().take(60).collect();
-        let entry=(plugin.to_owned(),message.clone(),self.applied.active,self.applied.page.clone());
-        if let Some(slot)=self.plugin_settings_deferred.iter_mut().find(|(p,m,..)|p==plugin&&m["context"]==message["context"]) {*slot=entry;}
-        else if self.plugin_settings_deferred.len()<32 {self.plugin_settings_deferred.push(entry);}
-        else {return self.throttled_log(&context,"file pleine",format!("Plugin {plugin} : setSettings ignoré : file d'attente pleine"));}
-        self.throttled_log(&context,reason,format!("Plugin {plugin} : setSettings mis en attente ({reason}) — contexte {context}"));
+    fn defer_plugin_settings(
+        &mut self,
+        plugin: &str,
+        message: &serde_json::Value,
+        reason: &'static str,
+    ) {
+        let context: String = message["context"]
+            .as_str()
+            .unwrap_or("")
+            .chars()
+            .take(60)
+            .collect();
+        let entry = (
+            plugin.to_owned(),
+            message.clone(),
+            self.applied.active,
+            self.applied.page.clone(),
+        );
+        if let Some(slot) = self
+            .plugin_settings_deferred
+            .iter_mut()
+            .find(|(p, m, ..)| p == plugin && m["context"] == message["context"])
+        {
+            *slot = entry;
+        } else if self.plugin_settings_deferred.len() < 32 {
+            self.plugin_settings_deferred.push(entry);
+        } else {
+            return self.throttled_log(
+                &context,
+                "file pleine",
+                format!("Plugin {plugin} : setSettings ignoré : file d'attente pleine"),
+            );
+        }
+        self.throttled_log(
+            &context,
+            reason,
+            format!("Plugin {plugin} : setSettings mis en attente ({reason}) — contexte {context}"),
+        );
     }
     /// F-04 : applique les setSettings en attente dès que la configuration est de nouveau cohérente avec l'état appliqué.
     fn replay_plugin_settings(&mut self) {
-        if self.plugin_settings_deferred.is_empty() || self.gate.dirty || self.gate.invalid || self.config.active!=self.applied.active || self.config.page!=self.applied.page {return;}
-        for (plugin,message,active,page) in std::mem::take(&mut self.plugin_settings_deferred) {
-            if active==self.applied.active && page==self.applied.page {self.plugin_message(&plugin,&message);}
-            else {self.log(format!("Plugin {plugin} : setSettings ignoré : profil ou page changés entre-temps"));}
+        if self.plugin_settings_deferred.is_empty()
+            || self.gate.dirty
+            || self.gate.invalid
+            || self.config.active != self.applied.active
+            || self.config.page != self.applied.page
+        {
+            return;
+        }
+        for (plugin, message, active, page) in std::mem::take(&mut self.plugin_settings_deferred) {
+            if active == self.applied.active && page == self.applied.page {
+                self.plugin_message(&plugin, &message);
+            } else {
+                self.log(format!(
+                    "Plugin {plugin} : setSettings ignoré : profil ou page changés entre-temps"
+                ));
+            }
         }
     }
-    fn plugin_message(&mut self,plugin:&str,message:&serde_json::Value){
-        if self.block_inspector_message(plugin,message) { return; }
-        let name=message["event"].as_str().unwrap_or("");
-        if name=="novydeckTrigger" { self.plugin_trigger(plugin,message); return; }
-        let state_message = matches!(name,"setState"|"novydeckStateUnknown");
+    fn plugin_message(&mut self, plugin: &str, message: &serde_json::Value) {
+        if self.block_inspector_message(plugin, message) {
+            return;
+        }
+        let name = message["event"].as_str().unwrap_or("");
+        if name == "novydeckTrigger" {
+            self.plugin_trigger(plugin, message);
+            return;
+        }
+        let state_message = matches!(name, "setState" | "novydeckStateUnknown");
         if state_message {
-            if let Some((index,_))=self.plugin_states.observe(&self.applied,plugin,message) { self.send_state_face(index); }
+            if let Some((index, _)) = self.plugin_states.observe(&self.applied, plugin, message) {
+                self.send_state_face(index);
+            }
         }
         use serde_json::json;
-        let context=message["context"].as_str().unwrap_or("");
-        let visible=self.plugins.as_ref().and_then(|m|m.visible().get(context)).filter(|v|v.plugin==plugin).cloned();
-        if context.starts_with("novydeck-block-") && matches!(name,"setTitle"|"setImage"|"setState"|"showOk"|"showAlert"|"setSettings"|"getSettings") {
-            let Some((index,path))=crate::plugin_runtime::virtual_step_path(&self.applied,context) else {return};
-            let Some(crate::model::Step::PluginAction { plugin: owner, action, settings, .. })=
-                extras::step_mut(&mut self.applied.keys_mut()[index].steps,&path) else {return};
+        let context = message["context"].as_str().unwrap_or("");
+        let visible = self
+            .plugins
+            .as_ref()
+            .and_then(|m| m.visible().get(context))
+            .filter(|v| v.plugin == plugin)
+            .cloned();
+        if context.starts_with("novydeck-block-")
+            && matches!(
+                name,
+                "setTitle"
+                    | "setImage"
+                    | "setState"
+                    | "showOk"
+                    | "showAlert"
+                    | "setSettings"
+                    | "getSettings"
+            )
+        {
+            let Some((index, path)) =
+                crate::plugin_runtime::virtual_step_path(&self.applied, context)
+            else {
+                return;
+            };
+            let Some(crate::model::Step::PluginAction {
+                plugin: owner,
+                action,
+                settings,
+                ..
+            }) = extras::step_mut(&mut self.applied.keys_mut()[index].steps, &path)
+            else {
+                return;
+            };
             // setSettings/getSettings du SDK ne portent pas le champ `action` : le contexte virtuel suffit.
-            if owner!=plugin || message["action"].as_str().is_some_and(|a|a!=action.as_str()) {return;}
-            if name=="getSettings" {
-                let v=crate::plugin_runtime::Visible {context:context.into(),plugin:owner.clone(),action:action.clone(),index:0,settings:settings.clone(),state:0};
-                if let Some(manager)=&self.plugins {manager.send(plugin,app_settings_event(&v,&crate::plugin_runtime::Device::virtual_device(),settings,None));}
-            } else if name=="setSettings" {
-                if let Some(new)=message["payload"].as_object() {
-                    let new=serde_json::Value::Object(new.clone());
-                    *settings=new.clone();
-                    if self.config.active==self.applied.active && self.config.page==self.applied.page && !self.gate.dirty {
-                        if let Some(crate::model::Step::PluginAction { settings, .. })=extras::step_mut(&mut self.config.keys_mut()[index].steps,&path) {
-                            *settings=new.clone();
-                            self.plugin_save_pending=true;self.flush_plugin_save(Instant::now(),false);
-                            if let Some(manager)=&self.plugins {manager.virtual_settings(context,new);}
+            if owner != plugin
+                || message["action"]
+                    .as_str()
+                    .is_some_and(|a| a != action.as_str())
+            {
+                return;
+            }
+            if name == "getSettings" {
+                let v = crate::plugin_runtime::Visible {
+                    context: context.into(),
+                    plugin: owner.clone(),
+                    action: action.clone(),
+                    index: 0,
+                    settings: settings.clone(),
+                    state: 0,
+                };
+                if let Some(manager) = &self.plugins {
+                    manager.send(
+                        plugin,
+                        app_settings_event(
+                            &v,
+                            &crate::plugin_runtime::Device::virtual_device(),
+                            settings,
+                            None,
+                        ),
+                    );
+                }
+            } else if name == "setSettings" {
+                if let Some(new) = message["payload"].as_object() {
+                    let new = serde_json::Value::Object(new.clone());
+                    *settings = new.clone();
+                    if self.config.active == self.applied.active
+                        && self.config.page == self.applied.page
+                        && !self.gate.dirty
+                    {
+                        if let Some(crate::model::Step::PluginAction { settings, .. }) =
+                            extras::step_mut(&mut self.config.keys_mut()[index].steps, &path)
+                        {
+                            *settings = new.clone();
+                            self.plugin_save_pending = true;
+                            self.flush_plugin_save(Instant::now(), false);
+                            if let Some(manager) = &self.plugins {
+                                manager.virtual_settings(context, new);
+                            }
                         }
-                    } else {self.defer_plugin_settings(plugin,message,if self.gate.dirty {"modification en cours"} else {"page affichée différente"});}
+                    } else {
+                        self.defer_plugin_settings(
+                            plugin,
+                            message,
+                            if self.gate.dirty {
+                                "modification en cours"
+                            } else {
+                                "page affichée différente"
+                            },
+                        );
+                    }
                 }
             }
             return;
         }
-        let pi=message["__pi"].as_str();
-        let sdk_device=self.device_model.as_ref().map_or_else(crate::plugin_runtime::Device::virtual_device,|d|crate::plugin_runtime::Device::from_grid(d.name.clone(),d.cols,d.rows));
+        let pi = message["__pi"].as_str();
+        let sdk_device = self
+            .device_model
+            .as_ref()
+            .map_or_else(crate::plugin_runtime::Device::virtual_device, |d| {
+                crate::plugin_runtime::Device::from_grid(d.name.clone(), d.cols, d.rows)
+            });
         match name {
-            "registerPlugin"=>{},
-            "logMessage"=>{if let Some(text)=message["payload"]["message"].as_str(){self.log(format!("Plugin {plugin} : {}",text.chars().take(500).collect::<String>()));}},
-            "setTitle"|"setState"|"setImage"|"showOk"|"showAlert"=>{
-                if visible.is_none(){return;}
-                let face=self.plugin_faces.entry(context.to_owned()).or_default();
-                let previous=face.clone();
+            "registerPlugin" => {}
+            "logMessage" => {
+                if let Some(text) = message["payload"]["message"].as_str() {
+                    self.log(format!(
+                        "Plugin {plugin} : {}",
+                        text.chars().take(500).collect::<String>()
+                    ));
+                }
+            }
+            "setTitle" | "setState" | "setImage" | "showOk" | "showAlert" => {
+                if visible.is_none() {
+                    return;
+                }
+                let face = self.plugin_faces.entry(context.to_owned()).or_default();
+                let previous = face.clone();
                 match name {
-                    "setTitle"=>{if let Some(title)=message["payload"]["title"].as_str(){face.title=title.chars().take(100).collect();}},
-                    "setState"=>{if let Some(state)=message["payload"]["state"].as_u64(){face.state=state.min(255) as u8;}},
-                    "showOk"=>{},
-                    "showAlert"=>face.flash=Some((false,Instant::now())),
+                    "setTitle" => {
+                        if let Some(title) = message["payload"]["title"].as_str() {
+                            face.title = title.chars().take(100).collect();
+                        }
+                    }
+                    "setState" => {
+                        if let Some(state) = message["payload"]["state"].as_u64() {
+                            face.state = state.min(255) as u8;
+                        }
+                    }
+                    "showOk" => {}
+                    "showAlert" => face.flash = Some((false, Instant::now())),
 
-                    "setImage"=>{if let Some(value)=message["payload"]["image"].as_str(){
-                        if let Ok(image)=decode_plugin_image(value){face.image_bytes=image;}
-                    }else if message["payload"]["image"].is_null(){face.image_bytes=None;}},
-                    _=>{}
+                    "setImage" => {
+                        if let Some(value) = message["payload"]["image"].as_str() {
+                            if let Ok(image) = decode_plugin_image(value) {
+                                face.image_bytes = image;
+                            }
+                        } else if message["payload"]["image"].is_null() {
+                            face.image_bytes = None;
+                        }
+                    }
+                    _ => {}
                 }
-                if face.title!=previous.title || face.image_bytes!=previous.image_bytes || face.state!=previous.state || face.flash.is_some() {
-                    face.version=face.version.wrapping_add(1);
-                    if let Some(v)=visible { self.send_plugin_face(v.index); }
+                if face.title != previous.title
+                    || face.image_bytes != previous.image_bytes
+                    || face.state != previous.state
+                    || face.flash.is_some()
+                {
+                    face.version = face.version.wrapping_add(1);
+                    if let Some(v) = visible {
+                        self.send_plugin_face(v.index);
+                    }
                 }
-            },
-            "setSettings"=>{
-                if let (Some(v),Some(settings))=(visible,message["payload"].as_object()){
-                    if self.config.active==self.applied.active && self.config.page==self.applied.page && !self.gate.dirty {
-                        if let Some(binding)=self.config.keys_mut()[v.index].plugin.as_mut(){binding.settings=json!(settings);}
-                        if let Some(binding)=self.applied.keys_mut()[v.index].plugin.as_mut(){binding.settings=json!(settings);}
-                        self.plugin_save_pending=true;self.flush_plugin_save(Instant::now(),false);
-                        if let Some(manager)=&mut self.plugins {manager.sync_settings(&self.applied,&v.context,pi.is_some());}
-                    } else {self.defer_plugin_settings(plugin,message,if self.gate.dirty {"modification en cours"} else {"page affichée différente"});}
+            }
+            "setSettings" => {
+                if let (Some(v), Some(settings)) = (visible, message["payload"].as_object()) {
+                    if self.config.active == self.applied.active
+                        && self.config.page == self.applied.page
+                        && !self.gate.dirty
+                    {
+                        if let Some(binding) = self.config.keys_mut()[v.index].plugin.as_mut() {
+                            binding.settings = json!(settings);
+                        }
+                        if let Some(binding) = self.applied.keys_mut()[v.index].plugin.as_mut() {
+                            binding.settings = json!(settings);
+                        }
+                        self.plugin_save_pending = true;
+                        self.flush_plugin_save(Instant::now(), false);
+                        if let Some(manager) = &mut self.plugins {
+                            manager.sync_settings(&self.applied, &v.context, pi.is_some());
+                        }
+                    } else {
+                        self.defer_plugin_settings(
+                            plugin,
+                            message,
+                            if self.gate.dirty {
+                                "modification en cours"
+                            } else {
+                                "page affichée différente"
+                            },
+                        );
+                    }
                 }
-            },
-            "getSettings"=>{if let (Some(v),Some(manager))=(visible,&self.plugins){manager.send(plugin,app_settings_event(&v,&sdk_device,&v.settings,pi));}},
-            "setGlobalSettings"=>{let settings=&message["payload"];if settings.is_object(){
-                match store::set_plugin_settings(&self.path.with_file_name("plugin-settings.json"),plugin,settings) {
-                    Err(e)=>self.fail(trf("Réglages globaux non sauvegardés : {error}", &[("error", &e)])),
-                    Ok(())=>if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings},"__pi":"*"}));if pi.is_some(){manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings}}));}},
+            }
+            "getSettings" => {
+                if let (Some(v), Some(manager)) = (visible, &self.plugins) {
+                    manager.send(plugin, app_settings_event(&v, &sdk_device, &v.settings, pi));
                 }
-            }},
-            "getGlobalSettings"=>{
-                let all=store::read_json_object(&self.path.with_file_name("plugin-settings.json")).unwrap_or_else(|e|{self.fail(trf("Réglages globaux illisibles : {error}", &[("error", &e)]));json!({})});
-                if let Some(manager)=&self.plugins {manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":all.get(plugin).cloned().unwrap_or_else(||json!({}))},"__pi":pi}));}
-            },
-            "openUrl"=>{if let Some(url)=message["payload"]["url"].as_str().filter(|u|u.starts_with("https://")||u.starts_with("http://")){
-                if let Some(effects)=&mut self.plugin_external_effects { effects.push(format!("openUrl: {url}")); }
-                else { let _=std::process::Command::new("rundll32.exe").arg("url.dll,FileProtocolHandler").arg(url).spawn(); }
-            }},
-            _=>{}
+            }
+            "setGlobalSettings" => {
+                let settings = &message["payload"];
+                if settings.is_object() {
+                    match store::set_plugin_settings(
+                        &self.path.with_file_name("plugin-settings.json"),
+                        plugin,
+                        settings,
+                    ) {
+                        Err(e) => self.fail(trf(
+                            "Réglages globaux non sauvegardés : {error}",
+                            &[("error", &e)],
+                        )),
+                        Ok(()) => {
+                            if let Some(manager) = &self.plugins {
+                                manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings},"__pi":"*"}));
+                                if pi.is_some() {
+                                    manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":settings}}));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "getGlobalSettings" => {
+                let all =
+                    store::read_json_object(&self.path.with_file_name("plugin-settings.json"))
+                        .unwrap_or_else(|e| {
+                            self.fail(trf(
+                                "Réglages globaux illisibles : {error}",
+                                &[("error", &e)],
+                            ));
+                            json!({})
+                        });
+                if let Some(manager) = &self.plugins {
+                    manager.send(plugin,json!({"event":"didReceiveGlobalSettings","payload":{"settings":all.get(plugin).cloned().unwrap_or_else(||json!({}))},"__pi":pi}));
+                }
+            }
+            "openUrl" => {
+                if let Some(url) = message["payload"]["url"]
+                    .as_str()
+                    .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+                {
+                    if let Some(effects) = &mut self.plugin_external_effects {
+                        effects.push(format!("openUrl: {url}"));
+                    } else {
+                        let _ = std::process::Command::new("rundll32.exe")
+                            .arg("url.dll,FileProtocolHandler")
+                            .arg(url)
+                            .spawn();
+                    }
+                }
+            }
+            _ => {}
         }
     }
     fn background_tick(&mut self) {
         self.replay_plugin_settings();
-        self.flush_plugin_save(Instant::now(),false);
+        self.flush_plugin_save(Instant::now(), false);
         crate::obs_monitor::update(&self.config.obs, false);
         let obs_state = crate::obs_monitor::snapshot();
         if obs_state != self.obs_state {
             self.obs_state = obs_state;
-            if self.wanted && !self.gate.dirty && !self.gate.invalid { self.upload(false); }
+            if self.wanted && !self.gate.dirty && !self.gate.invalid {
+                self.upload(false);
+            }
         }
-        let expired=self.plugin_faces.iter_mut().filter_map(|(context,face)|{
-            if face.flash.is_some_and(|(_,at)|at.elapsed()>=Duration::from_secs(1)){
-                face.flash=None; face.version=face.version.wrapping_add(1);Some(context.clone())
-            }else{None}
-        }).collect::<Vec<_>>();
-        for context in expired {if let Some(index)=self.plugins.as_ref().and_then(|m|m.visible().get(&context)).map(|v|v.index){self.send_plugin_face(index);}}
-        if let Some(plugins)=&mut self.plugins { if !self.gate.dirty && self.pending.is_none() { plugins.sync(&self.applied); } }
-        let initial=self.plugins.as_ref().map(|m|m.visible().values().filter(|v| !self.plugin_faces.contains_key(&v.context)).map(|v|(v.context.clone(),v.index,v.state)).collect::<Vec<_>>()).unwrap_or_default();
-        for (context,index,state) in initial { self.plugin_faces.insert(context,PluginFace{state,..Default::default()}); self.send_plugin_face(index); }
+        let expired = self
+            .plugin_faces
+            .iter_mut()
+            .filter_map(|(context, face)| {
+                if face
+                    .flash
+                    .is_some_and(|(_, at)| at.elapsed() >= Duration::from_secs(1))
+                {
+                    face.flash = None;
+                    face.version = face.version.wrapping_add(1);
+                    Some(context.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        for context in expired {
+            if let Some(index) = self
+                .plugins
+                .as_ref()
+                .and_then(|m| m.visible().get(&context))
+                .map(|v| v.index)
+            {
+                self.send_plugin_face(index);
+            }
+        }
+        if let Some(plugins) = &mut self.plugins {
+            if !self.gate.dirty && self.pending.is_none() {
+                plugins.sync(&self.applied);
+            }
+        }
+        let initial = self
+            .plugins
+            .as_ref()
+            .map(|m| {
+                m.visible()
+                    .values()
+                    .filter(|v| !self.plugin_faces.contains_key(&v.context))
+                    .map(|v| (v.context.clone(), v.index, v.state))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for (context, index, state) in initial {
+            self.plugin_faces.insert(
+                context,
+                PluginFace {
+                    state,
+                    ..Default::default()
+                },
+            );
+            self.send_plugin_face(index);
+        }
         self.events();
         self.plugin_events();
         self.housekeeping();
-        let due = self.long_press.due(Instant::now(), self.applied.long_press_ms);
-        for index in due { self.execute_physical(index, true); }
+        let due = self
+            .long_press
+            .due(Instant::now(), self.applied.long_press_ms);
+        for index in due {
+            self.execute_physical(index, true);
+        }
         self.assistant_events();
         if self.gate.dirty
             && !self.gate.invalid
@@ -5383,37 +6848,62 @@ impl App {
     }
 }
 // Réponse App à setSettings/getSettings ; même contrat que les événements du runtime.
-fn app_settings_event(v:&crate::plugin_runtime::Visible,device:&crate::plugin_runtime::Device,settings:&serde_json::Value,pi:Option<&str>)->serde_json::Value {
-    let mut current=v.clone();
-    current.settings=settings.clone();
-    let mut message=crate::plugin_runtime::event("didReceiveSettings",&current,device);
-    if let Some(id)=pi {message["__pi"]=serde_json::json!(id);}
+fn app_settings_event(
+    v: &crate::plugin_runtime::Visible,
+    device: &crate::plugin_runtime::Device,
+    settings: &serde_json::Value,
+    pi: Option<&str>,
+) -> serde_json::Value {
+    let mut current = v.clone();
+    current.settings = settings.clone();
+    let mut message = crate::plugin_runtime::event("didReceiveSettings", &current, device);
+    if let Some(id) = pi {
+        message["__pi"] = serde_json::json!(id);
+    }
     message
 }
 #[cfg(test)]
 #[test]
 fn app_did_receive_settings_contract() {
     use serde_json::json;
-    let v=crate::plugin_runtime::Visible{context:"ctx".into(),plugin:"p".into(),action:"a".into(),index:7,settings:json!({"old":true}),state:1};
-    let device=crate::plugin_runtime::Device::virtual_device();
-    let set=app_settings_event(&v,&device,&json!({"new":true}),None);
-    assert_eq!(set["payload"]["settings"],json!({"new":true}));
-    assert_eq!(set["payload"]["resources"],json!({}));
-    assert_eq!(set["payload"]["controller"],"Keypad");
+    let v = crate::plugin_runtime::Visible {
+        context: "ctx".into(),
+        plugin: "p".into(),
+        action: "a".into(),
+        index: 7,
+        settings: json!({"old":true}),
+        state: 1,
+    };
+    let device = crate::plugin_runtime::Device::virtual_device();
+    let set = app_settings_event(&v, &device, &json!({"new":true}), None);
+    assert_eq!(set["payload"]["settings"], json!({"new":true}));
+    assert_eq!(set["payload"]["resources"], json!({}));
+    assert_eq!(set["payload"]["controller"], "Keypad");
     assert!(set.get("__pi").is_none());
-    let get=app_settings_event(&v,&device,&v.settings,Some("inspector"));
-    assert_eq!(get["payload"]["settings"],json!({"old":true}));
-    assert_eq!(get["payload"]["resources"],json!({}));
-    assert_eq!(get["payload"]["coordinates"],json!({"column":2,"row":1}));
-    assert_eq!(get["__pi"],"inspector");
+    let get = app_settings_event(&v, &device, &v.settings, Some("inspector"));
+    assert_eq!(get["payload"]["settings"], json!({"old":true}));
+    assert_eq!(get["payload"]["resources"], json!({}));
+    assert_eq!(get["payload"]["coordinates"], json!({"column":2,"row":1}));
+    assert_eq!(get["__pi"], "inspector");
 }
 fn clear_background(dark: bool) -> [f32; 4] {
     let c = if dark { [24, 26, 31] } else { [237, 240, 245] };
-    [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
+    [
+        c[0] as f32 / 255.0,
+        c[1] as f32 / 255.0,
+        c[2] as f32 / 255.0,
+        1.0,
+    ]
 }
 impl eframe::App for Runner {
     fn clear_color(&self, _: &egui::Visuals) -> [f32; 4] {
-        clear_background(self.app.lock().unwrap_or_else(|e| e.into_inner()).preferences.dark)
+        clear_background(
+            self.app
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .preferences
+                .dark,
+        )
     }
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         eframe::App::update(
@@ -5432,39 +6922,104 @@ impl Drop for Runner {
         self.stop.store(true, Ordering::SeqCst);
     }
 }
-fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Condition, audio: &crate::audio::Snapshot, depth: usize) -> bool {
+fn edit_condition(
+    ui: &mut egui::Ui,
+    condition: &mut crate::conditions::Condition,
+    audio: &crate::audio::Snapshot,
+    depth: usize,
+) -> bool {
     use crate::conditions::Condition as C;
     let mut changed = false;
     let variants = [
-        ("foreground_app", tr("Application au premier plan")), ("app_running", tr("Application ouverte (arrière-plan inclus)")),
-        ("window_open", tr("Fenêtre ouverte")), ("app_audio_playing", tr("Session audio active")),
-        ("app_muted", tr("Application muette")), ("app_volume_compare", tr("Volume d’application")),
-        ("device_muted", tr("Périphérique muet")), ("device_volume_compare", tr("Volume du périphérique")),
-        ("audio_device_present", tr("Périphérique audio actif")), ("default_output_is", tr("Sortie par défaut")),
-        ("variable_compare", tr("Variable")), ("not", tr("NON")), ("all", tr("Toutes (ET)")), ("any", tr("Au moins une (OU)"))
+        ("foreground_app", tr("Application au premier plan")),
+        (
+            "app_running",
+            tr("Application ouverte (arrière-plan inclus)"),
+        ),
+        ("window_open", tr("Fenêtre ouverte")),
+        ("app_audio_playing", tr("Session audio active")),
+        ("app_muted", tr("Application muette")),
+        ("app_volume_compare", tr("Volume d’application")),
+        ("device_muted", tr("Périphérique muet")),
+        ("device_volume_compare", tr("Volume du périphérique")),
+        ("audio_device_present", tr("Périphérique audio actif")),
+        ("default_output_is", tr("Sortie par défaut")),
+        ("variable_compare", tr("Variable")),
+        ("not", tr("NON")),
+        ("all", tr("Toutes (ET)")),
+        ("any", tr("Au moins une (OU)")),
     ];
     let mut selected = condition.kind().to_owned();
-    egui::ComboBox::from_id_salt(("condition_kind", depth)).selected_text(variants.iter().find(|(id, _)| *id == condition.kind()).map(|(_, label)| *label).unwrap_or(condition.label())).show_ui(ui, |ui| {
-        for (id, label) in variants { if depth < 8 || !["not", "all", "any"].contains(&id) {
-            changed |= ui.selectable_value(&mut selected, id.into(), label).changed();
-        } }
-    });
+    egui::ComboBox::from_id_salt(("condition_kind", depth))
+        .selected_text(
+            variants
+                .iter()
+                .find(|(id, _)| *id == condition.kind())
+                .map(|(_, label)| *label)
+                .unwrap_or(condition.label()),
+        )
+        .show_ui(ui, |ui| {
+            for (id, label) in variants {
+                if depth < 8 || !["not", "all", "any"].contains(&id) {
+                    changed |= ui
+                        .selectable_value(&mut selected, id.into(), label)
+                        .changed();
+                }
+            }
+        });
     if selected != condition.kind() {
         *condition = match selected.as_str() {
-            "foreground_app" => C::ForegroundApp { exe: "explorer.exe".into() },
-            "app_running" => C::AppRunning { exe: "explorer.exe".into() },
-            "window_open" => C::WindowOpen { title: "Chrome".into() },
-            "app_audio_playing" => C::AppAudioPlaying { exe: "foreground".into() },
-            "app_muted" => C::AppMuted { exe: "foreground".into() },
-            "app_volume_compare" => C::AppVolumeCompare { exe: "foreground".into(), op: "above".into(), value: 50 },
-            "device_muted" => C::DeviceMuted { input: false, device: "default".into() },
-            "device_volume_compare" => C::DeviceVolumeCompare { input: false, device: "default".into(), op: "above".into(), value: 50 },
-            "audio_device_present" => C::AudioDevicePresent { name_contains: "Casque".into(), input: false },
-            "default_output_is" => C::DefaultOutputIs { name_contains: "Casque".into() },
-            "variable_compare" => C::VariableCompare { name: "mode".into(), op: "equals".into(), value: String::new() },
-            "not" => C::Not { condition: Box::new(C::default()) },
-            "all" => C::All { conditions: vec![C::default()] },
-            "any" => C::Any { conditions: vec![C::default()] },
+            "foreground_app" => C::ForegroundApp {
+                exe: "explorer.exe".into(),
+            },
+            "app_running" => C::AppRunning {
+                exe: "explorer.exe".into(),
+            },
+            "window_open" => C::WindowOpen {
+                title: "Chrome".into(),
+            },
+            "app_audio_playing" => C::AppAudioPlaying {
+                exe: "foreground".into(),
+            },
+            "app_muted" => C::AppMuted {
+                exe: "foreground".into(),
+            },
+            "app_volume_compare" => C::AppVolumeCompare {
+                exe: "foreground".into(),
+                op: "above".into(),
+                value: 50,
+            },
+            "device_muted" => C::DeviceMuted {
+                input: false,
+                device: "default".into(),
+            },
+            "device_volume_compare" => C::DeviceVolumeCompare {
+                input: false,
+                device: "default".into(),
+                op: "above".into(),
+                value: 50,
+            },
+            "audio_device_present" => C::AudioDevicePresent {
+                name_contains: "Casque".into(),
+                input: false,
+            },
+            "default_output_is" => C::DefaultOutputIs {
+                name_contains: "Casque".into(),
+            },
+            "variable_compare" => C::VariableCompare {
+                name: "mode".into(),
+                op: "equals".into(),
+                value: String::new(),
+            },
+            "not" => C::Not {
+                condition: Box::new(C::default()),
+            },
+            "all" => C::All {
+                conditions: vec![C::default()],
+            },
+            "any" => C::Any {
+                conditions: vec![C::default()],
+            },
             _ => unreachable!(),
         };
     }
@@ -5473,169 +7028,380 @@ fn edit_condition(ui: &mut egui::Ui, condition: &mut crate::conditions::Conditio
             ui.label(tr("Nom d’exécutable (.exe) :"));
             changed |= condition_exe(ui, exe);
         }
-        C::WindowOpen { title } => { ui.label(tr("Le titre contient :")); changed |= ui.text_edit_singleline(title).changed(); }
-        C::AppAudioPlaying { exe } | C::AppMuted { exe } => { changed |= condition_audio_exe(ui, exe); }
+        C::WindowOpen { title } => {
+            ui.label(tr("Le titre contient :"));
+            changed |= ui.text_edit_singleline(title).changed();
+        }
+        C::AppAudioPlaying { exe } | C::AppMuted { exe } => {
+            changed |= condition_audio_exe(ui, exe);
+        }
         C::AppVolumeCompare { exe, op, value } => {
             changed |= condition_audio_exe(ui, exe);
             changed |= condition_operator(ui, op);
-            changed |= ui.add(egui::Slider::new(value, 0..=100).text("%" )).changed();
+            changed |= ui
+                .add(egui::Slider::new(value, 0..=100).text("%"))
+                .changed();
         }
         C::DeviceMuted { input, device } | C::DeviceVolumeCompare { input, device, .. } => {
             changed |= theme::checkbox(ui, input, tr("Microphone (sinon sortie)")).changed();
-            egui::ComboBox::from_id_salt("condition_device").selected_text(if device == "default" { tr("Par défaut") } else { device.as_str() }).show_ui(ui, |ui| {
-                changed |= ui.selectable_value(device, "default".into(), tr("Par défaut")).changed();
-                for endpoint in audio.devices.iter().filter(|d| d.input == *input) {
-                    changed |= ui.selectable_value(device, endpoint.id.clone(), &endpoint.name).changed();
-                }
-            });
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("condition_device_id").show(ui, |ui| {
-                changed |= ui.text_edit_singleline(device).changed();
-            });
+            egui::ComboBox::from_id_salt("condition_device")
+                .selected_text(if device == "default" {
+                    tr("Par défaut")
+                } else {
+                    device.as_str()
+                })
+                .show_ui(ui, |ui| {
+                    changed |= ui
+                        .selectable_value(device, "default".into(), tr("Par défaut"))
+                        .changed();
+                    for endpoint in audio.devices.iter().filter(|d| d.input == *input) {
+                        changed |= ui
+                            .selectable_value(device, endpoint.id.clone(), &endpoint.name)
+                            .changed();
+                    }
+                });
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("condition_device_id")
+                .show(ui, |ui| {
+                    changed |= ui.text_edit_singleline(device).changed();
+                });
         }
-        C::AudioDevicePresent { name_contains, input } => {
+        C::AudioDevicePresent {
+            name_contains,
+            input,
+        } => {
             changed |= theme::checkbox(ui, input, tr("Microphone (sinon sortie)")).changed();
             let options: Vec<_> = audio.devices.iter().filter(|d| d.input == *input).collect();
-            egui::ComboBox::from_id_salt("condition_device_name").selected_text(name_contains.as_str()).show_ui(ui, |ui| {
-                for endpoint in options { changed |= ui.selectable_value(name_contains, endpoint.name.clone(), &endpoint.name).changed(); }
-            });
-            ui.label(tr("Le nom contient :")); changed |= ui.text_edit_singleline(name_contains).changed();
+            egui::ComboBox::from_id_salt("condition_device_name")
+                .selected_text(name_contains.as_str())
+                .show_ui(ui, |ui| {
+                    for endpoint in options {
+                        changed |= ui
+                            .selectable_value(name_contains, endpoint.name.clone(), &endpoint.name)
+                            .changed();
+                    }
+                });
+            ui.label(tr("Le nom contient :"));
+            changed |= ui.text_edit_singleline(name_contains).changed();
         }
         C::DefaultOutputIs { name_contains } => {
-            egui::ComboBox::from_id_salt("condition_default_output").selected_text(name_contains.as_str()).show_ui(ui, |ui| {
-                for endpoint in audio.devices.iter().filter(|d| !d.input) { changed |= ui.selectable_value(name_contains, endpoint.name.clone(), &endpoint.name).changed(); }
-            });
-            ui.label(tr("Le nom contient :")); changed |= ui.text_edit_singleline(name_contains).changed();
+            egui::ComboBox::from_id_salt("condition_default_output")
+                .selected_text(name_contains.as_str())
+                .show_ui(ui, |ui| {
+                    for endpoint in audio.devices.iter().filter(|d| !d.input) {
+                        changed |= ui
+                            .selectable_value(name_contains, endpoint.name.clone(), &endpoint.name)
+                            .changed();
+                    }
+                });
+            ui.label(tr("Le nom contient :"));
+            changed |= ui.text_edit_singleline(name_contains).changed();
         }
         C::VariableCompare { name, op, value } => {
-            ui.label(tr("Nom de variable")); changed |= ui.text_edit_singleline(name).changed();
-            egui::ComboBox::from_id_salt("variable_operator").selected_text(match op.as_str() { "equals" => tr("Égale"), "not_equals" => tr("Différente"), "contains" => tr("Contient"), "greater" => tr("Supérieure"), "less" => tr("Inférieure"), _ => op.as_str() }).show_ui(ui, |ui| {
-                for (id, label) in [("equals", tr("Égale")), ("not_equals", tr("Différente")), ("contains", tr("Contient")), ("greater", tr("Supérieure")), ("less", tr("Inférieure"))] {
-                    changed |= ui.selectable_value(op, id.into(), label).changed();
-                }
-            });
-            ui.label(tr("Valeur")); changed |= ui.text_edit_singleline(value).changed();
+            ui.label(tr("Nom de variable"));
+            changed |= ui.text_edit_singleline(name).changed();
+            egui::ComboBox::from_id_salt("variable_operator")
+                .selected_text(match op.as_str() {
+                    "equals" => tr("Égale"),
+                    "not_equals" => tr("Différente"),
+                    "contains" => tr("Contient"),
+                    "greater" => tr("Supérieure"),
+                    "less" => tr("Inférieure"),
+                    _ => op.as_str(),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("equals", tr("Égale")),
+                        ("not_equals", tr("Différente")),
+                        ("contains", tr("Contient")),
+                        ("greater", tr("Supérieure")),
+                        ("less", tr("Inférieure")),
+                    ] {
+                        changed |= ui.selectable_value(op, id.into(), label).changed();
+                    }
+                });
+            ui.label(tr("Valeur"));
+            changed |= ui.text_edit_singleline(value).changed();
         }
-        C::HomeAssistantState { .. } => { ui.colored_label(egui::Color32::from_rgb(220, 150, 40), tr("Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »).")); }
-        C::Not { condition } => { ui.indent("not_condition", |ui| { changed |= edit_condition(ui, condition, audio, depth + 1); }); }
+        C::HomeAssistantState { .. } => {
+            ui.colored_label(egui::Color32::from_rgb(220, 150, 40), tr("Condition Home Assistant retirée : utilise le plugin Home Assistant (bloc « Quand l’état du plugin change »)."));
+        }
+        C::Not { condition } => {
+            ui.indent("not_condition", |ui| {
+                changed |= edit_condition(ui, condition, audio, depth + 1);
+            });
+        }
         C::All { conditions } | C::Any { conditions } => {
             let mut remove = None;
             for (i, child) in conditions.iter_mut().enumerate() {
-                ui.push_id(i, |ui| { ui.horizontal(|ui| { ui.label(trf("Condition {number}", &[("number", &(i + 1))]));
-                    if ui.small_button(tr("Retirer")).clicked() { remove = Some(i); }
+                ui.push_id(i, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(trf("Condition {number}", &[("number", &(i + 1))]));
+                        if ui.small_button(tr("Retirer")).clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                    ui.indent(i, |ui| {
+                        changed |= edit_condition(ui, child, audio, depth + 1);
+                    });
                 });
-                ui.indent(i, |ui| { changed |= edit_condition(ui, child, audio, depth + 1); }); });
             }
-            if let Some(i) = remove { if conditions.len() > 1 { conditions.remove(i); changed = true; } }
-            if depth < 8 && conditions.len() < 32 && ui.button(tr("+ Ajouter une condition")).clicked() { conditions.push(C::default()); changed = true; }
+            if let Some(i) = remove {
+                if conditions.len() > 1 {
+                    conditions.remove(i);
+                    changed = true;
+                }
+            }
+            if depth < 8
+                && conditions.len() < 32
+                && ui.button(tr("+ Ajouter une condition")).clicked()
+            {
+                conditions.push(C::default());
+                changed = true;
+            }
         }
     }
     if let C::DeviceVolumeCompare { op, value, .. } = condition {
         changed |= condition_operator(ui, op);
-        changed |= ui.add(egui::Slider::new(value, 0..=100).text("%" )).changed();
+        changed |= ui
+            .add(egui::Slider::new(value, 0..=100).text("%"))
+            .changed();
     }
     changed
 }
 fn condition_exe(ui: &mut egui::Ui, exe: &mut String) -> bool {
     let mut changed = false;
-    egui::ComboBox::from_id_salt("exe_suggestions").selected_text(exe.as_str()).show_ui(ui, |ui| {
-        for name in crate::conditions::running_exes() { changed |= ui.selectable_value(exe, name.clone(), name).changed(); }
-    });
+    egui::ComboBox::from_id_salt("exe_suggestions")
+        .selected_text(exe.as_str())
+        .show_ui(ui, |ui| {
+            for name in crate::conditions::running_exes() {
+                changed |= ui.selectable_value(exe, name.clone(), name).changed();
+            }
+        });
     changed | ui.text_edit_singleline(exe).changed()
 }
 fn condition_audio_exe(ui: &mut egui::Ui, exe: &mut String) -> bool {
     let mut changed = false;
-    egui::ComboBox::from_id_salt("condition_audio_exe").selected_text(if exe == "foreground" { tr("Application au premier plan") } else { exe.as_str() }).show_ui(ui, |ui| {
-        changed |= ui.selectable_value(exe, "foreground".into(), tr("Application au premier plan")).changed();
-        for name in crate::conditions::running_exes() { changed |= ui.selectable_value(exe, name.clone(), name).changed(); }
-    });
+    egui::ComboBox::from_id_salt("condition_audio_exe")
+        .selected_text(if exe == "foreground" {
+            tr("Application au premier plan")
+        } else {
+            exe.as_str()
+        })
+        .show_ui(ui, |ui| {
+            changed |= ui
+                .selectable_value(exe, "foreground".into(), tr("Application au premier plan"))
+                .changed();
+            for name in crate::conditions::running_exes() {
+                changed |= ui.selectable_value(exe, name.clone(), name).changed();
+            }
+        });
     ui.label(tr("Ou saisir un exécutable (.exe) :"));
     changed | ui.text_edit_singleline(exe).changed()
 }
 fn condition_operator(ui: &mut egui::Ui, op: &mut String) -> bool {
     let mut changed = false;
-    egui::ComboBox::from_id_salt("volume_operator").selected_text(if op == "above" { tr("Au-dessus de") } else { tr("En dessous de") }).show_ui(ui, |ui| {
-        changed |= ui.selectable_value(op, "above".into(), tr("Au-dessus de")).changed();
-        changed |= ui.selectable_value(op, "below".into(), tr("En dessous de")).changed();
-    });
+    egui::ComboBox::from_id_salt("volume_operator")
+        .selected_text(if op == "above" {
+            tr("Au-dessus de")
+        } else {
+            tr("En dessous de")
+        })
+        .show_ui(ui, |ui| {
+            changed |= ui
+                .selectable_value(op, "above".into(), tr("Au-dessus de"))
+                .changed();
+            changed |= ui
+                .selectable_value(op, "below".into(), tr("En dessous de"))
+                .changed();
+        });
     changed
 }
 // This editor changes only the selected branch; other root steps and the other branch stay intact.
-enum OnOffBranchEdit { Remove(usize), Replace(usize) }
+enum OnOffBranchEdit {
+    Remove(usize),
+    Replace(usize),
+}
 fn onoff_branch_card(
-    ui: &mut egui::Ui, steps: &mut Vec<Step>, choice: u8, branch: &mut u8,
-    selected: &mut usize, profile: &str, removed: &mut bool,
+    ui: &mut egui::Ui,
+    steps: &mut Vec<Step>,
+    choice: u8,
+    branch: &mut u8,
+    selected: &mut usize,
+    profile: &str,
+    removed: &mut bool,
     branch_edit: &mut Option<OnOffBranchEdit>,
 ) -> bool {
     let mut changed = false;
-    let title = if choice == 0 { tr("1er appui") } else { tr("2e appui") };
+    let title = if choice == 0 {
+        tr("1er appui")
+    } else {
+        tr("2e appui")
+    };
     let mut addition = None;
     let mut replacement = None;
     let mut removal = None;
     let palette = theme::palette(ui.ctx());
-    let stroke = if *branch == choice { egui::Stroke::new(2.0, palette.accent) } else { egui::Stroke::new(1.0, palette.border) };
-    egui::Frame::new().fill(palette.raised).stroke(stroke).corner_radius(8).inner_margin(10).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-        if ui.selectable_label(*branch == choice, RichText::new(title).strong()).clicked() { *branch = choice; *selected = 0; }
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            ui.menu_button(tr("Ajouter"), |ui| {
-                egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
-                    for (kind, label) in crate::automation::NAMES.iter().enumerate() {
-                        if (7..=12).contains(&kind) || kind == 36 { continue; }
-                        if ui.add_enabled(steps.len() < 256, iconset::button(ui.ctx(), iconset::for_step(&catalog::action(kind, profile).steps[0]), tr(*label))).clicked() {
-                            addition = Some(kind); ui.close_menu();
+    let stroke = if *branch == choice {
+        egui::Stroke::new(2.0, palette.accent)
+    } else {
+        egui::Stroke::new(1.0, palette.border)
+    };
+    egui::Frame::new()
+        .fill(palette.raised)
+        .stroke(stroke)
+        .corner_radius(8)
+        .inner_margin(10)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+            if ui
+                .selectable_label(*branch == choice, RichText::new(title).strong())
+                .clicked()
+            {
+                *branch = choice;
+                *selected = 0;
+            }
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                ui.menu_button(tr("Ajouter"), |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(250.0)
+                        .show(ui, |ui| {
+                            for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                                if (7..=12).contains(&kind) || kind == 36 {
+                                    continue;
+                                }
+                                if ui
+                                    .add_enabled(
+                                        steps.len() < 256,
+                                        iconset::button(
+                                            ui.ctx(),
+                                            iconset::for_step(
+                                                &catalog::action(kind, profile).steps[0],
+                                            ),
+                                            tr(*label),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    addition = Some(kind);
+                                    ui.close_menu();
+                                }
+                            }
+                        });
+                });
+                if ui
+                    .add_enabled(!steps.is_empty(), egui::Button::new(tr("Modifier")))
+                    .clicked()
+                {
+                    *branch = choice;
+                    *selected = (*selected).min(steps.len() - 1);
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if ui
+                    .add_enabled(!steps.is_empty(), egui::Button::new(tr("Retirer")))
+                    .clicked()
+                {
+                    removal = Some((*selected).min(steps.len() - 1));
+                    *branch = choice;
+                }
+                ui.add_enabled_ui(!steps.is_empty(), |ui| {
+                    ui.menu_button(tr("Remplacer"), |ui| {
+                        for (kind, label) in crate::automation::NAMES.iter().enumerate() {
+                            if (7..=12).contains(&kind) || kind == 36 {
+                                continue;
+                            }
+                            if ui.button(tr(*label)).clicked() {
+                                replacement = Some(((*selected).min(steps.len() - 1), kind));
+                                ui.close_menu();
+                            }
                         }
-                    }
+                    });
                 });
             });
-            if ui.add_enabled(!steps.is_empty(), egui::Button::new(tr("Modifier"))).clicked() { *branch = choice; *selected = (*selected).min(steps.len() - 1); }
+            ui.add_space(4.0);
+            for (i, step) in steps.iter().enumerate() {
+                let summary = match step {
+                    Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
+                    _ => tr(step.name()).to_owned(),
+                };
+                if ui
+                    .selectable_label(*branch == choice && *selected == i, summary)
+                    .clicked()
+                {
+                    *branch = choice;
+                    *selected = i;
+                }
+            }
         });
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if ui.add_enabled(!steps.is_empty(), egui::Button::new(tr("Retirer"))).clicked() { removal = Some((*selected).min(steps.len() - 1)); *branch = choice; }
-            ui.add_enabled_ui(!steps.is_empty(), |ui| {
-                ui.menu_button(tr("Remplacer"), |ui| {
-                    for (kind, label) in crate::automation::NAMES.iter().enumerate() {
-                        if (7..=12).contains(&kind) || kind == 36 { continue; }
-                        if ui.button(tr(*label)).clicked() { replacement = Some(((*selected).min(steps.len() - 1), kind)); ui.close_menu(); }
-                    }
-                });
-            });
-        });
-        ui.add_space(4.0);
-        for (i, step) in steps.iter().enumerate() {
-            let summary = match step {
-                Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
-                _ => tr(step.name()).to_owned(),
-            };
-            if ui.selectable_label(*branch == choice && *selected == i, summary).clicked() { *branch = choice; *selected = i; }
-        }
-    });
-    if let Some(i) = removal { steps.remove(i); *selected = (*selected).min(steps.len().saturating_sub(1)); *branch_edit = Some(OnOffBranchEdit::Remove(i)); *removed = true; changed = true; }
-    if let Some((i, kind)) = replacement { steps.splice(i..=i, catalog::action(kind, profile).steps); *branch = choice; *branch_edit = Some(OnOffBranchEdit::Replace(i)); changed = true; }
-    if let Some(kind) = addition { *selected = steps.len(); steps.extend(catalog::action(kind, profile).steps); *branch = choice; changed = true; }
+    if let Some(i) = removal {
+        steps.remove(i);
+        *selected = (*selected).min(steps.len().saturating_sub(1));
+        *branch_edit = Some(OnOffBranchEdit::Remove(i));
+        *removed = true;
+        changed = true;
+    }
+    if let Some((i, kind)) = replacement {
+        steps.splice(i..=i, catalog::action(kind, profile).steps);
+        *branch = choice;
+        *branch_edit = Some(OnOffBranchEdit::Replace(i));
+        changed = true;
+    }
+    if let Some(kind) = addition {
+        *selected = steps.len();
+        steps.extend(catalog::action(kind, profile).steps);
+        *branch = choice;
+        changed = true;
+    }
     changed
 }
 
 #[allow(clippy::too_many_arguments)]
 fn onoff_branch_ui(
-    ui: &mut egui::Ui, steps: &mut [Step], branch: usize, selected: usize, root: usize,
-    profiles: &[String], pages: &[crate::model::Page], audio: &crate::audio::Snapshot,
-    tx: &Sender<Option<DialogEffect>>, target: &StepTarget,
-    record_step: &mut Option<Vec<usize>>, pick_audio: &mut Option<(Vec<usize>, usize)>,
+    ui: &mut egui::Ui,
+    steps: &mut [Step],
+    branch: usize,
+    selected: usize,
+    root: usize,
+    profiles: &[String],
+    pages: &[crate::model::Page],
+    audio: &crate::audio::Snapshot,
+    tx: &Sender<Option<DialogEffect>>,
+    target: &StepTarget,
+    record_step: &mut Option<Vec<usize>>,
+    pick_audio: &mut Option<(Vec<usize>, usize)>,
 ) -> bool {
-    let Some((i, step)) = steps.iter_mut().enumerate().nth(selected) else { return false };
+    let Some((i, step)) = steps.iter_mut().enumerate().nth(selected) else {
+        return false;
+    };
     let mut record = false;
     let mut audio_icon = None;
     let path = vec![root, branch, i];
     ui.separator();
-    let changed = ui.push_id((branch, i), |ui| {
-        edit_step(ui, step, profiles, pages, &mut record, audio, &mut audio_icon, tx,
-            &(target.0, target.1.clone(), target.2, path.clone()))
-    }).inner;
-    if record { *record_step = Some(path.clone()); }
-    if let Some(icon) = audio_icon { *pick_audio = Some((path, icon)); }
+    let changed = ui
+        .push_id((branch, i), |ui| {
+            edit_step(
+                ui,
+                step,
+                profiles,
+                pages,
+                &mut record,
+                audio,
+                &mut audio_icon,
+                tx,
+                &(target.0, target.1.clone(), target.2, path.clone()),
+            )
+        })
+        .inner;
+    if record {
+        *record_step = Some(path.clone());
+    }
+    if let Some(icon) = audio_icon {
+        *pick_audio = Some((path, icon));
+    }
     changed
 }
 
@@ -5657,156 +7423,505 @@ fn edit_step(
         Step::PluginAction { .. } => {
             ui.label(tr("Action fournie par un plugin installé."));
         }
-        Step::KeyHold { keys, action, hold_ms } => {
+        Step::KeyHold {
+            keys,
+            action,
+            hold_ms,
+        } => {
             ui.label(tr("Touches (ex. CTRL+SHIFT+A)"));
             changed |= ui.text_edit_singleline(keys).changed();
-            egui::ComboBox::from_id_salt("key_hold_action").selected_text(if action == "up" { tr("Relâcher") } else { tr("Maintenir") }).show_ui(ui, |ui| {
-                changed |= ui.selectable_value(action, "down".into(), tr("Maintenir")).changed();
-                changed |= ui.selectable_value(action, "up".into(), tr("Relâcher")).changed();
-            });
+            egui::ComboBox::from_id_salt("key_hold_action")
+                .selected_text(if action == "up" {
+                    tr("Relâcher")
+                } else {
+                    tr("Maintenir")
+                })
+                .show_ui(ui, |ui| {
+                    changed |= ui
+                        .selectable_value(action, "down".into(), tr("Maintenir"))
+                        .changed();
+                    changed |= ui
+                        .selectable_value(action, "up".into(), tr("Relâcher"))
+                        .changed();
+                });
             if action == "down" {
                 ui.collapsing(tr("Options avancées"), |ui| {
-                    ui.label(tr("Durée (ms) : 0 = jusqu’au bloc Relâcher ou fin de macro"));
-                    changed |= ui.add(egui::DragValue::new(hold_ms).range(0..=3_600_000)).changed();
+                    ui.label(tr(
+                        "Durée (ms) : 0 = jusqu’au bloc Relâcher ou fin de macro",
+                    ));
+                    changed |= ui
+                        .add(egui::DragValue::new(hold_ms).range(0..=3_600_000))
+                        .changed();
                 });
-            } else if *hold_ms != 0 { *hold_ms = 0; changed = true; }
+            } else if *hold_ms != 0 {
+                *hold_ms = 0;
+                changed = true;
+            }
         }
-        Step::MouseClick { button, double, x, y, relative_to } => {
-            egui::ComboBox::from_id_salt("mouse_button").selected_text(match button.as_str() { "left" => tr("Gauche"), "right" => tr("Droit"), _ => tr("Milieu") }).show_ui(ui, |ui| {
-                for (id, label) in [("left", tr("Gauche")), ("right", tr("Droit")), ("middle", tr("Milieu"))] { changed |= ui.selectable_value(button, id.into(), label).changed(); }
-            });
+        Step::MouseClick {
+            button,
+            double,
+            x,
+            y,
+            relative_to,
+        } => {
+            egui::ComboBox::from_id_salt("mouse_button")
+                .selected_text(match button.as_str() {
+                    "left" => tr("Gauche"),
+                    "right" => tr("Droit"),
+                    _ => tr("Milieu"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("left", tr("Gauche")),
+                        ("right", tr("Droit")),
+                        ("middle", tr("Milieu")),
+                    ] {
+                        changed |= ui.selectable_value(button, id.into(), label).changed();
+                    }
+                });
             changed |= theme::checkbox(ui, double, tr("Double clic")).changed();
             ui.collapsing(tr("Options avancées"), |ui| {
                 let mut positioned = x.is_some();
-                if theme::checkbox(ui, &mut positioned, tr("Déplacer avant de cliquer")).changed() { *x = positioned.then_some(0); *y = positioned.then_some(0); changed = true; }
+                if theme::checkbox(ui, &mut positioned, tr("Déplacer avant de cliquer")).changed()
+                {
+                    *x = positioned.then_some(0);
+                    *y = positioned.then_some(0);
+                    changed = true;
+                }
                 if positioned {
                     mouse_origin_editor(ui, relative_to, &mut changed);
-                    ui.horizontal(|ui| { ui.label("X"); changed |= ui.add(egui::DragValue::new(x.as_mut().unwrap()).range(-32768..=32767)).changed(); ui.label("Y"); changed |= ui.add(egui::DragValue::new(y.as_mut().unwrap()).range(-32768..=32767)).changed(); });
+                    ui.horizontal(|ui| {
+                        ui.label("X");
+                        changed |= ui
+                            .add(egui::DragValue::new(x.as_mut().unwrap()).range(-32768..=32767))
+                            .changed();
+                        ui.label("Y");
+                        changed |= ui
+                            .add(egui::DragValue::new(y.as_mut().unwrap()).range(-32768..=32767))
+                            .changed();
+                    });
                 }
             });
         }
-        Step::MouseMove { x, y, relative, relative_to } => {
-            ui.horizontal(|ui| { ui.label("X"); changed |= ui.add(egui::DragValue::new(x).range(-32768..=32767)).changed(); ui.label("Y"); changed |= ui.add(egui::DragValue::new(y).range(-32768..=32767)).changed(); });
+        Step::MouseMove {
+            x,
+            y,
+            relative,
+            relative_to,
+        } => {
+            ui.horizontal(|ui| {
+                ui.label("X");
+                changed |= ui
+                    .add(egui::DragValue::new(x).range(-32768..=32767))
+                    .changed();
+                ui.label("Y");
+                changed |= ui
+                    .add(egui::DragValue::new(y).range(-32768..=32767))
+                    .changed();
+            });
             ui.collapsing(tr("Options avancées"), |ui| {
-                if *relative { *relative_to = "cursor".into(); *relative = false; changed = true; }
+                if *relative {
+                    *relative_to = "cursor".into();
+                    *relative = false;
+                    changed = true;
+                }
                 mouse_origin_editor(ui, relative_to, &mut changed);
             });
         }
         Step::MouseScroll { amount, horizontal } => {
-            ui.label(tr("Défilement (crans)")); changed |= ui.add(egui::DragValue::new(amount).range(-100..=100)).changed();
-            ui.collapsing(tr("Options avancées"), |ui| { changed |= theme::checkbox(ui, horizontal, tr("Horizontal")).changed(); });
+            ui.label(tr("Défilement (crans)"));
+            changed |= ui
+                .add(egui::DragValue::new(amount).range(-100..=100))
+                .changed();
+            ui.collapsing(tr("Options avancées"), |ui| {
+                changed |= theme::checkbox(ui, horizontal, tr("Horizontal")).changed();
+            });
         }
-        Step::PlaySound { path, volume } => { ui.label(tr("Fichier WAV ou MP3")); changed |= ui.text_edit_singleline(path).changed(); ui.label(tr("Volume")); changed |= ui.add(egui::Slider::new(volume, 0..=100)).changed(); }
-        Step::StopSounds => { ui.label(tr("Arrête tous les sons lancés par NovyDeck.")); }
-        Step::Toggle { .. } => { ui.label(tr("Alterne les états 1 et 2 à chaque appui. Modifie leurs blocs dans l’Atelier.")); }
-        Step::UdpSend { host, port, text } => { ui.label(tr("Message : accepte {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.")); ui.label(tr("Hôte UDP")); changed |= ui.text_edit_singleline(host).changed(); ui.label(tr("Port")); changed |= ui.add(egui::DragValue::new(port).range(1..=65535)).changed(); ui.label(tr("Message")); changed |= ui.text_edit_multiline(text).changed(); }
-        Step::HttpRequest { method, url, body, content_type } => { ui.label(tr("Adresse et corps : {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.")); ui.label(tr("Méthode")); egui::ComboBox::from_id_salt("http_method").selected_text(method.as_str()).show_ui(ui, |ui| { for choice in ["GET", "POST", "PUT"] { changed |= ui.selectable_value(method, choice.into(), choice).changed(); } }); ui.label(tr("Adresse HTTP (sans HTTPS)")); changed |= ui.text_edit_singleline(url).changed(); ui.label(tr("Corps")); changed |= ui.text_edit_multiline(body).changed(); ui.label(tr("Type de contenu")); changed |= ui.text_edit_singleline(content_type).changed(); }
+        Step::PlaySound { path, volume } => {
+            ui.label(tr("Fichier WAV ou MP3"));
+            changed |= ui.text_edit_singleline(path).changed();
+            ui.label(tr("Volume"));
+            changed |= ui.add(egui::Slider::new(volume, 0..=100)).changed();
+        }
+        Step::StopSounds => {
+            ui.label(tr("Arrête tous les sons lancés par NovyDeck."));
+        }
+        Step::Toggle { .. } => {
+            ui.label(tr(
+                "Alterne les états 1 et 2 à chaque appui. Modifie leurs blocs dans l’Atelier.",
+            ));
+        }
+        Step::UdpSend { host, port, text } => {
+            ui.label(tr(
+                "Message : accepte {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.",
+            ));
+            ui.label(tr("Hôte UDP"));
+            changed |= ui.text_edit_singleline(host).changed();
+            ui.label(tr("Port"));
+            changed |= ui
+                .add(egui::DragValue::new(port).range(1..=65535))
+                .changed();
+            ui.label(tr("Message"));
+            changed |= ui.text_edit_multiline(text).changed();
+        }
+        Step::HttpRequest {
+            method,
+            url,
+            body,
+            content_type,
+        } => {
+            ui.label(tr(
+                "Adresse et corps : {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.",
+            ));
+            ui.label(tr("Méthode"));
+            egui::ComboBox::from_id_salt("http_method")
+                .selected_text(method.as_str())
+                .show_ui(ui, |ui| {
+                    for choice in ["GET", "POST", "PUT"] {
+                        changed |= ui.selectable_value(method, choice.into(), choice).changed();
+                    }
+                });
+            ui.label(tr("Adresse HTTP (sans HTTPS)"));
+            changed |= ui.text_edit_singleline(url).changed();
+            ui.label(tr("Corps"));
+            changed |= ui.text_edit_multiline(body).changed();
+            ui.label(tr("Type de contenu"));
+            changed |= ui.text_edit_singleline(content_type).changed();
+        }
         Step::D6Brightness { mode, value } => {
             ui.label(tr("Luminosité du périphérique"));
-            egui::ComboBox::from_id_salt("d6_brightness_mode").selected_text(match mode.as_str() { "up" => tr("Augmenter"), "down" => tr("Diminuer"), _ => tr("Régler à") }).show_ui(ui, |ui| {
-                for (id, label) in [("set", tr("Régler à")), ("up", tr("Augmenter")), ("down", tr("Diminuer"))] { changed |= ui.selectable_value(mode, id.into(), label).changed(); }
-            });
-            changed |= ui.add(egui::Slider::new(value, 0..=100).text("%" )).changed();
+            egui::ComboBox::from_id_salt("d6_brightness_mode")
+                .selected_text(match mode.as_str() {
+                    "up" => tr("Augmenter"),
+                    "down" => tr("Diminuer"),
+                    _ => tr("Régler à"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("set", tr("Régler à")),
+                        ("up", tr("Augmenter")),
+                        ("down", tr("Diminuer")),
+                    ] {
+                        changed |= ui.selectable_value(mode, id.into(), label).changed();
+                    }
+                });
+            changed |= ui
+                .add(egui::Slider::new(value, 0..=100).text("%"))
+                .changed();
         }
-        Step::DeviceVolume { input, device, action, step, level } => {
+        Step::DeviceVolume {
+            input,
+            device,
+            action,
+            step,
+            level,
+        } => {
             ui.label(tr("Volume du périphérique (pas celui d'une application)"));
             changed |= theme::checkbox(ui, input, tr("Microphone (sinon sortie)")).changed();
             let options: Vec<_> = audio.devices.iter().filter(|d| d.input == *input).collect();
-            let selected = if device == "default" { tr("Par défaut").to_string() }
-                else { options.iter().find(|d| d.id == *device).map(|d| d.name.clone()).unwrap_or_else(|| device.clone()) };
-            egui::ComboBox::from_id_salt("device_volume_target").selected_text(selected).show_ui(ui, |ui| {
-                changed |= ui.selectable_value(device, "default".into(), tr("Par défaut")).changed();
-                for endpoint in &options {
-                    changed |= ui.selectable_value(device, endpoint.id.clone(), &endpoint.name).changed();
-                }
-            });
+            let selected = if device == "default" {
+                tr("Par défaut").to_string()
+            } else {
+                options
+                    .iter()
+                    .find(|d| d.id == *device)
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| device.clone())
+            };
+            egui::ComboBox::from_id_salt("device_volume_target")
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    changed |= ui
+                        .selectable_value(device, "default".into(), tr("Par défaut"))
+                        .changed();
+                    for endpoint in &options {
+                        changed |= ui
+                            .selectable_value(device, endpoint.id.clone(), &endpoint.name)
+                            .changed();
+                    }
+                });
             ui.label(tr("Action"));
-            egui::ComboBox::from_id_salt("device_volume_action").selected_text(match action.as_str() {
-                "up" => tr("Augmenter"), "down" => tr("Diminuer"), "set" => tr("Régler à"), "mute" => tr("Couper"), "unmute" => tr("Rétablir"), _ => tr("Basculer muet"),
-            }).show_ui(ui, |ui| {
-                for (id, label) in [("up", tr("Augmenter")), ("down", tr("Diminuer")), ("set", tr("Régler à")), ("mute", tr("Couper")), ("unmute", tr("Rétablir")), ("toggle_mute", tr("Basculer muet"))] {
-                    changed |= ui.selectable_value(action, id.into(), label).changed();
-                }
-            });
-            if action == "up" || action == "down" { changed |= ui.add(egui::Slider::new(step, 1..=100).text(tr("Pas (points)"))).changed(); }
-            if action == "set" { changed |= ui.add(egui::Slider::new(level, 0..=100).text(tr("Niveau (%)"))).changed(); }
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("device_volume_advanced").show(ui, |ui| {
-                ui.label(tr("ID du périphérique (ou default) :"));
-                changed |= ui.text_edit_singleline(device).changed();
-            });
+            egui::ComboBox::from_id_salt("device_volume_action")
+                .selected_text(match action.as_str() {
+                    "up" => tr("Augmenter"),
+                    "down" => tr("Diminuer"),
+                    "set" => tr("Régler à"),
+                    "mute" => tr("Couper"),
+                    "unmute" => tr("Rétablir"),
+                    _ => tr("Basculer muet"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("up", tr("Augmenter")),
+                        ("down", tr("Diminuer")),
+                        ("set", tr("Régler à")),
+                        ("mute", tr("Couper")),
+                        ("unmute", tr("Rétablir")),
+                        ("toggle_mute", tr("Basculer muet")),
+                    ] {
+                        changed |= ui.selectable_value(action, id.into(), label).changed();
+                    }
+                });
+            if action == "up" || action == "down" {
+                changed |= ui
+                    .add(egui::Slider::new(step, 1..=100).text(tr("Pas (points)")))
+                    .changed();
+            }
+            if action == "set" {
+                changed |= ui
+                    .add(egui::Slider::new(level, 0..=100).text(tr("Niveau (%)")))
+                    .changed();
+            }
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("device_volume_advanced")
+                .show(ui, |ui| {
+                    ui.label(tr("ID du périphérique (ou default) :"));
+                    changed |= ui.text_edit_singleline(device).changed();
+                });
         }
         Step::Clipboard { op, value, name } => {
             ui.label(tr("Action sur le presse-papiers"));
-            egui::ComboBox::from_id_salt("clipboard_op").selected_text(match op.as_str() {
-                "copy_text" => tr("Copier du texte"), "read_to_variable" => tr("Lire dans une variable"),
-                "clear" => tr("Vider"), "save" => tr("Sauvegarder le texte"), _ => tr("Restaurer le texte"),
-            }).show_ui(ui, |ui| {
-                for (id, label) in [("copy_text", tr("Copier du texte")), ("read_to_variable", tr("Lire dans une variable")), ("clear", "Vider"), ("save", tr("Sauvegarder le texte")), ("restore", tr("Restaurer le texte"))] {
-                    changed |= ui.selectable_value(op, id.into(), label).changed();
-                }
-            });
-            if op == "copy_text" { ui.label(tr("Texte (accepte {nom})")); changed |= ui.text_edit_multiline(value).changed(); }
-            if op == "read_to_variable" { ui.label(tr("Nom de la variable")); changed |= ui.text_edit_singleline(name).changed(); }
+            egui::ComboBox::from_id_salt("clipboard_op")
+                .selected_text(match op.as_str() {
+                    "copy_text" => tr("Copier du texte"),
+                    "read_to_variable" => tr("Lire dans une variable"),
+                    "clear" => tr("Vider"),
+                    "save" => tr("Sauvegarder le texte"),
+                    _ => tr("Restaurer le texte"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("copy_text", tr("Copier du texte")),
+                        ("read_to_variable", tr("Lire dans une variable")),
+                        ("clear", "Vider"),
+                        ("save", tr("Sauvegarder le texte")),
+                        ("restore", tr("Restaurer le texte")),
+                    ] {
+                        changed |= ui.selectable_value(op, id.into(), label).changed();
+                    }
+                });
+            if op == "copy_text" {
+                ui.label(tr("Texte (accepte {nom})"));
+                changed |= ui.text_edit_multiline(value).changed();
+            }
+            if op == "read_to_variable" {
+                ui.label(tr("Nom de la variable"));
+                changed |= ui.text_edit_singleline(name).changed();
+            }
             egui::CollapsingHeader::new(tr("Options avancées")).id_salt("clipboard_advanced").show(ui, |ui| {
                 ui.label(tr("Sauvegarder et restaurer conservent le texte uniquement pendant cette exécution ; les autres formats ne sont pas restaurés."));
                 if op != "copy_text" { ui.label(tr("Valeur enregistrée (utilisée seulement par Copier du texte)")); changed |= ui.text_edit_multiline(value).changed(); }
                 if op != "read_to_variable" { ui.label(tr("Nom de variable (utilisé seulement par Lire)")); changed |= ui.text_edit_singleline(name).changed(); }
             });
         }
-        Step::WindowOp { target, value, op, x, y, w, h, monitor } => {
+        Step::WindowOp {
+            target,
+            value,
+            op,
+            x,
+            y,
+            w,
+            h,
+            monitor,
+        } => {
             ui.label(tr("Fenêtre ciblée"));
-            egui::ComboBox::from_id_salt("window_op_target").selected_text(match target.as_str() { "title" => tr("Titre"), "exe" => tr("Exécutable"), _ => tr("Fenêtre active") }).show_ui(ui, |ui| {
-                for (id, label) in [("foreground", tr("Fenêtre active")), ("title", tr("Titre")), ("exe", tr("Exécutable"))] { changed |= ui.selectable_value(target, id.into(), label).changed(); }
-            });
-            if target != "foreground" { ui.label(if target == "title" { tr("Titre contenant") } else { tr("Nom .exe") }); changed |= ui.text_edit_singleline(value).changed(); }
+            egui::ComboBox::from_id_salt("window_op_target")
+                .selected_text(match target.as_str() {
+                    "title" => tr("Titre"),
+                    "exe" => tr("Exécutable"),
+                    _ => tr("Fenêtre active"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("foreground", tr("Fenêtre active")),
+                        ("title", tr("Titre")),
+                        ("exe", tr("Exécutable")),
+                    ] {
+                        changed |= ui.selectable_value(target, id.into(), label).changed();
+                    }
+                });
+            if target != "foreground" {
+                ui.label(if target == "title" {
+                    tr("Titre contenant")
+                } else {
+                    tr("Nom .exe")
+                });
+                changed |= ui.text_edit_singleline(value).changed();
+            }
             ui.label(tr("Action"));
-            egui::ComboBox::from_id_salt("window_op_action").selected_text(match op.as_str() {
-                "activate" => tr("Activer"), "minimize" => tr("Réduire"), "maximize" => tr("Maximiser"), "restore" => tr("Restaurer"), "move" => tr("Déplacer"), "resize" => tr("Redimensionner"), "move_to_monitor" => tr("Changer d’écran"), "toggle_always_on_top" => tr("Basculer toujours au premier plan"), "always_on_top_on" => tr("Toujours au premier plan"), "close_others" => tr("Fermer les autres fenêtres"), "minimize_others" => tr("Réduire les autres fenêtres"), _ => tr("Retirer du premier plan permanent")
-            }).show_ui(ui, |ui| {
-                for (id, label) in [("activate", tr("Activer")), ("minimize", tr("Réduire")), ("maximize", tr("Maximiser")), ("restore", tr("Restaurer")), ("move", tr("Déplacer")), ("resize", tr("Redimensionner")), ("move_to_monitor", tr("Changer d’écran")), ("toggle_always_on_top", tr("Basculer toujours au premier plan")), ("always_on_top_on", tr("Toujours au premier plan")), ("always_on_top_off", tr("Retirer du premier plan permanent")), ("close_others", tr("Fermer les autres fenêtres")), ("minimize_others", tr("Réduire les autres fenêtres"))] { changed |= ui.selectable_value(op, id.into(), label).changed(); }
-            });
-            if op == "move_to_monitor" { changed |= ui.add(egui::DragValue::new(monitor).range(1..=16).prefix(tr("Écran "))).changed(); }
+            egui::ComboBox::from_id_salt("window_op_action")
+                .selected_text(match op.as_str() {
+                    "activate" => tr("Activer"),
+                    "minimize" => tr("Réduire"),
+                    "maximize" => tr("Maximiser"),
+                    "restore" => tr("Restaurer"),
+                    "move" => tr("Déplacer"),
+                    "resize" => tr("Redimensionner"),
+                    "move_to_monitor" => tr("Changer d’écran"),
+                    "toggle_always_on_top" => tr("Basculer toujours au premier plan"),
+                    "always_on_top_on" => tr("Toujours au premier plan"),
+                    "close_others" => tr("Fermer les autres fenêtres"),
+                    "minimize_others" => tr("Réduire les autres fenêtres"),
+                    _ => tr("Retirer du premier plan permanent"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("activate", tr("Activer")),
+                        ("minimize", tr("Réduire")),
+                        ("maximize", tr("Maximiser")),
+                        ("restore", tr("Restaurer")),
+                        ("move", tr("Déplacer")),
+                        ("resize", tr("Redimensionner")),
+                        ("move_to_monitor", tr("Changer d’écran")),
+                        (
+                            "toggle_always_on_top",
+                            tr("Basculer toujours au premier plan"),
+                        ),
+                        ("always_on_top_on", tr("Toujours au premier plan")),
+                        ("always_on_top_off", tr("Retirer du premier plan permanent")),
+                        ("close_others", tr("Fermer les autres fenêtres")),
+                        ("minimize_others", tr("Réduire les autres fenêtres")),
+                    ] {
+                        changed |= ui.selectable_value(op, id.into(), label).changed();
+                    }
+                });
+            if op == "move_to_monitor" {
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(monitor)
+                            .range(1..=16)
+                            .prefix(tr("Écran ")),
+                    )
+                    .changed();
+            }
             egui::CollapsingHeader::new(tr("Options avancées")).id_salt("window_op_advanced").show(ui, |ui| {
                 if op == "move" { changed |= ui.add(egui::DragValue::new(x).range(-32768..=32767).prefix("X ")).changed(); changed |= ui.add(egui::DragValue::new(y).range(-32768..=32767).prefix("Y ")).changed(); }
                 if op == "resize" { changed |= ui.add(egui::DragValue::new(w).range(1..=32767).prefix(tr("Largeur "))).changed(); changed |= ui.add(egui::DragValue::new(h).range(1..=32767).prefix(tr("Hauteur "))).changed(); }
                 ui.label(tr("Écran 1 = écran principal ; autres écrans triés de gauche à droite, puis de haut en bas."));
             });
         }
-        Step::AppVolume { target, action, step, level, include_children } => {
+        Step::AppVolume {
+            target,
+            action,
+            step,
+            level,
+            include_children,
+        } => {
             ui.label(tr("Cible"));
             let mut foreground = target == "foreground";
-            egui::ComboBox::from_id_salt("app_volume_target").selected_text(if foreground { tr("Application au premier plan") } else { tr("Application précise") }).show_ui(ui, |ui| {
-                changed |= ui.selectable_value(&mut foreground, true, tr("Application au premier plan")).changed();
-                changed |= ui.selectable_value(&mut foreground, false, tr("Application précise")).changed();
-            });
-            if foreground { if target != "foreground" { *target = "foreground".into(); changed = true; } }
-            else {
-                if target == "foreground" { *target = "chrome.exe".into(); changed = true; }
+            egui::ComboBox::from_id_salt("app_volume_target")
+                .selected_text(if foreground {
+                    tr("Application au premier plan")
+                } else {
+                    tr("Application précise")
+                })
+                .show_ui(ui, |ui| {
+                    changed |= ui
+                        .selectable_value(&mut foreground, true, tr("Application au premier plan"))
+                        .changed();
+                    changed |= ui
+                        .selectable_value(&mut foreground, false, tr("Application précise"))
+                        .changed();
+                });
+            if foreground {
+                if target != "foreground" {
+                    *target = "foreground".into();
+                    changed = true;
+                }
+            } else {
+                if target == "foreground" {
+                    *target = "chrome.exe".into();
+                    changed = true;
+                }
                 ui.label(tr("Nom du programme (ex. chrome.exe)"));
                 changed |= ui.text_edit_singleline(target).changed();
             }
             ui.label(tr("Action"));
-            egui::ComboBox::from_id_salt("app_volume_action").selected_text(match action.as_str() {
-                "up" => tr("Augmenter"), "down" => tr("Diminuer"), "set" => tr("Régler à"), "mute" => tr("Couper"), "unmute" => tr("Rétablir"), _ => tr("Basculer muet"),
-            }).show_ui(ui, |ui| {
-                for (id, label) in [("up", tr("Augmenter")), ("down", tr("Diminuer")), ("set", tr("Régler à")), ("mute", tr("Couper")), ("unmute", tr("Rétablir")), ("toggle_mute", tr("Basculer muet"))] {
-                    changed |= ui.selectable_value(action, id.into(), label).changed();
-                }
-            });
-            if action == "up" || action == "down" { changed |= ui.add(egui::Slider::new(step, 1..=100).text(tr("Pas (points)"))).changed(); }
-            if action == "set" { changed |= ui.add(egui::Slider::new(level, 0..=100).text(tr("Niveau (%)"))).changed(); }
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("app_volume_advanced").show(ui, |ui| {
-                changed |= theme::checkbox(ui, include_children, tr("Inclure les processus enfants")).changed();
-            });
+            egui::ComboBox::from_id_salt("app_volume_action")
+                .selected_text(match action.as_str() {
+                    "up" => tr("Augmenter"),
+                    "down" => tr("Diminuer"),
+                    "set" => tr("Régler à"),
+                    "mute" => tr("Couper"),
+                    "unmute" => tr("Rétablir"),
+                    _ => tr("Basculer muet"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("up", tr("Augmenter")),
+                        ("down", tr("Diminuer")),
+                        ("set", tr("Régler à")),
+                        ("mute", tr("Couper")),
+                        ("unmute", tr("Rétablir")),
+                        ("toggle_mute", tr("Basculer muet")),
+                    ] {
+                        changed |= ui.selectable_value(action, id.into(), label).changed();
+                    }
+                });
+            if action == "up" || action == "down" {
+                changed |= ui
+                    .add(egui::Slider::new(step, 1..=100).text(tr("Pas (points)")))
+                    .changed();
+            }
+            if action == "set" {
+                changed |= ui
+                    .add(egui::Slider::new(level, 0..=100).text(tr("Niveau (%)")))
+                    .changed();
+            }
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("app_volume_advanced")
+                .show(ui, |ui| {
+                    changed |=
+                        theme::checkbox(ui, include_children, tr("Inclure les processus enfants"))
+                            .changed();
+                });
         }
-        Step::D6Sleep => { ui.label(tr("Met le périphérique en veille maintenant. Un appui le réveille sans lancer la macro.")); }
-        Step::CloseWindow => { ui.label(tr("Ferme la fenêtre active (jamais NovyDeck).")); }
-        Step::ObsScene { name } => { ui.label(tr("Scène OBS")); changed |= obs_entry(ui, name, &crate::obs_monitor::snapshot().scenes); }
-        Step::ObsMute { input, mode } => { ui.label(tr("Entrée audio OBS")); changed |= obs_entry(ui, input, &crate::obs_monitor::snapshot().inputs); obs_choice(ui, mode, &["toggle", "mute", "unmute"], &mut changed); }
-        Step::ObsSourceVisibility { scene, source, mode } => { ui.label(tr("Scène puis source OBS")); changed |= obs_entry(ui, scene, &crate::obs_monitor::snapshot().scenes); changed |= obs_entry(ui, source, crate::obs_monitor::snapshot().scene_items.get(scene).map(Vec::as_slice).unwrap_or(&[])); obs_choice(ui, mode, &["toggle", "show", "hide"], &mut changed); }
-        Step::ObsRecord { mode } => obs_choice(ui, mode, &["toggle", "start", "stop", "pause"], &mut changed),
-        Step::ObsStream { mode } | Step::ObsVirtualCam { mode } => obs_choice(ui, mode, &["toggle", "start", "stop"], &mut changed),
-        Step::ObsReplay { mode } => obs_choice(ui, mode, &["toggle", "start", "stop", "save"], &mut changed),
+        Step::D6Sleep => {
+            ui.label(tr("Met le périphérique en veille maintenant. Un appui le réveille sans lancer la macro."));
+        }
+        Step::CloseWindow => {
+            ui.label(tr("Ferme la fenêtre active (jamais NovyDeck)."));
+        }
+        Step::ObsScene { name } => {
+            ui.label(tr("Scène OBS"));
+            changed |= obs_entry(ui, name, &crate::obs_monitor::snapshot().scenes);
+        }
+        Step::ObsMute { input, mode } => {
+            ui.label(tr("Entrée audio OBS"));
+            changed |= obs_entry(ui, input, &crate::obs_monitor::snapshot().inputs);
+            obs_choice(ui, mode, &["toggle", "mute", "unmute"], &mut changed);
+        }
+        Step::ObsSourceVisibility {
+            scene,
+            source,
+            mode,
+        } => {
+            ui.label(tr("Scène puis source OBS"));
+            changed |= obs_entry(ui, scene, &crate::obs_monitor::snapshot().scenes);
+            changed |= obs_entry(
+                ui,
+                source,
+                crate::obs_monitor::snapshot()
+                    .scene_items
+                    .get(scene)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]),
+            );
+            obs_choice(ui, mode, &["toggle", "show", "hide"], &mut changed);
+        }
+        Step::ObsRecord { mode } => obs_choice(
+            ui,
+            mode,
+            &["toggle", "start", "stop", "pause"],
+            &mut changed,
+        ),
+        Step::ObsStream { mode } | Step::ObsVirtualCam { mode } => {
+            obs_choice(ui, mode, &["toggle", "start", "stop"], &mut changed)
+        }
+        Step::ObsReplay { mode } => {
+            obs_choice(ui, mode, &["toggle", "start", "stop", "save"], &mut changed)
+        }
         Step::Delay { ms } => {
             ui.horizontal(|ui| {
                 changed |= ui
@@ -5818,10 +7933,19 @@ fn edit_step(
         Step::Hotkey { keys } => {
             ui.horizontal(|ui| {
                 // Le champ laisse la place au bouton : panneau de propriétés étroit compris.
-                let button = ui.fonts(|f| f.layout_no_wrap(tr("Enregistrer…").into(), egui::TextStyle::Button.resolve(ui.style()), Color32::WHITE).size().x)
-                    + ui.spacing().button_padding.x * 2.0;
+                let button = ui.fonts(|f| {
+                    f.layout_no_wrap(
+                        tr("Enregistrer…").into(),
+                        egui::TextStyle::Button.resolve(ui.style()),
+                        Color32::WHITE,
+                    )
+                    .size()
+                    .x
+                }) + ui.spacing().button_padding.x * 2.0;
                 let width = (ui.available_width() - button - ui.spacing().item_spacing.x).max(60.0);
-                changed |= ui.add(egui::TextEdit::singleline(keys).desired_width(width)).changed();
+                changed |= ui
+                    .add(egui::TextEdit::singleline(keys).desired_width(width))
+                    .changed();
                 if ui.button(tr("Enregistrer…")).clicked() {
                     *record = true;
                 }
@@ -5838,16 +7962,29 @@ fn edit_step(
                 )
                 .changed();
         }
-        Step::Launch { program, args, focus_if_running } => {
-            ui.label(tr("Arguments : {nom}, {date}, {heure}, {horodatage}, {presse_papiers}."));
+        Step::Launch {
+            program,
+            args,
+            focus_if_running,
+        } => {
+            ui.label(tr(
+                "Arguments : {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.",
+            ));
             ui.horizontal(|ui| {
                 changed |= ui.text_edit_singleline(program).changed();
                 if ui.small_button("…").clicked() {
-                    choose_step_file(tx.clone(),target.clone(),false);
+                    choose_step_file(tx.clone(), target.clone(), false);
                 }
             });
-            changed |= theme::checkbox(ui, focus_if_running, tr("Si déjà ouverte, activer au lieu de relancer")).changed();
-            ui.label(RichText::new(tr("Arguments : un par ligne, sans guillemets ajoutés")).small());
+            changed |= theme::checkbox(
+                ui,
+                focus_if_running,
+                tr("Si déjà ouverte, activer au lieu de relancer"),
+            )
+            .changed();
+            ui.label(
+                RichText::new(tr("Arguments : un par ligne, sans guillemets ajoutés")).small(),
+            );
             let mut text = args.join("\n");
             if ui
                 .add(
@@ -5866,7 +8003,9 @@ fn edit_step(
             }
         }
         Step::Url { url } => {
-            ui.label(tr("Adresse : accepte {nom}, {date}, {heure}, {horodatage}, {presse_papiers}."));
+            ui.label(tr(
+                "Adresse : accepte {nom}, {date}, {heure}, {horodatage}, {presse_papiers}.",
+            ));
             changed |= ui.text_edit_singleline(url).changed();
         }
         Step::WaitWindow {
@@ -5874,7 +8013,9 @@ fn edit_step(
             timeout_ms,
             focus,
         } => {
-            ui.label(tr("Le titre contient (sans distinction majuscule/minuscule)"));
+            ui.label(tr(
+                "Le titre contient (sans distinction majuscule/minuscule)",
+            ));
             changed |= ui.text_edit_singleline(title).changed();
             ui.horizontal(|ui| {
                 ui.label(tr("Délai max."));
@@ -5887,7 +8028,8 @@ fn edit_step(
                     .changed();
                 ui.label("ms");
             });
-            changed |= theme::checkbox(ui, focus, tr("Mettre cette fenêtre au premier plan")).changed();
+            changed |=
+                theme::checkbox(ui, focus, tr("Mettre cette fenêtre au premier plan")).changed();
         }
         Step::Media { command } => {
             let items = [
@@ -5940,18 +8082,40 @@ fn edit_step(
         step @ Step::AudioSwitch { .. } => {
             changed |= icon_ui::audio_options(ui, step, audio, pick_audio_icon, tx, target);
         }
-        Step::TextOp { name, op, value, find, persistent } => {
+        Step::TextOp {
+            name,
+            op,
+            value,
+            find,
+            persistent,
+        } => {
             ui.label(tr("Variable texte"));
             changed |= ui.text_edit_singleline(name).changed();
-            let choices = [("set", tr("Définir")), ("append", tr("Ajouter à la fin")), ("prepend", tr("Ajouter au début")),
-                ("upper", tr("Mettre en majuscules")), ("lower", tr("Mettre en minuscules")), ("trim", tr("Supprimer les espaces")),
-                ("replace", tr("Remplacer")), ("length", tr("Compter les caractères"))];
-            let selected = choices.iter().find(|(id, _)| *id == op).map(|(_, label)| *label).unwrap_or(tr("Opération inconnue"));
-            egui::ComboBox::from_id_salt("text_op_choice").selected_text(selected).show_ui(ui, |ui| {
-                for (id, label) in choices { changed |= ui.selectable_value(op, id.into(), label).changed(); }
-            });
+            let choices = [
+                ("set", tr("Définir")),
+                ("append", tr("Ajouter à la fin")),
+                ("prepend", tr("Ajouter au début")),
+                ("upper", tr("Mettre en majuscules")),
+                ("lower", tr("Mettre en minuscules")),
+                ("trim", tr("Supprimer les espaces")),
+                ("replace", tr("Remplacer")),
+                ("length", tr("Compter les caractères")),
+            ];
+            let selected = choices
+                .iter()
+                .find(|(id, _)| *id == op)
+                .map(|(_, label)| *label)
+                .unwrap_or(tr("Opération inconnue"));
+            egui::ComboBox::from_id_salt("text_op_choice")
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    for (id, label) in choices {
+                        changed |= ui.selectable_value(op, id.into(), label).changed();
+                    }
+                });
             if ["set", "append", "prepend", "replace"].contains(&op.as_str()) {
-                ui.label(tr("Valeur (accepte {variable})")); changed |= ui.text_edit_multiline(value).changed();
+                ui.label(tr("Valeur (accepte {variable})"));
+                changed |= ui.text_edit_multiline(value).changed();
             }
             egui::CollapsingHeader::new(tr("Options avancées")).id_salt("text_op_advanced").show(ui, |ui| {
                 if op == "replace" { ui.label(tr("Texte recherché (accepte {variable}, non vide après interpolation)")); changed |= ui.text_edit_singleline(find).changed(); }
@@ -5961,17 +8125,29 @@ fn edit_step(
             });
         }
         Step::Notify { title, message } => {
-            ui.label(tr("Titre")); changed |= ui.text_edit_singleline(title).changed();
-            ui.label(tr("Message (variables : {nom} ; {{ pour une accolade)")); changed |= ui.text_edit_multiline(message).changed();
+            ui.label(tr("Titre"));
+            changed |= ui.text_edit_singleline(title).changed();
+            ui.label(tr("Message (variables : {nom} ; {{ pour une accolade)"));
+            changed |= ui.text_edit_multiline(message).changed();
         }
-        Step::WaitUntil { condition, timeout_ms, poll_ms } => {
+        Step::WaitUntil {
+            condition,
+            timeout_ms,
+            poll_ms,
+        } => {
             changed |= edit_condition(ui, condition, audio, 0);
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("wait_until_advanced").show(ui, |ui| {
-                ui.label(tr("Délai maximal (ms)"));
-                changed |= ui.add(egui::DragValue::new(timeout_ms).range(50..=600_000)).changed();
-                ui.label(tr("Intervalle de vérification (ms)"));
-                changed |= ui.add(egui::DragValue::new(poll_ms).range(50..=600_000)).changed();
-            });
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("wait_until_advanced")
+                .show(ui, |ui| {
+                    ui.label(tr("Délai maximal (ms)"));
+                    changed |= ui
+                        .add(egui::DragValue::new(timeout_ms).range(50..=600_000))
+                        .changed();
+                    ui.label(tr("Intervalle de vérification (ms)"));
+                    changed |= ui
+                        .add(egui::DragValue::new(poll_ms).range(50..=600_000))
+                        .changed();
+                });
         }
         Step::IfCondition { condition, .. } => {
             changed |= edit_condition(ui, condition, audio, 0);
@@ -5989,35 +8165,76 @@ fn edit_step(
                 ui.label(tr("fois les blocs de l’Atelier"));
             });
         }
-        Step::Math { name, op, value, min, max, persistent } => {
-            ui.label(tr("Variable numérique")); changed |= ui.text_edit_singleline(name).changed();
+        Step::Math {
+            name,
+            op,
+            value,
+            min,
+            max,
+            persistent,
+        } => {
+            ui.label(tr("Variable numérique"));
+            changed |= ui.text_edit_singleline(name).changed();
             ui.label(tr("Opération"));
-            egui::ComboBox::from_id_salt("math_op").selected_text(match op.as_str() {
-                "set" => tr("Définir"), "add" => tr("Ajouter"), "subtract" => tr("Soustraire"),
-                "multiply" => tr("Multiplier"), "divide" => tr("Diviser"), "modulo" => tr("Modulo"),
-                "min" => tr("Minimum"), "max" => tr("Maximum"), _ => tr("Aléatoire"),
-            }).show_ui(ui, |ui| {
-                for (id, label) in [("set", tr("Définir")), ("add", tr("Ajouter")), ("subtract", tr("Soustraire")),
-                    ("multiply", tr("Multiplier")), ("divide", tr("Diviser")), ("modulo", tr("Modulo")),
-                    ("min", "Minimum"), ("max", "Maximum"), ("random", tr("Aléatoire"))] {
-                    changed |= ui.selectable_value(op, id.into(), label).changed();
-                }
-            });
-            if op != "random" { ui.label(tr("Valeur (nombre ou {variable})")); changed |= ui.text_edit_singleline(value).changed(); }
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("math_advanced").show(ui, |ui| {
-                if op == "random" {
-                    ui.label(tr("Minimum")); changed |= ui.add(egui::DragValue::new(min)).changed();
-                    ui.label(tr("Maximum")); changed |= ui.add(egui::DragValue::new(max)).changed();
-                }
-                changed |= theme::checkbox(ui, persistent, tr("Conserver entre les macros")).changed();
-            });
+            egui::ComboBox::from_id_salt("math_op")
+                .selected_text(match op.as_str() {
+                    "set" => tr("Définir"),
+                    "add" => tr("Ajouter"),
+                    "subtract" => tr("Soustraire"),
+                    "multiply" => tr("Multiplier"),
+                    "divide" => tr("Diviser"),
+                    "modulo" => tr("Modulo"),
+                    "min" => tr("Minimum"),
+                    "max" => tr("Maximum"),
+                    _ => tr("Aléatoire"),
+                })
+                .show_ui(ui, |ui| {
+                    for (id, label) in [
+                        ("set", tr("Définir")),
+                        ("add", tr("Ajouter")),
+                        ("subtract", tr("Soustraire")),
+                        ("multiply", tr("Multiplier")),
+                        ("divide", tr("Diviser")),
+                        ("modulo", tr("Modulo")),
+                        ("min", "Minimum"),
+                        ("max", "Maximum"),
+                        ("random", tr("Aléatoire")),
+                    ] {
+                        changed |= ui.selectable_value(op, id.into(), label).changed();
+                    }
+                });
+            if op != "random" {
+                ui.label(tr("Valeur (nombre ou {variable})"));
+                changed |= ui.text_edit_singleline(value).changed();
+            }
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("math_advanced")
+                .show(ui, |ui| {
+                    if op == "random" {
+                        ui.label(tr("Minimum"));
+                        changed |= ui.add(egui::DragValue::new(min)).changed();
+                        ui.label(tr("Maximum"));
+                        changed |= ui.add(egui::DragValue::new(max)).changed();
+                    }
+                    changed |=
+                        theme::checkbox(ui, persistent, tr("Conserver entre les macros")).changed();
+                });
         }
-        Step::SetVariable { name, value, persistent } => {
-            ui.label(tr("Variable")); changed |= ui.text_edit_singleline(name).changed();
-            ui.label(tr("Valeur (accepte {variable})")); changed |= ui.text_edit_singleline(value).changed();
-            egui::CollapsingHeader::new(tr("Options avancées")).id_salt("set_variable_advanced").show(ui, |ui| {
-                changed |= theme::checkbox(ui, persistent, tr("Conserver entre les macros")).changed();
-            });
+        Step::SetVariable {
+            name,
+            value,
+            persistent,
+        } => {
+            ui.label(tr("Variable"));
+            changed |= ui.text_edit_singleline(name).changed();
+            ui.label(tr("Valeur (accepte {variable})"));
+            changed |= ui.text_edit_singleline(value).changed();
+            egui::CollapsingHeader::new(tr("Options avancées"))
+                .id_salt("set_variable_advanced")
+                .show(ui, |ui| {
+                    changed |=
+                        theme::checkbox(ui, persistent, tr("Conserver entre les macros")).changed();
+                });
         }
         Step::IfVariable { name, value, .. } => {
             ui.horizontal(|ui| {
@@ -6038,7 +8255,7 @@ fn edit_step(
                 ui.label(tr("AutoHotkey v2"));
                 changed |= ui.text_edit_singleline(executable).changed();
                 if ui.button("Parcourir…").clicked() {
-                    choose_step_file(tx.clone(),target.clone(),true);
+                    choose_step_file(tx.clone(), target.clone(), true);
                 }
             });
             changed |= ui
@@ -6058,7 +8275,9 @@ fn edit_step(
             ui.label(RichText::new(tr("Le script agit sur ton PC lors de l’exécution. Arrêter la macro termine le processus AutoHotkey lancé par NovyDeck.")).small());
         }
         Step::Back | Step::PageNext | Step::PagePrevious => {
-            ui.label(tr("Navigation dans ce profil, aussi disponible depuis les touches du périphérique."));
+            ui.label(tr(
+                "Navigation dans ce profil, aussi disponible depuis les touches du périphérique.",
+            ));
         }
         Step::Profile { name } => {
             egui::ComboBox::from_id_salt("profile_action")
@@ -6074,34 +8293,136 @@ fn edit_step(
 }
 
 fn mouse_origin_editor(ui: &mut egui::Ui, origin: &mut String, changed: &mut bool) {
-    egui::ComboBox::from_id_salt("mouse_origin").selected_text(match origin.as_str() { "window" => tr("Fenêtre (zone client)"), "cursor" => tr("Curseur"), _ => tr("Écran") }).show_ui(ui, |ui| {
-        for (id, label) in [("screen", tr("Écran")), ("window", tr("Fenêtre (zone client)")), ("cursor", tr("Curseur"))] { *changed |= ui.selectable_value(origin, id.into(), label).changed(); }
-    });
+    egui::ComboBox::from_id_salt("mouse_origin")
+        .selected_text(match origin.as_str() {
+            "window" => tr("Fenêtre (zone client)"),
+            "cursor" => tr("Curseur"),
+            _ => tr("Écran"),
+        })
+        .show_ui(ui, |ui| {
+            for (id, label) in [
+                ("screen", tr("Écran")),
+                ("window", tr("Fenêtre (zone client)")),
+                ("cursor", tr("Curseur")),
+            ] {
+                *changed |= ui.selectable_value(origin, id.into(), label).changed();
+            }
+        });
 }
 fn step_summary(step: &Step) -> String {
     match step {
         Step::Hotkey { keys } => keys.clone(),
         Step::KeyHold { .. } => step.key_hold_summary().unwrap_or_default(),
         Step::Delay { ms } => trf("Attendre {ms} ms", &[("ms", &ms)]),
-        Step::MouseClick { button, double, x, y, relative_to } => trf("Clic {button}{double}{position}", &[("button", &button), ("double", &if *double { tr(" double") } else { "" }), ("position", &x.zip(*y).map(|(x, y)| trf(" à {x}, {y} ({relative_to})", &[("x", &x), ("y", &y), ("relative_to", &relative_to)])).unwrap_or_default())]),
-        Step::MouseMove { x, y, relative, relative_to } => trf("Souris {x}, {y} ({origin})", &[("x", &x), ("y", &y), ("origin", &if *relative { "cursor" } else { relative_to })]),
-        Step::MouseScroll { amount, horizontal } => trf("Défiler de {amount} crans {direction}", &[("amount", &amount), ("direction", &if *horizontal { tr("horizontalement") } else { tr("verticalement") })]),
-        Step::PlaySound { path, volume } => trf("Son : {path} ({volume} %)", &[("path", &path), ("volume", &volume)]),
-        Step::IfCondition { condition, .. } => trf("Si {condition}", &[("condition", &condition.summary())]),
-        Step::WaitUntil { condition, timeout_ms, .. } => trf("Attendre que {condition} ({timeout} ms max)", &[("condition", &condition.summary()), ("timeout", &timeout_ms)]),
-        Step::Notify { title, message } => trf("Notification « {title} » : {message}", &[("title", &title), ("message", &message.chars().take(50).collect::<String>())]),
+        Step::MouseClick {
+            button,
+            double,
+            x,
+            y,
+            relative_to,
+        } => trf(
+            "Clic {button}{double}{position}",
+            &[
+                ("button", &button),
+                ("double", &if *double { tr(" double") } else { "" }),
+                (
+                    "position",
+                    &x.zip(*y)
+                        .map(|(x, y)| {
+                            trf(
+                                " à {x}, {y} ({relative_to})",
+                                &[("x", &x), ("y", &y), ("relative_to", &relative_to)],
+                            )
+                        })
+                        .unwrap_or_default(),
+                ),
+            ],
+        ),
+        Step::MouseMove {
+            x,
+            y,
+            relative,
+            relative_to,
+        } => trf(
+            "Souris {x}, {y} ({origin})",
+            &[
+                ("x", &x),
+                ("y", &y),
+                ("origin", &if *relative { "cursor" } else { relative_to }),
+            ],
+        ),
+        Step::MouseScroll { amount, horizontal } => trf(
+            "Défiler de {amount} crans {direction}",
+            &[
+                ("amount", &amount),
+                (
+                    "direction",
+                    &if *horizontal {
+                        tr("horizontalement")
+                    } else {
+                        tr("verticalement")
+                    },
+                ),
+            ],
+        ),
+        Step::PlaySound { path, volume } => trf(
+            "Son : {path} ({volume} %)",
+            &[("path", &path), ("volume", &volume)],
+        ),
+        Step::IfCondition { condition, .. } => {
+            trf("Si {condition}", &[("condition", &condition.summary())])
+        }
+        Step::WaitUntil {
+            condition,
+            timeout_ms,
+            ..
+        } => trf(
+            "Attendre que {condition} ({timeout} ms max)",
+            &[
+                ("condition", &condition.summary()),
+                ("timeout", &timeout_ms),
+            ],
+        ),
+        Step::Notify { title, message } => trf(
+            "Notification « {title} » : {message}",
+            &[
+                ("title", &title),
+                ("message", &message.chars().take(50).collect::<String>()),
+            ],
+        ),
         Step::Math { .. } => step.math_summary().unwrap_or_default(),
         Step::TextOp { .. } => step.text_op_summary().unwrap_or_default(),
-        Step::SetVariable { name, persistent, .. } => trf("Définir {name}{persistent}", &[("name", &name), ("persistent", &if *persistent { tr(" (enregistrée)") } else { "" })]),
+        Step::SetVariable {
+            name, persistent, ..
+        } => trf(
+            "Définir {name}{persistent}",
+            &[
+                ("name", &name),
+                (
+                    "persistent",
+                    &if *persistent {
+                        tr(" (enregistrée)")
+                    } else {
+                        ""
+                    },
+                ),
+            ],
+        ),
         Step::Clipboard { .. } => step.clipboard_summary().unwrap_or_default(),
         Step::WindowOp { .. } => step.window_op_summary().unwrap_or_default(),
         Step::AppVolume { .. } => step.app_volume_summary().unwrap_or_default(),
         Step::DeviceVolume { .. } => step.device_volume_summary().unwrap_or_default(),
         Step::StopSounds => tr("Arrêter les sons").into(),
-        Step::Toggle { a, b } => trf("Basculer 1 / 2 ({a} / {b} blocs)", &[("a", &a.len()), ("b", &b.len())]),
+        Step::Toggle { a, b } => trf(
+            "Basculer 1 / 2 ({a} / {b} blocs)",
+            &[("a", &a.len()), ("b", &b.len())],
+        ),
         Step::UdpSend { host, port, .. } => format!("UDP : {host}:{port}"),
         Step::HttpRequest { method, url, .. } => format!("HTTP {method} : {url}"),
-        Step::D6Brightness { mode, value } => trf("Luminosité : {mode} {value} %", &[("mode", &mode), ("value", &value)]),
+        Step::D6Brightness { mode, value } => trf(
+            "Luminosité : {mode} {value} %",
+            &[("mode", &mode), ("value", &value)],
+        ),
         Step::D6Sleep => tr("Veille du périphérique").into(),
         Step::CloseWindow => tr("Fermer la fenêtre active").into(),
         Step::Media { command } => trf("Média : {command}", &[("command", &command)]),
@@ -6134,15 +8455,18 @@ mod dialog_tests {
     use super::*;
     #[test]
     fn dialog_worker_result_applies_on_the_next_ui_tick_without_native_window() {
-        let dir=tempfile::tempdir().unwrap();
-        let mut app=App::init(&egui::Context::default(),Some(dir.path().join("config.json")));
-        app.start_dialog(|| Some(Box::new(|app: &mut App| app.config.brightness=17)));
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::init(
+            &egui::Context::default(),
+            Some(dir.path().join("config.json")),
+        );
+        app.start_dialog(|| Some(Box::new(|app: &mut App| app.config.brightness = 17)));
         assert!(app.dialog_pending);
-        let result=app.dialog_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let result = app.dialog_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         app.dialog_tx.send(result).unwrap();
         app.dialog_results();
         assert!(!app.dialog_pending);
-        assert_eq!(app.config.brightness,17);
+        assert_eq!(app.config.brightness, 17);
     }
 }
 
@@ -6153,7 +8477,9 @@ mod automatic_profile_sleep_tests {
     fn legacy_config_defaults_and_new_fields_round_trip() {
         let old = serde_json::to_value(Config::default()).unwrap();
         let mut old = old;
-        for field in ["auto_profile", "sleep_after_min", "sleep_brightness"] { old.as_object_mut().unwrap().remove(field); }
+        for field in ["auto_profile", "sleep_after_min", "sleep_brightness"] {
+            old.as_object_mut().unwrap().remove(field);
+        }
         old["profiles"][0].as_object_mut().unwrap().remove("apps");
         let mut loaded: Config = serde_json::from_value(old).unwrap();
         assert!(!loaded.auto_profile);
@@ -6163,7 +8489,13 @@ mod automatic_profile_sleep_tests {
         loaded.profiles[0].apps.push("OBS64.EXE".into());
         loaded.auto_profile = true;
         loaded.sleep_after_min = 15;
-        assert_eq!(serde_json::from_str::<Config>(&serde_json::to_string(&loaded).unwrap()).unwrap().profiles[0].apps, vec!["OBS64.EXE"]);
+        assert_eq!(
+            serde_json::from_str::<Config>(&serde_json::to_string(&loaded).unwrap())
+                .unwrap()
+                .profiles[0]
+                .apps,
+            vec!["OBS64.EXE"]
+        );
         loaded.sleep_after_min = 241;
         assert!(loaded.validate().is_err());
     }
@@ -6182,7 +8514,10 @@ mod automatic_profile_sleep_tests {
     #[test]
     fn macro_blocks_auto_switch_until_finished() {
         let dir = tempfile::tempdir().unwrap();
-        let mut app = App::init(&egui::Context::default(), Some(dir.path().join("config.json")));
+        let mut app = App::init(
+            &egui::Context::default(),
+            Some(dir.path().join("config.json")),
+        );
         app.config.profiles.push(Profile::new("OBS".into()));
         app.config.profiles[1].apps.push("obs64.exe".into());
         app.config.auto_profile = true;
@@ -6211,19 +8546,30 @@ mod automatic_profile_sleep_tests {
 }
 
 fn obs_choice(ui: &mut egui::Ui, mode: &mut String, options: &[&str], changed: &mut bool) {
-    egui::ComboBox::from_id_salt(ui.next_auto_id()).selected_text(mode.as_str()).show_ui(ui, |ui| {
-        for option in options { *changed |= ui.selectable_value(mode, (*option).to_owned(), *option).changed(); }
-    });
+    egui::ComboBox::from_id_salt(ui.next_auto_id())
+        .selected_text(mode.as_str())
+        .show_ui(ui, |ui| {
+            for option in options {
+                *changed |= ui
+                    .selectable_value(mode, (*option).to_owned(), *option)
+                    .changed();
+            }
+        });
 }
 
 fn obs_entry(ui: &mut egui::Ui, value: &mut String, options: &[String]) -> bool {
     let mut changed = ui.text_edit_singleline(value).changed();
     if !options.is_empty() {
-        egui::ComboBox::from_id_salt(ui.next_auto_id()).selected_text(tr("Choisir…")).show_ui(ui, |ui| {
-            for item in options {
-                if ui.selectable_label(value == item, item).clicked() { *value = item.clone(); changed = true; }
-            }
-        });
+        egui::ComboBox::from_id_salt(ui.next_auto_id())
+            .selected_text(tr("Choisir…"))
+            .show_ui(ui, |ui| {
+                for item in options {
+                    if ui.selectable_label(value == item, item).clicked() {
+                        *value = item.clone();
+                        changed = true;
+                    }
+                }
+            });
     }
     changed
 }

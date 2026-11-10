@@ -6,7 +6,9 @@ use super::*;
 #[test]
 #[ignore]
 fn ui018_real_frames() {
-    let dir = std::path::PathBuf::from(std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"));
+    let dir = std::path::PathBuf::from(
+        std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"),
+    );
     std::fs::create_dir_all(&dir).unwrap();
     let size = vec2(1366.0, 768.0);
     crate::i18n::set_language("fr");
@@ -15,14 +17,20 @@ fn ui018_real_frames() {
         h.app.preferences.reduce_motion = false;
         h.app.preferences.interface_animations = true;
         // Laisser finir l'intro de démarrage (voile + logo) avant de filmer.
-        for _ in 0..50 { h.frame(size, vec![]); }
+        for _ in 0..50 {
+            h.frame(size, vec![]);
+        }
         h
     };
     let shot = |h: &mut Harness, sequence: &str, index: usize, events: Vec<Input>| {
         // Harness::frame adds 50 ms; compensate to get real 33 ms egui input timestamps.
         h.time -= 0.017;
         let frame = h.frame(size, events);
-        h.png(size, frame, &dir.join(format!("ui018r-{sequence}-{index:02}.png")));
+        h.png(
+            size,
+            frame,
+            &dir.join(format!("ui018r-{sequence}-{index:02}.png")),
+        );
     };
 
     let mut h = new_scene();
@@ -53,18 +61,36 @@ fn ui018_real_frames() {
         };
         if i == 5 {
             let open = h.frame(size, vec![]);
-            let device = open.shapes.iter().filter_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text.starts_with("Réglages — ") => {
-                    let pos = t.pos + t.galley.size() * 0.5;
-                    s.clip_rect.contains(pos).then_some(pos)
-                }, _ => None,
-            }).next().expect("device settings in menu");
+            let device = open
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text.starts_with("Réglages — ") => {
+                        let pos = t.pos + t.galley.size() * 0.5;
+                        s.clip_rect.contains(pos).then_some(pos)
+                    }
+                    _ => None,
+                })
+                .next()
+                .expect("device settings in menu");
             device_pos = Some(device);
-            shot(&mut h, "settings", i, vec![Input::PointerMoved(device), button(device, true)]);
+            shot(
+                &mut h,
+                "settings",
+                i,
+                vec![Input::PointerMoved(device), button(device, true)],
+            );
         } else {
-            shot(&mut h, "settings", i, if i == 6 {
-                vec![button(device_pos.expect("settings pointer"), false)]
-            } else { events });
+            shot(
+                &mut h,
+                "settings",
+                i,
+                if i == 6 {
+                    vec![button(device_pos.expect("settings pointer"), false)]
+                } else {
+                    events
+                },
+            );
         }
     }
     assert!(h.app.settings, "real settings dialog opened");
@@ -72,41 +98,69 @@ fn ui018_real_frames() {
     let mut h = new_scene();
     h.app.catalog_tab = 0;
     let initial = h.warm(size);
-    let source = h.app.drag_sources.iter().find_map(|(rect, item)|
-        matches!(item, DragItem::Action(_)).then_some(rect.center())).expect("real library action");
-    let target = h.app.drop_targets.iter().find(|(_, i)| *i == 0).expect("deck key 1").0.center();
+    let source = h
+        .app
+        .drag_sources
+        .iter()
+        .find_map(|(rect, item)| matches!(item, DragItem::Action(_)).then_some(rect.center()))
+        .expect("real library action");
+    let target = h
+        .app
+        .drop_targets
+        .iter()
+        .find(|(_, i)| *i == 0)
+        .expect("deck key 1")
+        .0
+        .center();
     let before = h.app.config.keys()[0].clone();
     for i in 0..14 {
         let events = match i {
             1 => vec![Input::PointerMoved(source), button(source, true)],
-            2..=7 => vec![Input::PointerMoved(source + (target - source) * ((i - 1) as f32 / 6.0))],
+            2..=7 => vec![Input::PointerMoved(
+                source + (target - source) * ((i - 1) as f32 / 6.0),
+            )],
             8 => vec![Input::PointerMoved(target), button(target, false)],
             _ => vec![],
         };
         shot(&mut h, "drag", i, events);
     }
-    assert_ne!(h.app.config.keys()[0].steps, before.steps, "library action dropped on key 1");
+    assert_ne!(
+        h.app.config.keys()[0].steps,
+        before.steps,
+        "library action dropped on key 1"
+    );
 
     let mut h = new_scene();
     h.app.show_workflow = true;
     h.app.selected = 0;
-    h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 111 }, Step::Delay { ms: 222 }, Step::Delay { ms: 333 }];
+    h.app.config.keys_mut()[0].steps = vec![
+        Step::Delay { ms: 111 },
+        Step::Delay { ms: 222 },
+        Step::Delay { ms: 333 },
+    ];
     let initial = h.warm(size);
     let source = text_position(&initial.shapes, "Attendre 333 ms").expect("actual workshop card");
     let target = text_position(&initial.shapes, "1").expect("first workshop slot");
     for i in 0..14 {
         let events = match i {
             1 => vec![Input::PointerMoved(source), button(source, true)],
-            2..=7 => vec![Input::PointerMoved(source + (target - source) * ((i - 1) as f32 / 6.0))],
+            2..=7 => vec![Input::PointerMoved(
+                source + (target - source) * ((i - 1) as f32 / 6.0),
+            )],
             8 => vec![Input::PointerMoved(target), button(target, false)],
             _ => vec![],
         };
         shot(&mut h, "atelier", i, events);
     }
-    assert!(matches!(h.app.config.keys()[0].steps.first(), Some(Step::Delay { ms: 333 })), "workshop block reinserted");
+    assert!(
+        matches!(
+            h.app.config.keys()[0].steps.first(),
+            Some(Step::Delay { ms: 333 })
+        ),
+        "workshop block reinserted"
+    );
     crate::i18n::set_language("fr");
 }
-
 
 #[test]
 fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
@@ -116,13 +170,23 @@ fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
     let b = egui::pos2(40.0, 152.0);
     let mut samples = vec![];
     for (time, target, inserted, enabled) in [
-        (0.0, a, false, true), (0.01, b, false, true), (0.07, b, false, true),
-        (0.15, b, false, true), (0.24, b, false, true), (0.25, a, false, false),
+        (0.0, a, false, true),
+        (0.01, b, false, true),
+        (0.07, b, false, true),
+        (0.15, b, false, true),
+        (0.24, b, false, true),
+        (0.25, a, false, false),
     ] {
         let mut value = (Vec2::ZERO, 1.0);
-        ctx.run(egui::RawInput { time: Some(time), ..Default::default() }, |ctx| {
-            value = motion::workshop_card(ctx, id, target, inserted, enabled);
-        });
+        ctx.run(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |ctx| {
+                value = motion::workshop_card(ctx, id, target, inserted, enabled);
+            },
+        );
         samples.push(value);
     }
     assert_eq!(samples[0], (Vec2::ZERO, 1.0));
@@ -131,46 +195,104 @@ fn ui018_atelier_cards_slide_pop_and_stop_repainting() {
     assert_eq!(samples[5], (Vec2::ZERO, 1.0));
     let pop = egui::Id::new("ui018_atelier_pop");
     let mut first = (Vec2::ZERO, 1.0);
-    ctx.run(egui::RawInput { time: Some(0.30), ..Default::default() }, |ctx| { first = motion::workshop_card(ctx, pop, b, true, true); });
+    ctx.run(
+        egui::RawInput {
+            time: Some(0.30),
+            ..Default::default()
+        },
+        |ctx| {
+            first = motion::workshop_card(ctx, pop, b, true, true);
+        },
+    );
     assert!(first.1 < 1.0);
     let mut settled = (Vec2::ZERO, 1.0);
-    ctx.run(egui::RawInput { time: Some(0.54), ..Default::default() }, |ctx| { settled = motion::workshop_card(ctx, pop, b, false, true); });
+    ctx.run(
+        egui::RawInput {
+            time: Some(0.54),
+            ..Default::default()
+        },
+        |ctx| {
+            settled = motion::workshop_card(ctx, pop, b, false, true);
+        },
+    );
     assert_eq!(settled, (Vec2::ZERO, 1.0));
-    assert!(!ctx.has_requested_repaint(), "atelier must stay idle after 220 ms");
+    assert!(
+        !ctx.has_requested_repaint(),
+        "atelier must stay idle after 220 ms"
+    );
 }
 
 /// Deterministic headless workshop paint frames; no hardware or app window.
 #[test]
 #[ignore]
 fn ui018_atelier_motion_frames() {
-    let dir = std::path::PathBuf::from(std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"));
+    let dir = std::path::PathBuf::from(
+        std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"),
+    );
     std::fs::create_dir_all(&dir).unwrap();
     let ctx = egui::Context::default();
     let size = Vec2::new(360.0, 280.0);
     for (i, ms) in [0_u32, 60, 120, 200, 280].iter().enumerate() {
-        let output = ctx.run(egui::RawInput { time: Some(f64::from(*ms) / 1000.0),
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() }, |ctx| {
-            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("atelier_frames")));
-            painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::ZERO, size), 0.0, Color32::from_rgb(27, 31, 40));
-            for (n, base) in [58.0_f32, 119.0, 180.0].iter().enumerate() {
-                let target = egui::pos2(34.0, *base + if *ms == 0 || n == 0 { 0.0 } else { 48.0 });
-                let (delta, scale) = motion::workshop_card(ctx, egui::Id::new(("atelier_frame", n)), target, false, true);
-                let rect = egui::Rect::from_min_size(target + delta, Vec2::new(286.0, 43.0));
-                let rect = egui::Rect::from_center_size(rect.center(), rect.size() * scale);
-                painter.rect_filled(rect, 8.0, Color32::from_rgb(53 + n as u8 * 14, 67 + n as u8 * 10, 91 + n as u8 * 11));
-                painter.rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height())), 0.0, Color32::from_rgb(72, 155, 244));
-            }
-            if *ms != 0 {
-                let slot = egui::Rect::from_min_size(egui::pos2(34.0, 119.0), Vec2::new(286.0, 43.0));
-                painter.rect_stroke(slot, 8.0, egui::Stroke::new(2.0, Color32::from_rgb(72, 155, 244)), egui::StrokeKind::Inside);
-            }
-        });
+        let output = ctx.run(
+            egui::RawInput {
+                time: Some(f64::from(*ms) / 1000.0),
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                ..Default::default()
+            },
+            |ctx| {
+                let painter = ctx.layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("atelier_frames"),
+                ));
+                painter.rect_filled(
+                    egui::Rect::from_min_size(egui::Pos2::ZERO, size),
+                    0.0,
+                    Color32::from_rgb(27, 31, 40),
+                );
+                for (n, base) in [58.0_f32, 119.0, 180.0].iter().enumerate() {
+                    let target =
+                        egui::pos2(34.0, *base + if *ms == 0 || n == 0 { 0.0 } else { 48.0 });
+                    let (delta, scale) = motion::workshop_card(
+                        ctx,
+                        egui::Id::new(("atelier_frame", n)),
+                        target,
+                        false,
+                        true,
+                    );
+                    let rect = egui::Rect::from_min_size(target + delta, Vec2::new(286.0, 43.0));
+                    let rect = egui::Rect::from_center_size(rect.center(), rect.size() * scale);
+                    painter.rect_filled(
+                        rect,
+                        8.0,
+                        Color32::from_rgb(53 + n as u8 * 14, 67 + n as u8 * 10, 91 + n as u8 * 11),
+                    );
+                    painter.rect_filled(
+                        egui::Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height())),
+                        0.0,
+                        Color32::from_rgb(72, 155, 244),
+                    );
+                }
+                if *ms != 0 {
+                    let slot =
+                        egui::Rect::from_min_size(egui::pos2(34.0, 119.0), Vec2::new(286.0, 43.0));
+                    painter.rect_stroke(
+                        slot,
+                        8.0,
+                        egui::Stroke::new(2.0, Color32::from_rgb(72, 155, 244)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            },
+        );
         let mut png = image::RgbaImage::from_pixel(360, 280, image::Rgba([27, 31, 40, 255]));
         for clipped in &output.shapes {
             let (rect, color) = match &clipped.shape {
-                egui::Shape::Rect(s) => (s.rect, s.fill), _ => continue,
+                egui::Shape::Rect(s) => (s.rect, s.fill),
+                _ => continue,
             };
-            if color == Color32::TRANSPARENT { continue; }
+            if color == Color32::TRANSPARENT {
+                continue;
+            }
             let rect = rect.intersect(clipped.clip_rect);
             for y in (rect.top().max(0.0) as u32)..(rect.bottom().min(280.0) as u32) {
                 for x in (rect.left().max(0.0) as u32)..(rect.right().min(360.0) as u32) {
@@ -178,14 +300,23 @@ fn ui018_atelier_motion_frames() {
                 }
             }
         }
-        png.save(dir.join(format!("ui018-atelier-{i:02}.png"))).unwrap();
+        png.save(dir.join(format!("ui018-atelier-{i:02}.png")))
+            .unwrap();
     }
 }
 
 fn visual() -> DragVisual {
     let source = egui::Rect::from_min_size(egui::pos2(26.0, 68.0), Vec2::new(140.0, 56.0));
-    DragVisual { item: DragItem::NewFolder, source, center: source.center(), goal: source.center(),
-        target: None, phase: 0, started: 0.0, last: 0.0 }
+    DragVisual {
+        item: DragItem::NewFolder,
+        source,
+        center: source.center(),
+        goal: source.center(),
+        target: None,
+        phase: 0,
+        started: 0.0,
+        last: 0.0,
+    }
 }
 
 #[test]
@@ -195,8 +326,20 @@ fn ui018_drag_follows_and_finishes_without_residual_card_or_repaint() {
     v.goal = egui::pos2(330.0, 110.0);
     assert!(v.advance(0.05, true));
     assert!(v.center.x > v.source.center().x && v.center.x < v.goal.x);
-    let flying = ctx.run(egui::RawInput { time: Some(0.05), ..Default::default() }, |ctx| v.paint(ctx, 0.05));
-    assert!(flying.shapes.iter().any(|s| matches!(s.shape, egui::Shape::Path(_))), "floating card silhouette");
+    let flying = ctx.run(
+        egui::RawInput {
+            time: Some(0.05),
+            ..Default::default()
+        },
+        |ctx| v.paint(ctx, 0.05),
+    );
+    assert!(
+        flying
+            .shapes
+            .iter()
+            .any(|s| matches!(s.shape, egui::Shape::Path(_))),
+        "floating card silhouette"
+    );
     let target = egui::Rect::from_center_size(egui::pos2(330.0, 110.0), Vec2::splat(74.0));
     v.target = Some((7, target));
     v.phase = 1;
@@ -204,11 +347,26 @@ fn ui018_drag_follows_and_finishes_without_residual_card_or_repaint() {
     v.goal = target.center();
     assert!(v.advance(0.20, true));
     assert!(v.center.distance(target.center()) < 1.0);
-    let ring = ctx.run(egui::RawInput { time: Some(0.32), ..Default::default() }, |ctx| v.paint(ctx, 0.32));
+    let ring = ctx.run(
+        egui::RawInput {
+            time: Some(0.32),
+            ..Default::default()
+        },
+        |ctx| v.paint(ctx, 0.32),
+    );
     assert!(!ring.shapes.is_empty());
     assert!(!v.advance(0.54, true));
-    let settled = ctx.run(egui::RawInput { time: Some(0.55), ..Default::default() }, |_| ());
-    assert!(settled.shapes.is_empty(), "no residual tooltip after animation");
+    let settled = ctx.run(
+        egui::RawInput {
+            time: Some(0.55),
+            ..Default::default()
+        },
+        |_| (),
+    );
+    assert!(
+        settled.shapes.is_empty(),
+        "no residual tooltip after animation"
+    );
     assert!(!ctx.has_requested_repaint(), "no repaint at rest");
 }
 
@@ -228,47 +386,96 @@ fn ui018_cancel_returns_to_origin_and_motion_disabled_is_immediate() {
 #[test]
 #[ignore]
 fn ui018_motion_frames() {
-    let dir = std::path::PathBuf::from(std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"));
+    let dir = std::path::PathBuf::from(
+        std::env::var_os("NOVYDECK_UI_OUTPUT").expect("NOVYDECK_UI_OUTPUT required"),
+    );
     std::fs::create_dir_all(&dir).unwrap();
     let ctx = egui::Context::default();
     let size = Vec2::new(480.0, 220.0);
     let target = egui::Rect::from_center_size(egui::pos2(365.0, 105.0), Vec2::splat(78.0));
     let mut v = visual();
-    for (stage, times) in [("drag", &[0_u32, 60, 120, 180][..]), ("drop", &[0_u32, 60, 120, 160, 240, 320, 480][..])] {
-        if stage == "drop" { v.phase = 1; v.started = 0.20; v.last = 0.20; v.target = Some((7, target)); v.goal = target.center(); }
+    for (stage, times) in [
+        ("drag", &[0_u32, 60, 120, 180][..]),
+        ("drop", &[0_u32, 60, 120, 160, 240, 320, 480][..]),
+    ] {
+        if stage == "drop" {
+            v.phase = 1;
+            v.started = 0.20;
+            v.last = 0.20;
+            v.target = Some((7, target));
+            v.goal = target.center();
+        }
         for (index, ms) in times.iter().enumerate() {
-            let now = if stage == "drop" { 0.20 + f64::from(*ms) / 1000.0 } else { f64::from(*ms) / 1000.0 };
-            if stage == "drag" { v.goal = egui::pos2(170.0 + *ms as f32 * 0.9, 80.0); }
+            let now = if stage == "drop" {
+                0.20 + f64::from(*ms) / 1000.0
+            } else {
+                f64::from(*ms) / 1000.0
+            };
+            if stage == "drag" {
+                v.goal = egui::pos2(170.0 + *ms as f32 * 0.9, 80.0);
+            }
             v.advance(now, true);
-            let output = ctx.run(egui::RawInput { time: Some(now), screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() }, |ctx| {
-                let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Background, egui::Id::new("ui018_frame")));
-                p.rect_filled(egui::Rect::from_min_size(egui::Pos2::ZERO, size), 0.0, Color32::from_rgb(27, 31, 40));
-                p.rect_filled(v.source, 8.0, Color32::from_rgb(55, 62, 79));
-                p.rect_filled(target, 12.0, Color32::from_rgb(75, 89, 115));
-                if stage == "drag" { p.rect_stroke(target.expand(5.0), 12.0, egui::Stroke::new(3.0, Color32::from_rgb(91, 166, 255)), egui::StrokeKind::Outside); }
-                v.paint(ctx, now);
-            });
+            let output = ctx.run(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+                    ..Default::default()
+                },
+                |ctx| {
+                    let p = ctx.layer_painter(egui::LayerId::new(
+                        egui::Order::Background,
+                        egui::Id::new("ui018_frame"),
+                    ));
+                    p.rect_filled(
+                        egui::Rect::from_min_size(egui::Pos2::ZERO, size),
+                        0.0,
+                        Color32::from_rgb(27, 31, 40),
+                    );
+                    p.rect_filled(v.source, 8.0, Color32::from_rgb(55, 62, 79));
+                    p.rect_filled(target, 12.0, Color32::from_rgb(75, 89, 115));
+                    if stage == "drag" {
+                        p.rect_stroke(
+                            target.expand(5.0),
+                            12.0,
+                            egui::Stroke::new(3.0, Color32::from_rgb(91, 166, 255)),
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                    v.paint(ctx, now);
+                },
+            );
             let mut png = image::RgbaImage::from_pixel(480, 220, image::Rgba([27, 31, 40, 255]));
             for clipped in &output.shapes {
                 let (rect, color) = match &clipped.shape {
                     egui::Shape::Rect(s) => (s.rect, s.fill),
-                    egui::Shape::Path(s) if s.closed && s.points.len() >= 3 => (egui::Rect::from_points(&s.points), s.fill),
+                    egui::Shape::Path(s) if s.closed && s.points.len() >= 3 => {
+                        (egui::Rect::from_points(&s.points), s.fill)
+                    }
                     _ => continue,
                 };
-                if color == Color32::TRANSPARENT { continue; }
+                if color == Color32::TRANSPARENT {
+                    continue;
+                }
                 let rect = rect.intersect(clipped.clip_rect);
                 for y in (rect.top().max(0.0) as u32)..(rect.bottom().min(220.0) as u32) {
                     for x in (rect.left().max(0.0) as u32)..(rect.right().min(480.0) as u32) {
                         let old = png.get_pixel(x, y).0;
                         let a = f32::from(color.a()) / 255.0;
-                        png.put_pixel(x, y, image::Rgba([
-                            (f32::from(old[0]) * (1.0 - a) + f32::from(color.r()) * a) as u8,
-                            (f32::from(old[1]) * (1.0 - a) + f32::from(color.g()) * a) as u8,
-                            (f32::from(old[2]) * (1.0 - a) + f32::from(color.b()) * a) as u8, 255]));
+                        png.put_pixel(
+                            x,
+                            y,
+                            image::Rgba([
+                                (f32::from(old[0]) * (1.0 - a) + f32::from(color.r()) * a) as u8,
+                                (f32::from(old[1]) * (1.0 - a) + f32::from(color.g()) * a) as u8,
+                                (f32::from(old[2]) * (1.0 - a) + f32::from(color.b()) * a) as u8,
+                                255,
+                            ]),
+                        );
                     }
                 }
             }
-            png.save(dir.join(format!("ui018-{stage}-{index:02}.png"))).unwrap();
+            png.save(dir.join(format!("ui018-{stage}-{index:02}.png")))
+                .unwrap();
         }
     }
 }

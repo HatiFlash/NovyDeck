@@ -1,21 +1,38 @@
 //! Tests of the actual egui widgets, without opening or controlling Windows.
-#[path = "ui_assistant015_tests.rs"] mod assistant015_tests;
-#[path = "ui_workshop_tests.rs"] mod workshop_drag_tests;
-#[path = "ui_workshop_dnd_tests.rs"] mod workshop_dnd_tests;
-#[path = "ui_workshop_cards_tests.rs"] mod workshop_cards_tests;
-#[path = "ui_workshop_library_tests.rs"] mod workshop_library_tests;
-#[path = "ui_update_tests.rs"] mod update_tests;
-#[path = "ui_audit_tests.rs"] mod audit_tests;
-#[path = "ui_main015_tests.rs"] mod main015_tests;
-#[path = "ui_017_tests.rs"] mod ui_017_tests;
-#[path = "ui_018_tests.rs"] mod ui_018_tests;
-#[path = "ui_release013_tests.rs"] mod release013_tests;
-#[path = "ui_plugin_management_tests.rs"] mod plugin_management_tests;
-#[path="ui_plugin_block_tests.rs"] mod plugin_block_tests;
-#[path="ui_plugin_state_tests.rs"] mod plugin_state_tests;
-#[path="ui_onoff_tests.rs"] mod onoff_tests;
-#[path="ui_release0151_tests.rs"] mod release0151_tests;
-#[path="ui_toggle_device_tests.rs"] mod toggle_device_tests;
+#[path = "ui_assistant015_tests.rs"]
+mod assistant015_tests;
+#[path = "ui_audit_tests.rs"]
+mod audit_tests;
+#[path = "ui_main015_tests.rs"]
+mod main015_tests;
+#[path = "ui_onoff_tests.rs"]
+mod onoff_tests;
+#[path = "ui_plugin_block_tests.rs"]
+mod plugin_block_tests;
+#[path = "ui_plugin_management_tests.rs"]
+mod plugin_management_tests;
+#[path = "ui_plugin_state_tests.rs"]
+mod plugin_state_tests;
+#[path = "ui_release013_tests.rs"]
+mod release013_tests;
+#[path = "ui_release0151_tests.rs"]
+mod release0151_tests;
+#[path = "ui_toggle_device_tests.rs"]
+mod toggle_device_tests;
+#[path = "ui_017_tests.rs"]
+mod ui_017_tests;
+#[path = "ui_018_tests.rs"]
+mod ui_018_tests;
+#[path = "ui_update_tests.rs"]
+mod update_tests;
+#[path = "ui_workshop_cards_tests.rs"]
+mod workshop_cards_tests;
+#[path = "ui_workshop_dnd_tests.rs"]
+mod workshop_dnd_tests;
+#[path = "ui_workshop_tests.rs"]
+mod workshop_drag_tests;
+#[path = "ui_workshop_library_tests.rs"]
+mod workshop_library_tests;
 
 #[test]
 fn workshop_ai_requires_consent_and_local_never_offers_it() {
@@ -23,10 +40,15 @@ fn workshop_ai_requires_consent_and_local_never_offers_it() {
     h.app.preferences.workshop_chat_mode = "ia".into();
     h.app.workshop_chat_send("une demande".into(), None);
     assert!(h.app.workshop_chat.consent.is_some());
-    let scope = (h.app.config.active, h.app.config.page.clone(), h.app.selected);
+    let scope = (
+        h.app.config.active,
+        h.app.config.page.clone(),
+        h.app.selected,
+    );
     assert!(super::workshop_chat_ui::mcp_request(&mut h.app.workshop_chat, &scope).is_none());
     h.app.preferences.workshop_chat_mode = "local".into();
-    h.app.workshop_chat_send("inconnue introuvable xyz".into(), None);
+    h.app
+        .workshop_chat_send("inconnue introuvable xyz".into(), None);
     assert!(h.app.workshop_chat.consent.is_none());
     assert!(super::workshop_chat_ui::mcp_request(&mut h.app.workshop_chat, &scope).is_none());
 }
@@ -39,13 +61,23 @@ fn mcp_get_state_exposes_request_only_after_consent_and_not_after_cancel() {
     assert!(state.get("pending_request").is_none());
     h.app.preferences.workshop_chat_mode = "ia".into();
     h.app.workshop_chat_send("attends 2 s".into(), None);
-    assert!(h.app.assistant_call("deckforge_get_state", &args).unwrap().get("pending_request").is_none());
+    assert!(h
+        .app
+        .assistant_call("deckforge_get_state", &args)
+        .unwrap()
+        .get("pending_request")
+        .is_none());
     h.app.workshop_chat.awaiting = h.app.workshop_chat.consent.take();
     let state = h.app.assistant_call("deckforge_get_state", &args).unwrap();
     assert_eq!(state["pending_request"]["text"], "attends 2 s");
     assert_eq!(state["pending_request"]["destination"]["key"], 1);
     h.app.workshop_chat.awaiting = None;
-    assert!(h.app.assistant_call("deckforge_get_state", &args).unwrap().get("pending_request").is_none());
+    assert!(h
+        .app
+        .assistant_call("deckforge_get_state", &args)
+        .unwrap()
+        .get("pending_request")
+        .is_none());
 }
 
 #[test]
@@ -60,7 +92,12 @@ fn workshop_chat_consent_card_is_visible_without_publishing() {
     assert!(text_position(&output.shapes, "Transmettre à mon IA").is_some());
     assert!(text_position(&output.shapes, "Non merci").is_some());
     assert!(h.app.workshop_chat.awaiting.is_none());
-    assert!(h.app.assistant_call("deckforge_get_state", &serde_json::json!({})).unwrap().get("pending_request").is_none());
+    assert!(h
+        .app
+        .assistant_call("deckforge_get_state", &serde_json::json!({}))
+        .unwrap()
+        .get("pending_request")
+        .is_none());
     let pos = text_position(&output.shapes, "Non merci").unwrap();
     h.click(size, pos);
     assert!(h.app.workshop_chat.consent.is_none());
@@ -68,9 +105,14 @@ fn workshop_chat_consent_card_is_visible_without_publishing() {
 
 #[test]
 fn workshop_responsive_panels_reserve_space_at_multiple_sizes_and_dpi() {
-    for (physical, dpi) in [(vec2(1000.0, 700.0), 1.0), (vec2(1000.0, 700.0), 1.5),
-        (vec2(1366.0, 768.0), 1.0), (vec2(1920.0, 1080.0), 1.0),
-        (vec2(1366.0, 768.0), 1.25), (vec2(1920.0, 1080.0), 1.5)] {
+    for (physical, dpi) in [
+        (vec2(1000.0, 700.0), 1.0),
+        (vec2(1000.0, 700.0), 1.5),
+        (vec2(1366.0, 768.0), 1.0),
+        (vec2(1920.0, 1080.0), 1.0),
+        (vec2(1366.0, 768.0), 1.25),
+        (vec2(1920.0, 1080.0), 1.5),
+    ] {
         let mut h = Harness::new();
         h.ctx.set_pixels_per_point(dpi);
         let size = physical / dpi;
@@ -78,34 +120,91 @@ fn workshop_responsive_panels_reserve_space_at_multiple_sizes_and_dpi() {
         h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 100 }];
         h.app.workshop_chat.open = true;
         let output = h.warm(size);
-        for label in ["Fermer l’assistant", "Simuler", "Tester pour de vrai", "Enregistrer", "Construis ton automatisation"] {
-            assert!(text_position(&output.shapes, label).is_some(), "{label} at {physical:?} / {dpi}");
+        for label in [
+            "Fermer l’assistant",
+            "Simuler",
+            "Tester pour de vrai",
+            "Enregistrer",
+            "Construis ton automatisation",
+        ] {
+            assert!(
+                text_position(&output.shapes, label).is_some(),
+                "{label} at {physical:?} / {dpi}"
+            );
         }
         if size.x < 1500.0 {
-            let chat = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_chat_panel")).unwrap().rect;
-            assert!(chat.left() > 0.0 && chat.right() <= size.x + 1.0, "chat {chat:?} at {size:?}");
+            let chat = egui::containers::panel::PanelState::load(
+                &h.ctx,
+                egui::Id::new("workshop_chat_panel"),
+            )
+            .unwrap()
+            .rect;
+            assert!(
+                chat.left() > 0.0 && chat.right() <= size.x + 1.0,
+                "chat {chat:?} at {size:?}"
+            );
             let title = text_position(&output.shapes, "Construis ton automatisation").unwrap();
-            assert!(title.x < chat.left() && title.y < size.y, "chat overlaps canvas {chat:?}, title {title:?}");
+            assert!(
+                title.x < chat.left() && title.y < size.y,
+                "chat overlaps canvas {chat:?}, title {title:?}"
+            );
             assert!(text_position(&output.shapes, "Retour à la séquence").is_some());
             assert!(text_position(&output.shapes, "BIBLIOTHÈQUE DE BLOCS").is_none());
             assert!(text_position(&output.shapes, "Propriétés du bloc").is_none());
         }
         h.app.workshop_chat.open = false;
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize]));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize]));
         let output = h.warm(size);
-        assert!(text_position(&output.shapes, "Propriétés du bloc").is_some(), "properties {size:?} panel={:?} path={:?} text={:?}", egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_properties_panel")).map(|p| p.rect), h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t)=&s.shape { Some(t.galley.job.text.clone()) } else { None }).take(30).collect::<Vec<_>>());
+        assert!(
+            text_position(&output.shapes, "Propriétés du bloc").is_some(),
+            "properties {size:?} panel={:?} path={:?} text={:?}",
+            egui::containers::panel::PanelState::load(
+                &h.ctx,
+                egui::Id::new("workshop_properties_panel")
+            )
+            .map(|p| p.rect),
+            h.ctx
+                .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))),
+            output
+                .shapes
+                .iter()
+                .filter_map(|s| if let egui::Shape::Text(t) = &s.shape {
+                    Some(t.galley.job.text.clone())
+                } else {
+                    None
+                })
+                .take(30)
+                .collect::<Vec<_>>()
+        );
         assert!(text_position(&output.shapes, "Construis ton automatisation").is_some());
-        let property = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_properties_panel")).unwrap().rect;
-        assert!(property.left() > 0.0 && property.right() <= size.x + 1.0, "property {property:?} at {size:?}");
-        assert!(text_position(&output.shapes, "Construis ton automatisation").unwrap().x < property.left());
+        let property = egui::containers::panel::PanelState::load(
+            &h.ctx,
+            egui::Id::new("workshop_properties_panel"),
+        )
+        .unwrap()
+        .rect;
+        assert!(
+            property.left() > 0.0 && property.right() <= size.x + 1.0,
+            "property {property:?} at {size:?}"
+        );
+        assert!(
+            text_position(&output.shapes, "Construis ton automatisation")
+                .unwrap()
+                .x
+                < property.left()
+        );
         assert!(text_position(&output.shapes, "× Fermer les propriétés").is_some());
     }
 }
 
 #[test]
 fn workshop_advanced_cards_start_folded_and_reveal_real_controls() {
-    for (physical, dpi) in [(vec2(1000.0, 700.0), 1.0), (vec2(1366.0, 768.0), 1.25),
-        (vec2(1920.0, 1080.0), 1.5)] {
+    for (physical, dpi) in [
+        (vec2(1000.0, 700.0), 1.0),
+        (vec2(1366.0, 768.0), 1.25),
+        (vec2(1920.0, 1080.0), 1.5),
+    ] {
         let size = physical / dpi;
         let mut h = Harness::new();
         h.ctx.set_pixels_per_point(dpi);
@@ -113,19 +212,45 @@ fn workshop_advanced_cards_start_folded_and_reveal_real_controls() {
         h.app.preferences.workshop_advanced = true;
         h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 125 }];
         let output = h.warm(size);
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             let snapshot = h.warm(size);
-            h.png(size, snapshot, &PathBuf::from(dir).join(format!("atelier-advanced-folded-{}-{}.png", physical.x as u32, (dpi * 100.0) as u32)));
+            h.png(
+                size,
+                snapshot,
+                &PathBuf::from(dir).join(format!(
+                    "atelier-advanced-folded-{}-{}.png",
+                    physical.x as u32,
+                    (dpi * 100.0) as u32
+                )),
+            );
         }
-        assert!(text_position(&output.shapes, "ms").is_none(), "folded {physical:?} {dpi}");
+        assert!(
+            text_position(&output.shapes, "ms").is_none(),
+            "folded {physical:?} {dpi}"
+        );
         let id = egui::Id::new("block_fold").with(vec![0_usize]);
         h.ctx.data_mut(|d| d.insert_temp(id, false));
         let output = h.warm(size);
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             let snapshot = h.warm(size);
-            h.png(size, snapshot, &PathBuf::from(dir).join(format!("atelier-advanced-expanded-{}-{}.png", physical.x as u32, (dpi * 100.0) as u32)));
+            h.png(
+                size,
+                snapshot,
+                &PathBuf::from(dir).join(format!(
+                    "atelier-advanced-expanded-{}-{}.png",
+                    physical.x as u32,
+                    (dpi * 100.0) as u32
+                )),
+            );
         }
-        assert!(text_position(&output.shapes, "ms").is_some(), "expanded {physical:?} {dpi}");
+        assert!(
+            text_position(&output.shapes, "ms").is_some(),
+            "expanded {physical:?} {dpi}"
+        );
     }
 }
 
@@ -138,14 +263,26 @@ fn workshop_chat_and_properties_fit_both_screen_sizes() {
         h.app.workshop_chat.open = true;
         let output = h.warm(size);
         assert!(!output.shapes.is_empty());
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             let snapshot = h.warm(size);
-            h.png(size, snapshot, &PathBuf::from(dir).join(format!("atelier-chat-{}.png", size.x as u32)));
+            h.png(
+                size,
+                snapshot,
+                &PathBuf::from(dir).join(format!("atelier-chat-{}.png", size.x as u32)),
+            );
         }
         assert!(text_position(&output.shapes, "Assistant · Atelier").is_some());
-        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_chat_panel")).unwrap().rect;
+        let panel =
+            egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_chat_panel"))
+                .unwrap()
+                .rect;
         let canvas = text_position(&output.shapes, "Construis ton automatisation").unwrap();
-        assert!(canvas.x < panel.left() && panel.right() <= size.x + 1.0, "chat {panel:?} canvas {canvas:?}");
+        assert!(
+            canvas.x < panel.left() && panel.right() <= size.x + 1.0,
+            "chat {panel:?} canvas {canvas:?}"
+        );
     }
 }
 use super::*;
@@ -158,16 +295,31 @@ fn workshop_chat_previews_a_natural_request_without_running_it() {
     h.app.selected = 2;
     let before = h.app.config.keys()[2].steps.clone();
     h.app.workshop_chat.open = true;
-    h.app.workshop_chat_send("ferme toutes les fenêtres sauf celle sur laquelle je suis, puis attends 1 s".into(), None);
+    h.app.workshop_chat_send(
+        "ferme toutes les fenêtres sauf celle sur laquelle je suis, puis attends 1 s".into(),
+        None,
+    );
     let pending = h.app.workshop_chat.pending.as_ref().expect("aperçu");
-    assert!(matches!(&pending.proposal.steps[..], [Step::WindowOp { op, .. }, Step::Delay { ms: 1000 }] if op == "close_others"));
-    assert_eq!(h.app.config.keys()[2].steps, before, "aucune insertion sans validation");
+    assert!(
+        matches!(&pending.proposal.steps[..], [Step::WindowOp { op, .. }, Step::Delay { ms: 1000 }] if op == "close_others")
+    );
+    assert_eq!(
+        h.app.config.keys()[2].steps,
+        before,
+        "aucune insertion sans validation"
+    );
     h.warm(size);
     let output = h.warm(size);
     assert!(text_position(&output.shapes, "Ajouter").is_some());
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
         std::fs::create_dir_all(&dir).unwrap();
-        h.png(size, output, &PathBuf::from(dir).join("atelier-assistant.png"));
+        h.png(
+            size,
+            output,
+            &PathBuf::from(dir).join("atelier-assistant.png"),
+        );
     }
 }
 #[test]
@@ -178,8 +330,13 @@ fn workshop_chat_plugin_choice_is_complete_and_insertable() {
     ] {
         let mut h = Harness::new();
         crate::i18n::set_language(language);
-        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
-        let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let folder =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
+        let mut plugin = crate::plugins::parse(
+            &folder,
+            &std::fs::read(folder.join("manifest.json")).unwrap(),
+        )
+        .unwrap();
         plugin.name = "SoundPad".into();
         plugin.actions[0].name = "Toggle Mute".into();
         plugin.actions[1].name = "Record Clip".into();
@@ -191,7 +348,9 @@ fn workshop_chat_plugin_choice_is_complete_and_insertable() {
         h.app.preferences.workshop_chat_mode = "local".into();
         h.app.workshop_chat_send("utilise SoundPad".into(), None);
         let pending = h.app.workshop_chat.pending.as_ref().unwrap();
-        assert!(matches!(&pending.proposal.status, crate::local_assistant::Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question)));
+        assert!(
+            matches!(&pending.proposal.status, crate::local_assistant::Status::Ambigue { question, choix_autonomes: true, .. } if question.starts_with(expected_question))
+        );
         let size = vec2(1366.0, 768.0);
         let output = h.warm(size);
         let pos = text_position(&output.shapes, expected_choice).expect("choix visible");
@@ -202,7 +361,9 @@ fn workshop_chat_plugin_choice_is_complete_and_insertable() {
         h.app.workshop_chat_send(request, None);
         let proposal = &h.app.workshop_chat.pending.as_ref().unwrap().proposal;
         assert!(proposal.insertable(), "{proposal:?}");
-        assert!(matches!(&proposal.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &plugin_id && action == &action_id));
+        assert!(
+            matches!(&proposal.steps[..], [Step::PluginAction { plugin, action, .. }] if plugin == &plugin_id && action == &action_id)
+        );
     }
     crate::i18n::set_language("fr");
 }
@@ -212,8 +373,15 @@ fn gallery_imports_a_user_icon_without_overwriting_and_applies_it() {
     let mut h = Harness::new();
     let source_dir = tempfile::tempdir().unwrap();
     let source = source_dir.path().join("mon logo.png");
-    image::RgbaImage::from_pixel(40, 40, image::Rgba([10, 200, 90, 255])).save(&source).unwrap();
-    let target = icon_ui::Target { profile: h.app.config.active, page: h.app.config.page.clone(), key: 4, destination: icon_ui::Destination::Key };
+    image::RgbaImage::from_pixel(40, 40, image::Rgba([10, 200, 90, 255]))
+        .save(&source)
+        .unwrap();
+    let target = icon_ui::Target {
+        profile: h.app.config.active,
+        page: h.app.config.page.clone(),
+        key: 4,
+        destination: icon_ui::Destination::Key,
+    };
     let first = h.app.import_icon_from(&target, &source).unwrap();
     assert!(first.is_file());
     assert_eq!(h.app.config.keys()[4].image, first.to_string_lossy());
@@ -223,12 +391,19 @@ fn gallery_imports_a_user_icon_without_overwriting_and_applies_it() {
     h.app.show_assets = true;
     h.app.open_icon_gallery(None);
     let output = h.warm(vec2(1380.0, 900.0));
-    assert!(text_position(&output.shapes, "Importer une icône…").is_some(), "bouton d'import visible dans la galerie");
+    assert!(
+        text_position(&output.shapes, "Importer une icône…").is_some(),
+        "bouton d'import visible dans la galerie"
+    );
 }
 #[test]
 fn workshop_chat_texts_and_buttons_stay_inside_the_panel() {
     // Régression : textes et boutons du chat coupés (messages longs, destination JSON, boutons).
-    for (size, dpi) in [(vec2(1000.0, 700.0), 1.0), (vec2(1366.0, 768.0), 1.25), (vec2(1920.0, 1080.0), 1.5)] {
+    for (size, dpi) in [
+        (vec2(1000.0, 700.0), 1.0),
+        (vec2(1366.0, 768.0), 1.25),
+        (vec2(1920.0, 1080.0), 1.5),
+    ] {
         let mut h = Harness::new();
         h.ctx.set_pixels_per_point(dpi);
         let size = size / dpi;
@@ -241,26 +416,64 @@ fn workshop_chat_texts_and_buttons_stay_inside_the_panel() {
         assert!(h.app.workshop_chat.consent.is_some());
         h.warm(size);
         let output = h.warm(size);
-        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_chat_panel")).unwrap().rect;
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        let panel =
+            egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_chat_panel"))
+                .unwrap()
+                .rect;
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
-            h.png(size, output.clone(), &PathBuf::from(dir).join(format!("atelier-chat-consent-{}.png", (size.x * dpi) as u32)));
+            h.png(
+                size,
+                output.clone(),
+                &PathBuf::from(dir).join(format!(
+                    "atelier-chat-consent-{}.png",
+                    (size.x * dpi) as u32
+                )),
+            );
         }
         let mut seen = 0;
         for shape in &output.shapes {
             if let egui::Shape::Text(t) = &shape.shape {
                 let r = t.visual_bounding_rect();
-                if t.galley.job.text.trim().is_empty() || !r.is_finite() || r.left() + 0.5 < panel.left() { continue; }
+                if t.galley.job.text.trim().is_empty()
+                    || !r.is_finite()
+                    || r.left() + 0.5 < panel.left()
+                {
+                    continue;
+                }
                 seen += 1;
-                assert!(r.right() <= panel.right() + 1.0, "{:?} dépasse {panel:?} à {size:?}@{dpi}: {r:?}", t.galley.job.text);
+                assert!(
+                    r.right() <= panel.right() + 1.0,
+                    "{:?} dépasse {panel:?} à {size:?}@{dpi}: {r:?}",
+                    t.galley.job.text
+                );
             }
         }
         assert!(seen > 8, "chat non rendu ({seen})");
-        assert!(h.app.workshop_chat.consent.as_ref().unwrap().destination_label().starts_with("Touche 3 · page"), "destination lisible attendue");
+        assert!(
+            h.app
+                .workshop_chat
+                .consent
+                .as_ref()
+                .unwrap()
+                .destination_label()
+                .starts_with("Touche 3 · page"),
+            "destination lisible attendue"
+        );
         assert!(!output.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.job.text.contains("{\"key\""))), "JSON brut affiché");
-        for label in ["Transmettre à mon IA", "Non merci", "Ajouter une temporisation"] {
-            let pos = text_position(&output.shapes, label).unwrap_or_else(|| panic!("{label} absent à {size:?}"));
-            assert!(pos.y < size.y && pos.x >= panel.left(), "{label} hors du panneau {pos:?}");
+        for label in [
+            "Transmettre à mon IA",
+            "Non merci",
+            "Ajouter une temporisation",
+        ] {
+            let pos = text_position(&output.shapes, label)
+                .unwrap_or_else(|| panic!("{label} absent à {size:?}"));
+            assert!(
+                pos.y < size.y && pos.x >= panel.left(),
+                "{label} hors du panneau {pos:?}"
+            );
         }
     }
 }
@@ -275,11 +488,21 @@ fn grids_render_without_overflow_or_touching_hardware() {
         assert_eq!(h.app.drop_targets.len(), keys as usize, "{name}");
         for (rect, index) in &h.app.drop_targets {
             assert!(*index < keys as usize);
-            assert!(rect.left() >= 0.0 && rect.top() >= 0.0 && rect.right() <= 1060.0 && rect.bottom() <= 720.0, "{name}: {rect:?}");
+            assert!(
+                rect.left() >= 0.0
+                    && rect.top() >= 0.0
+                    && rect.right() <= 1060.0
+                    && rect.bottom() <= 720.0,
+                "{name}: {rect:?}"
+            );
         }
         assert!(!output.shapes.is_empty());
-        if keys == 6 { assert_eq!(h.app.config.keys().len(), 15); }
-        if keys == 32 { assert_eq!(h.app.config.keys().len(), 32); }
+        if keys == 6 {
+            assert_eq!(h.app.config.keys().len(), 15);
+        }
+        if keys == 32 {
+            assert_eq!(h.app.config.keys().len(), 32);
+        }
     }
 }
 struct Harness {
@@ -309,12 +532,25 @@ impl Harness {
         let input = egui::RawInput {
             screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
             time: Some(self.time),
-            modifiers: events.iter().find_map(|e| if let Input::Key { modifiers, .. } = e { Some(*modifiers) } else { None }).unwrap_or_default(),
+            modifiers: events
+                .iter()
+                .find_map(|e| {
+                    if let Input::Key { modifiers, .. } = e {
+                        Some(*modifiers)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default(),
             events,
             focused: true,
             ..Default::default()
         };
-        let output = self.ctx.run(input, |ctx| { let start=Instant::now(); self.app.frame(ctx); self.app.diagnostic_sample(ctx,start); });
+        let output = self.ctx.run(input, |ctx| {
+            let start = Instant::now();
+            self.app.frame(ctx);
+            self.app.diagnostic_sample(ctx, start);
+        });
         for (id, delta) in &output.textures_delta.set {
             let image = match &delta.image {
                 egui::ImageData::Color(c) => (**c).clone(),
@@ -365,9 +601,14 @@ impl Harness {
             let Some(texture) = self.textures.get(&mesh.texture_id) else {
                 continue;
             };
-            let clip = Rect::from_min_max(primitive.clip_rect.min * ppp, primitive.clip_rect.max * ppp);
+            let clip =
+                Rect::from_min_max(primitive.clip_rect.min * ppp, primitive.clip_rect.max * ppp);
             for triangle in mesh.indices.chunks_exact(3) {
-                let scaled = |i: u32| { let mut v = mesh.vertices[i as usize]; v.pos = (v.pos.to_vec2() * ppp).to_pos2(); v };
+                let scaled = |i: u32| {
+                    let mut v = mesh.vertices[i as usize];
+                    v.pos = (v.pos.to_vec2() * ppp).to_pos2();
+                    v
+                };
                 let a = scaled(triangle[0]);
                 let b = scaled(triangle[1]);
                 let c = scaled(triangle[2]);
@@ -409,9 +650,16 @@ impl Harness {
                         let (x1, y1) = ((x0 + 1).min(tw - 1), (y0 + 1).min(th - 1));
                         let (dx, dy) = (fx - x0 as f32, fy - y0 as f32);
                         let mut tex = [0.0_f32; 4];
-                        for (px, py, w) in [(x0, y0, (1.0 - dx) * (1.0 - dy)), (x1, y0, dx * (1.0 - dy)), (x0, y1, (1.0 - dx) * dy), (x1, y1, dx * dy)] {
+                        for (px, py, w) in [
+                            (x0, y0, (1.0 - dx) * (1.0 - dy)),
+                            (x1, y0, dx * (1.0 - dy)),
+                            (x0, y1, (1.0 - dx) * dy),
+                            (x1, y1, dx * dy),
+                        ] {
                             let t = texture[(px, py)].to_array();
-                            for ch in 0..4 { tex[ch] += t[ch] as f32 * w; }
+                            for ch in 0..4 {
+                                tex[ch] += t[ch] as f32 * w;
+                            }
                         }
                         let ac = a.color.to_array();
                         let bc = b.color.to_array();
@@ -470,9 +718,15 @@ fn workshop_journal_starts_closed_and_opens_on_injected_events() {
     assert!(text_position(&output.shapes, "Journal").is_some());
     assert!(text_position(&output.shapes, "SIMULATION").is_none());
     h.app.workshop_journal.begin(true);
-    h.app.workshop_journal.step(vec![0], "Attendre".into(), None);
-    h.app.workshop_journal.step(vec![0], "Attendre".into(), Some(Duration::from_millis(5)));
-    h.app.workshop_journal.finish(true, Duration::from_millis(1200), "Macro terminée".into());
+    h.app
+        .workshop_journal
+        .step(vec![0], "Attendre".into(), None);
+    h.app
+        .workshop_journal
+        .step(vec![0], "Attendre".into(), Some(Duration::from_millis(5)));
+    h.app
+        .workshop_journal
+        .finish(true, Duration::from_millis(1200), "Macro terminée".into());
     let output = h.warm(size);
     assert!(text_position(&output.shapes, "Simulation · 1 étapes · OK · 1.2 s").is_some());
     assert!(text_position(&output.shapes, "SIMULATION").is_some());
@@ -490,7 +744,11 @@ fn workshop_real_run_requires_explicit_confirmation() {
     h.click(size, button);
     let output = h.warm(size);
     assert!(h.app.workshop_journal.confirm_real);
-    assert!(text_position(&output.shapes, "Ceci va réellement exécuter 1 blocs sur ce PC.").is_some());
+    assert!(text_position(
+        &output.shapes,
+        "Ceci va réellement exécuter 1 blocs sur ce PC."
+    )
+    .is_some());
     assert_eq!(h.app.workshop_journal.mode, None);
     assert!(!h.app.engine.running.load(Ordering::SeqCst));
     // Merely opening the confirmation never runs the macro.
@@ -501,7 +759,11 @@ fn workshop_real_run_requires_explicit_confirmation() {
 fn direct_plugin_only_key_simulates_without_dispatch_then_requires_real_confirmation() {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
-    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let mut plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("counter.js");
     std::fs::write(&script, r#"
@@ -512,39 +774,63 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
 "#).unwrap();
     plugin.folder = dir.path().into();
     plugin.runtime = crate::plugins::Runtime::Node(script);
-    let binding = crate::model::PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
-    h.app.config.keys_mut()[0] = Key { plugin: Some(binding), steps: vec![], ..Key::default() };
+    let binding = crate::model::PluginBinding {
+        plugin: plugin.uuid.clone(),
+        action: plugin.actions[0].uuid.clone(),
+        settings: serde_json::json!({}),
+        state: 0,
+    };
+    h.app.config.keys_mut()[0] = Key {
+        plugin: Some(binding),
+        steps: vec![],
+        ..Key::default()
+    };
     h.app.applied = h.app.config.clone();
     let mut manager = crate::plugin_runtime::Manager::new(vec![plugin]);
     manager.sync(&h.app.applied);
     h.app.plugins = Some(manager);
     h.app.show_workflow = true;
-    let size=vec2(1366.0,768.0);
-    let output=h.warm(size);
-    h.click(size,text_position(&output.shapes,"Simuler").unwrap());
-    let deadline=std::time::Instant::now()+std::time::Duration::from_secs(5);
-    while h.app.engine.running.load(Ordering::SeqCst) && std::time::Instant::now()<deadline {std::thread::sleep(std::time::Duration::from_millis(20));}
+    let size = vec2(1366.0, 768.0);
+    let output = h.warm(size);
+    h.click(size, text_position(&output.shapes, "Simuler").unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while h.app.engine.running.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     assert!(!h.app.engine.running.load(Ordering::SeqCst));
-    assert_eq!(h.app.workshop_journal.mode,Some(true));
+    assert_eq!(h.app.workshop_journal.mode, Some(true));
     assert!(!h.app.plugins.as_ref().unwrap().rx.try_iter().any(|r|matches!(r,crate::plugin_runtime::Reply::Message(_,v) if v["payload"]["message"]=="direct-keydown")));
-    let output=h.warm(size);
-    h.click(size,text_position(&output.shapes,"Tester pour de vrai").unwrap());
+    let output = h.warm(size);
+    h.click(
+        size,
+        text_position(&output.shapes, "Tester pour de vrai").unwrap(),
+    );
     assert!(h.app.workshop_journal.confirm_real);
     assert!(!h.app.engine.running.load(Ordering::SeqCst));
-    let output=h.warm(size);
-    h.click(size,text_position(&output.shapes,"Confirmer l'exécution réelle").unwrap());
-    assert_eq!(h.app.workshop_journal.mode,Some(false));
-    let rx=&h.app.plugins.as_ref().unwrap().rx;
-    let deadline=std::time::Instant::now()+std::time::Duration::from_secs(12);
+    let output = h.warm(size);
+    h.click(
+        size,
+        text_position(&output.shapes, "Confirmer l'exécution réelle").unwrap(),
+    );
+    assert_eq!(h.app.workshop_journal.mode, Some(false));
+    let rx = &h.app.plugins.as_ref().unwrap().rx;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(12);
     loop {
         match rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
-            Ok(crate::plugin_runtime::Reply::Message(_,v)) if v["payload"]["message"]=="direct-keydown"=>break,
-            Ok(crate::plugin_runtime::Reply::Error(_,error))=>panic!("plugin error: {error}"),
-            Ok(_)=>(),
-            Err(e)=>panic!("no plugin keyDown after confirmation: {e}"),
+            Ok(crate::plugin_runtime::Reply::Message(_, v))
+                if v["payload"]["message"] == "direct-keydown" =>
+            {
+                break
+            }
+            Ok(crate::plugin_runtime::Reply::Error(_, error)) => panic!("plugin error: {error}"),
+            Ok(_) => (),
+            Err(e) => panic!("no plugin keyDown after confirmation: {e}"),
         }
     }
-    assert!(h.app.config.keys()[0].steps.is_empty(),"testing must not rewrite the saved key");
+    assert!(
+        h.app.config.keys()[0].steps.is_empty(),
+        "testing must not rewrite the saved key"
+    );
 }
 
 #[test]
@@ -666,8 +952,14 @@ fn physical_navigation_reaches_upload_and_waits_for_matching_ack() {
 #[test]
 fn physical_folder_press_does_not_activate_destination_on_repeats_or_release() {
     let mut h = Harness::new();
-    h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
-    h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
+    h.app.config.profiles[0].pages.push(crate::model::Page::new(
+        "folder".into(),
+        "Dossier".into(),
+        true,
+    ));
+    h.app.config.keys_mut()[0].steps = vec![Step::Folder {
+        id: "folder".into(),
+    }];
     h.app.config.profiles[0].pages[0].keys[0].steps = vec![Step::Back];
     h.app.applied = h.app.config.clone();
     let (tx, rx) = mpsc::channel();
@@ -688,27 +980,40 @@ fn physical_folder_press_does_not_activate_destination_on_repeats_or_release() {
         std::thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(h.app.config.page, "folder");
-    let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(1)).unwrap() else { panic!("missing update") };
+    let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(1)).unwrap()
+    else {
+        panic!("missing update")
+    };
     tx.send(Event::Applied(revision)).unwrap();
     tx.send(Event::Key(0, Instant::now())).unwrap();
     tx.send(Event::KeyRelease(0, Instant::now())).unwrap();
     h.app.events();
     std::thread::sleep(Duration::from_millis(40));
     h.app.events();
-    assert_eq!(h.app.config.page, "folder", "same physical gesture returned home");
+    assert_eq!(
+        h.app.config.page, "folder",
+        "same physical gesture returned home"
+    );
     tx.send(Event::Key(0, Instant::now())).unwrap();
     let deadline = Instant::now() + Duration::from_secs(1);
     while h.app.config.page == "folder" && Instant::now() < deadline {
         h.app.events();
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert!(h.app.config.page.is_empty(), "new distinct press should navigate back");
+    assert!(
+        h.app.config.page.is_empty(),
+        "new distinct press should navigate back"
+    );
 }
 #[test]
 fn physical_navigation_never_sends_plugin_release_to_destination_or_returned_home() {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdplugin");
-    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let mut plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("edges.js");
     std::fs::write(&script, r#"
@@ -719,11 +1024,29 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
 "#).unwrap();
     plugin.folder = dir.path().into();
     plugin.runtime = crate::plugins::Runtime::Node(script);
-    let binding = crate::model::PluginBinding { plugin: plugin.uuid.clone(), action: plugin.actions[0].uuid.clone(), settings: serde_json::json!({}), state: 0 };
-    h.app.config.profiles[0].pages.push(crate::model::Page::new("folder".into(), "Dossier".into(), true));
-    h.app.config.keys_mut()[0].steps = vec![Step::Folder { id: "folder".into() }];
-    h.app.config.keys_mut()[1] = Key { plugin: Some(binding.clone()), ..Key::default() };
-    h.app.config.profiles[0].pages[0].keys[0] = Key { plugin: Some(binding), long_steps: vec![Step::Delay { ms: 1 }], ..Key::default() };
+    let binding = crate::model::PluginBinding {
+        plugin: plugin.uuid.clone(),
+        action: plugin.actions[0].uuid.clone(),
+        settings: serde_json::json!({}),
+        state: 0,
+    };
+    h.app.config.profiles[0].pages.push(crate::model::Page::new(
+        "folder".into(),
+        "Dossier".into(),
+        true,
+    ));
+    h.app.config.keys_mut()[0].steps = vec![Step::Folder {
+        id: "folder".into(),
+    }];
+    h.app.config.keys_mut()[1] = Key {
+        plugin: Some(binding.clone()),
+        ..Key::default()
+    };
+    h.app.config.profiles[0].pages[0].keys[0] = Key {
+        plugin: Some(binding),
+        long_steps: vec![Step::Delay { ms: 1 }],
+        ..Key::default()
+    };
     h.app.config.profiles[0].pages[0].keys[1].steps = vec![Step::Back];
     h.app.applied = h.app.config.clone();
     let (tx, rx) = mpsc::channel();
@@ -739,9 +1062,14 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     let mut manager = crate::plugin_runtime::Manager::new(vec![plugin]);
     manager.sync(&h.app.applied);
     h.app.plugins = Some(manager);
-    let send = |tx: &mpsc::Sender<Event>, event| { tx.send(event).unwrap(); };
+    let send = |tx: &mpsc::Sender<Event>, event| {
+        tx.send(event).unwrap();
+    };
     let mut apply = |h: &mut Harness| {
-        let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(2)).unwrap() else {panic!("missing update")};
+        let Command::Update(_, revision) = commands.recv_timeout(Duration::from_secs(2)).unwrap()
+        else {
+            panic!("missing update")
+        };
         tx.send(Event::Applied(revision)).unwrap();
         h.app.events();
     };
@@ -768,7 +1096,13 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
     h.app.events();
     let long_press = Instant::now();
     send(&tx, Event::Key(0, long_press));
-    send(&tx, Event::KeyRelease(0, long_press + Duration::from_millis(u64::from(h.app.applied.long_press_ms) + 1)));
+    send(
+        &tx,
+        Event::KeyRelease(
+            0,
+            long_press + Duration::from_millis(u64::from(h.app.applied.long_press_ms) + 1),
+        ),
+    );
     h.app.events();
     let idle_deadline = Instant::now() + Duration::from_secs(2);
     while h.app.engine.running.load(Ordering::SeqCst) && Instant::now() < idle_deadline {
@@ -786,18 +1120,30 @@ ws.addEventListener('message',m=>{const v=JSON.parse(m.data);if(v.event==='keyDo
         while let Ok(reply) = h.app.plugins.as_ref().unwrap().rx.try_recv() {
             if let crate::plugin_runtime::Reply::Message(_, v) = reply {
                 if let Some(message) = v["payload"]["message"].as_str() {
-                    if message == "keyDown" || message == "keyUp" { edges.push((message.to_owned(), v["context"].as_str().unwrap().to_owned())); }
+                    if message == "keyDown" || message == "keyUp" {
+                        edges.push((
+                            message.to_owned(),
+                            v["context"].as_str().unwrap().to_owned(),
+                        ));
+                    }
                 }
             }
         }
-        if edges.len() >= 5 { break; }
+        if edges.len() >= 5 {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert_eq!(edges, vec![("keyDown".into(), "deckforge-0--1".into()),
-                           ("keyDown".into(), "deckforge-0-folder-0".into()),
-                           ("keyUp".into(), "deckforge-0-folder-0".into()),
-                           ("keyDown".into(), "deckforge-0-folder-0".into()),
-                           ("keyUp".into(), "deckforge-0-folder-0".into())]);
+    assert_eq!(
+        edges,
+        vec![
+            ("keyDown".into(), "deckforge-0--1".into()),
+            ("keyDown".into(), "deckforge-0-folder-0".into()),
+            ("keyUp".into(), "deckforge-0-folder-0".into()),
+            ("keyDown".into(), "deckforge-0-folder-0".into()),
+            ("keyUp".into(), "deckforge-0-folder-0".into())
+        ]
+    );
 }
 #[test]
 fn page_management_preserves_other_pages_and_removes_dangling_folder_keys() {
@@ -836,12 +1182,23 @@ fn page_management_preserves_other_pages_and_removes_dangling_folder_keys() {
 #[test]
 fn deck_scales_with_window_without_scrolling() {
     let mut widths = Vec::new();
-    for size in [vec2(1060.0, 720.0), vec2(1380.0, 900.0), vec2(1920.0, 1200.0)] {
+    for size in [
+        vec2(1060.0, 720.0),
+        vec2(1380.0, 900.0),
+        vec2(1920.0, 1200.0),
+    ] {
         let mut h = Harness::new();
         h.warm(size);
         assert_eq!(h.app.drop_targets.len(), 15);
         let last = h.app.drop_targets[14].0;
-        assert!((last.width() / last.height() - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y).abs() < 0.01 && last.max.y <= size.y, "{size:?}: {last:?}");
+        assert!(
+            (last.width() / last.height()
+                - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y)
+                .abs()
+                < 0.01
+                && last.max.y <= size.y,
+            "{size:?}: {last:?}"
+        );
         widths.push(h.app.drop_targets[0].0.width());
     }
     assert!(widths[0] < widths[1] && widths[1] < widths[2], "{widths:?}");
@@ -862,14 +1219,20 @@ fn all_fifteen_keys_remain_visible_in_both_themes_and_window_sizes() {
         assert_eq!(h.app.drop_targets.len(), 15);
         for (r, i) in &h.app.drop_targets {
             assert!(
-                r.width() > 47.0 && (r.width() / r.height() - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y).abs() < 0.01,
+                r.width() > 47.0
+                    && (r.width() / r.height()
+                        - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y)
+                        .abs()
+                        < 0.01,
                 "Key {} clipped in {}: {:?}",
                 i + 1,
                 label,
                 r
             );
         }
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
             h.png(size, output, &std::path::PathBuf::from(dir).join(label));
         }
@@ -958,7 +1321,9 @@ fn editor_textures_match_usb_images_with_custom_files_audio_states_and_fallbacks
                 );
             }
         }
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
             h.png(size, output, &PathBuf::from(dir).join(name));
         }
@@ -1009,10 +1374,23 @@ fn lcd_preview_cache_refreshes_labels_colors_icons_and_changed_image_files() {
         .unwrap()
         .id();
     assert_ne!(new, label);
-    let before_overlay = h.app.key_previews.texture(&h.ctx, 5, &changed, 126, None).unwrap().id();
+    let before_overlay = h
+        .app
+        .key_previews
+        .texture(&h.ctx, 5, &changed, 126, None)
+        .unwrap()
+        .id();
     changed.label_overlay = false;
-    let without_overlay = h.app.key_previews.texture(&h.ctx, 5, &changed, 126, None).unwrap().id();
-    assert_ne!(before_overlay, without_overlay, "le cache de l'aperçu doit suivre le choix fond/ombre");
+    let without_overlay = h
+        .app
+        .key_previews
+        .texture(&h.ctx, 5, &changed, 126, None)
+        .unwrap()
+        .id();
+    assert_ne!(
+        before_overlay, without_overlay,
+        "le cache de l'aperçu doit suivre le choix fond/ombre"
+    );
     changed.color = [12, 34, 56];
     let color = h
         .app
@@ -1057,7 +1435,9 @@ fn imports_real_export_when_reference_is_provided() {
     if let Some(path) = std::env::var_os("DECKFORGE_ELGATO_REFERENCE") {
         let report = crate::elgato::load(&PathBuf::from(path)).unwrap();
         assert!(report.converted > 0);
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
             let result = serde_json::json!({"converted":report.converted,"pages":report.profile.pages.len()+1,"icons":report.icons.len(),"warnings":report.warnings});
             std::fs::write(
@@ -1229,11 +1609,24 @@ fn workshop_chat_opens_previews_inserts_and_undoes_without_running() {
     let pos = text_position(&output.shapes, "Envoyer").expect("send button");
     h.click(size, pos);
     let output = h.warm(size);
-    assert!(matches!(h.app.workshop_chat.pending.as_ref().unwrap().proposal.steps.as_slice(), [Step::Delay { ms: 2000 }]));
+    assert!(matches!(
+        h.app
+            .workshop_chat
+            .pending
+            .as_ref()
+            .unwrap()
+            .proposal
+            .steps
+            .as_slice(),
+        [Step::Delay { ms: 2000 }]
+    ));
     assert!(h.app.config.keys()[0].steps.is_empty());
     let pos = text_position(&output.shapes, "Ajouter").expect("add button");
     h.click(size, pos);
-    assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::Delay { ms: 2000 }]));
+    assert!(matches!(
+        h.app.config.keys()[0].steps.as_slice(),
+        [Step::Delay { ms: 2000 }]
+    ));
     assert!(!h.app.engine.running.load(Ordering::SeqCst));
     assert!(h.app.workshop_journal.lines.is_empty());
     h.app.undo_edit();
@@ -1251,7 +1644,11 @@ fn workshop_chat_pending_becomes_stale_on_key_change() {
     h.app.workshop_chat_send("attends 2 s".into(), None);
     h.app.selected = 1;
     let output = h.warm(size);
-    assert!(text_position(&output.shapes, "Proposition périmée : touche, page ou profil changé.").is_some());
+    assert!(text_position(
+        &output.shapes,
+        "Proposition périmée : touche, page ou profil changé."
+    )
+    .is_some());
     assert!(h.app.config.keys()[1].steps.is_empty());
     assert!(!h.app.engine.running.load(Ordering::SeqCst));
 }
@@ -1264,15 +1661,43 @@ fn workshop_selection_shortcuts_duplicate_delete_and_undo() {
     h.app.preferences.workshop_advanced = false;
     h.app.config.keys_mut()[0].steps = vec![Step::Delay { ms: 120 }];
     let output = h.warm(size);
-    let title = output.shapes.iter().filter_map(|shape| if let egui::Shape::Text(t) = &shape.shape {
-        (t.galley.job.text.contains("Attendre 120 ms")).then_some(t.galley.job.text.clone())
-    } else { None }).next().expect("step card title");
+    let title = output
+        .shapes
+        .iter()
+        .filter_map(|shape| {
+            if let egui::Shape::Text(t) = &shape.shape {
+                (t.galley.job.text.contains("Attendre 120 ms")).then_some(t.galley.job.text.clone())
+            } else {
+                None
+            }
+        })
+        .next()
+        .expect("step card title");
     let pos = text_position(&output.shapes, &title).unwrap();
     h.click(size, pos);
     h.warm(size);
-    assert_eq!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), Some(vec![0]));
-    let key = |key, modifiers| Input::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers };
-    h.frame(size, vec![key(egui::Key::D, Modifiers { ctrl: true, ..Default::default() })]);
+    assert_eq!(
+        h.ctx
+            .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))),
+        Some(vec![0])
+    );
+    let key = |key, modifiers| Input::Key {
+        key,
+        physical_key: Some(key),
+        pressed: true,
+        repeat: false,
+        modifiers,
+    };
+    h.frame(
+        size,
+        vec![key(
+            egui::Key::D,
+            Modifiers {
+                ctrl: true,
+                ..Default::default()
+            },
+        )],
+    );
     assert_eq!(h.app.config.keys()[0].steps.len(), 2);
     h.frame(size, vec![key(egui::Key::Delete, Modifiers::NONE)]);
     assert_eq!(h.app.config.keys()[0].steps.len(), 1);
@@ -1283,12 +1708,16 @@ fn workshop_selection_shortcuts_duplicate_delete_and_undo() {
 fn fully_visible(shapes: &[egui::epaint::ClippedShape], text: &str) -> bool {
     fn find(s: &egui::Shape, text: &str) -> Option<Rect> {
         match s {
-            egui::Shape::Text(t) if t.galley.job.text == text => Some(Rect::from_min_size(t.pos, t.galley.size())),
+            egui::Shape::Text(t) if t.galley.job.text == text => {
+                Some(Rect::from_min_size(t.pos, t.galley.size()))
+            }
             egui::Shape::Vec(v) => v.iter().find_map(|s| find(s, text)),
             _ => None,
         }
     }
-    shapes.iter().any(|s| find(&s.shape, text).is_some_and(|r| s.clip_rect.expand(0.5).contains_rect(r)))
+    shapes
+        .iter()
+        .any(|s| find(&s.shape, text).is_some_and(|r| s.clip_rect.expand(0.5).contains_rect(r)))
 }
 
 /// Laisse le temps au décodage des GIF (fil d'arrière-plan) puis renvoie une image stable.
@@ -1314,10 +1743,27 @@ fn demo_profile_is_added_beside_user_profiles_and_resets_by_name() {
     h.app.add_demo_profile();
     h.app.add_demo_profile();
     let after = serde_json::to_value(&h.app.config.profiles).unwrap();
-    assert_eq!(after.as_array().unwrap().len(), before.as_array().unwrap().len() + 1, "un seul profil de démonstration");
-    assert_eq!(after.as_array().unwrap()[..before.as_array().unwrap().len()], before.as_array().unwrap()[..], "profils de l'utilisateur intacts");
-    assert_eq!(h.app.config.profiles[h.app.config.active].name, crate::demo_profile::NAME);
-    assert!(h.app.config.keys().iter().take(15).all(|k| !k.steps.is_empty()));
+    assert_eq!(
+        after.as_array().unwrap().len(),
+        before.as_array().unwrap().len() + 1,
+        "un seul profil de démonstration"
+    );
+    assert_eq!(
+        after.as_array().unwrap()[..before.as_array().unwrap().len()],
+        before.as_array().unwrap()[..],
+        "profils de l'utilisateur intacts"
+    );
+    assert_eq!(
+        h.app.config.profiles[h.app.config.active].name,
+        crate::demo_profile::NAME
+    );
+    assert!(h
+        .app
+        .config
+        .keys()
+        .iter()
+        .take(15)
+        .all(|k| !k.steps.is_empty()));
     let size = vec2(1380.0, 900.0);
     settle(&mut h, size);
     assert_eq!(h.app.drop_targets.len(), 15);
@@ -1329,7 +1775,9 @@ fn demo_profile_is_added_beside_user_profiles_and_resets_by_name() {
 /// Captures du README : vraie interface rendue hors écran à 2560 px de large (1600 × 1000 points à 160 %).
 #[test]
 fn readme_captures_redesign_in_both_themes_and_languages() {
-    let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else { return };
+    let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else {
+        return;
+    };
     std::fs::create_dir_all(&dir).unwrap();
     let size = vec2(1600.0, 1000.0);
     for lang in ["fr", "en"] {
@@ -1342,14 +1790,25 @@ fn readme_captures_redesign_in_both_themes_and_languages() {
             h.ctx.set_pixels_per_point(1.6);
             let out = settle(&mut h, size);
             let suffix = if lang == "fr" { "-fr" } else { "" };
-            h.png(size, out, &dir.join(format!("redesign-{}{suffix}.png", if dark { "dark" } else { "light" })));
+            h.png(
+                size,
+                out,
+                &dir.join(format!(
+                    "redesign-{}{suffix}.png",
+                    if dark { "dark" } else { "light" }
+                )),
+            );
         }
     }
     crate::i18n::set_language("fr");
 }
 #[test]
 fn readme_captures_from_the_demo_profile() {
-    let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) else { return };
+    let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    else {
+        return;
+    };
     let dir = PathBuf::from(dir);
     std::fs::create_dir_all(&dir).unwrap();
     let size = vec2(1600.0, 1000.0);
@@ -1368,20 +1827,39 @@ fn readme_captures_from_the_demo_profile() {
     h.app.preferences.workshop_advanced = false;
     h.app.selected = 0;
     h.warm(size); // l'atelier oublie la sélection quand la touche ciblée change
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![1_usize]));
+    h.ctx
+        .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![1_usize]));
     let shapes = shot(&mut h, "novydeck-block-editor.png");
-    assert!(fully_visible(&shapes, "Enregistrer…"), "bouton d'enregistrement du raccourci coupé");
+    assert!(
+        fully_visible(&shapes, "Enregistrer…"),
+        "bouton d'enregistrement du raccourci coupé"
+    );
     let mut h = demo_harness();
     h.app.show_workflow = true;
     h.app.selected = 5;
     h.app.workshop_chat.open = true;
-    h.app.workshop_chat_send("ouvre le navigateur brave s'il est pas ouvert et si il deja ouvert ouvre un nouvel onglet".into(), None);
-    assert!(matches!(h.app.workshop_chat.pending.as_ref().expect("proposition réelle").proposal.steps.as_slice(), [Step::IfCondition { .. }]));
+    h.app.workshop_chat_send(
+        "ouvre le navigateur brave s'il est pas ouvert et si il deja ouvert ouvre un nouvel onglet"
+            .into(),
+        None,
+    );
+    assert!(matches!(
+        h.app
+            .workshop_chat
+            .pending
+            .as_ref()
+            .expect("proposition réelle")
+            .proposal
+            .steps
+            .as_slice(),
+        [Step::IfCondition { .. }]
+    ));
     shot(&mut h, "novydeck-assistant.png");
     let mut h = demo_harness();
     let photo = PathBuf::from(&h.app.config.keys()[8].image);
     let page = h.app.config.page.clone();
-    h.app.open_crop_editor(h.app.config.active, page, 8, photo, 126);
+    h.app
+        .open_crop_editor(h.app.config.active, page, 8, photo, 126);
     assert!(h.app.crop_session.is_some(), "recadrage ouvert");
     shot(&mut h, "novydeck-media-crop.png");
 }
@@ -1390,7 +1868,11 @@ fn readme_captures_from_the_demo_profile() {
 #[test]
 #[ignore = "produit les images de la vidéo ; DECKFORGE_VIDEO_OUTPUT requis"]
 fn demo_video_keyframes() {
-    let dir = PathBuf::from(std::env::var_os("NOVYDECK_VIDEO_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_VIDEO_OUTPUT")).expect("DECKFORGE_VIDEO_OUTPUT"));
+    let dir = PathBuf::from(
+        std::env::var_os("NOVYDECK_VIDEO_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_VIDEO_OUTPUT"))
+            .expect("DECKFORGE_VIDEO_OUTPUT"),
+    );
     std::fs::create_dir_all(&dir).unwrap();
     let size = vec2(1280.0, 720.0);
     let shot = |h: &mut Harness, name: &str| {
@@ -1404,10 +1886,21 @@ fn demo_video_keyframes() {
     std::fs::create_dir_all(&keys_dir).unwrap();
     let font = crate::key_render::font().unwrap();
     for (i, key) in h.app.config.keys().iter().take(15).enumerate() {
-        crate::key_render::preview(key, 252).unwrap().save(keys_dir.join(format!("key-{i:02}.png"))).unwrap();
-        for (f, frame) in crate::key_render::animated(key, 252, &font).unwrap().iter().enumerate() {
-            let upright = image::imageops::rotate180(&image::load_from_memory(&frame.jpeg).unwrap().into_rgb8());
-            upright.save(keys_dir.join(format!("key-{i:02}-f{f:02}.png"))).unwrap();
+        crate::key_render::preview(key, 252)
+            .unwrap()
+            .save(keys_dir.join(format!("key-{i:02}.png")))
+            .unwrap();
+        for (f, frame) in crate::key_render::animated(key, 252, &font)
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            let upright = image::imageops::rotate180(
+                &image::load_from_memory(&frame.jpeg).unwrap().into_rgb8(),
+            );
+            upright
+                .save(keys_dir.join(format!("key-{i:02}-f{f:02}.png")))
+                .unwrap();
         }
     }
     shot(&mut h, "01-main");
@@ -1420,21 +1913,33 @@ fn demo_video_keyframes() {
     h.app.show_workflow = true;
     h.app.preferences.workshop_advanced = false;
     h.warm(size);
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![1_usize]));
+    h.ctx
+        .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![1_usize]));
     shot(&mut h, "04-workshop");
-    let path = crate::workshop_ops::apply(&mut h.app.config.keys_mut()[0].steps,
-        crate::workshop_ops::Edit::Insert(vec![4], Step::Delay { ms: 500 })).expect("bloc inséré");
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), path.clone()));
+    let path = crate::workshop_ops::apply(
+        &mut h.app.config.keys_mut()[0].steps,
+        crate::workshop_ops::Edit::Insert(vec![4], Step::Delay { ms: 500 }),
+    )
+    .expect("bloc inséré");
+    h.ctx
+        .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), path.clone()));
     shot(&mut h, "05-block-added");
-    if let Some(Step::Delay { ms }) = h.app.config.keys_mut()[0].steps.get_mut(4) { *ms = 1200; }
+    if let Some(Step::Delay { ms }) = h.app.config.keys_mut()[0].steps.get_mut(4) {
+        *ms = 1200;
+    }
     shot(&mut h, "06-block-edited");
     h.app.workshop_chat.open = true;
-    h.app.workshop_chat_send("ouvre le navigateur brave s'il est pas ouvert et si il deja ouvert ouvre un nouvel onglet".into(), None);
+    h.app.workshop_chat_send(
+        "ouvre le navigateur brave s'il est pas ouvert et si il deja ouvert ouvre un nouvel onglet"
+            .into(),
+        None,
+    );
     shot(&mut h, "07-assistant");
     let mut h = demo_harness();
     let photo = PathBuf::from(&h.app.config.keys()[8].image);
     let page = h.app.config.page.clone();
-    h.app.open_crop_editor(h.app.config.active, page, 8, photo, 126);
+    h.app
+        .open_crop_editor(h.app.config.active, page, 8, photo, 126);
     shot(&mut h, "08-media-crop");
 }
 
@@ -1446,23 +1951,50 @@ fn key_media_is_masked_by_the_rounded_lcd_corners() {
         let mut h = Harness::new();
         h.ctx.set_pixels_per_point(dpi);
         let size = vec2(1380.0, 900.0);
-        h.app.config.keys_mut()[0] = Key { label: String::new(), color: [230, 20, 20], background: true, steps: vec![Step::Delay { ms: 1 }], ..Default::default() };
+        h.app.config.keys_mut()[0] = Key {
+            label: String::new(),
+            color: [230, 20, 20],
+            background: true,
+            steps: vec![Step::Delay { ms: 1 }],
+            ..Default::default()
+        };
         h.app.selected = 0;
         let out = h.warm(size);
         let face = h.app.drop_targets.iter().find(|(_, k)| *k == 0).unwrap().0;
         let lcd = crate::deck_chassis::lcd(face, face.width() / crate::deck_chassis::FACE_SIZE.x);
         let img = h.raster(size, out);
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
             let r = Rect::from_center_size(face.center(), face.size() * 1.15);
-            let crop = image::imageops::crop_imm(&img, (r.left() * dpi) as u32, (r.top() * dpi) as u32, (r.width() * dpi) as u32, (r.height() * dpi) as u32).to_image();
-            crop.save(PathBuf::from(dir).join(format!("key-corners-{}.png", (dpi * 100.0) as u32))).unwrap();
+            let crop = image::imageops::crop_imm(
+                &img,
+                (r.left() * dpi) as u32,
+                (r.top() * dpi) as u32,
+                (r.width() * dpi) as u32,
+                (r.height() * dpi) as u32,
+            )
+            .to_image();
+            crop.save(PathBuf::from(dir).join(format!("key-corners-{}.png", (dpi * 100.0) as u32)))
+                .unwrap();
         }
         let px = |p: egui::Pos2| *img.get_pixel((p.x * dpi) as u32, (p.y * dpi) as u32);
         let red = |c: image::Rgba<u8>| c.0[0] > 150 && c.0[1] < 90 && c.0[2] < 90;
-        if !(red(px(lcd.left_center() + vec2(2.0, 0.0))) && red(px(lcd.center_top() + vec2(0.0, 2.0)))) { failures.push(format!("média absent des bords à {dpi}")); }
-        for corner in [lcd.left_top() + vec2(1.0, 1.0), lcd.right_top() + vec2(-1.0, 1.0), lcd.left_bottom() + vec2(1.0, -1.0), lcd.right_bottom() + vec2(-1.0, -1.0)] {
-            if red(px(corner)) { failures.push(format!("angle carré du média visible à {dpi} : {corner:?}")); }
+        if !(red(px(lcd.left_center() + vec2(2.0, 0.0)))
+            && red(px(lcd.center_top() + vec2(0.0, 2.0))))
+        {
+            failures.push(format!("média absent des bords à {dpi}"));
+        }
+        for corner in [
+            lcd.left_top() + vec2(1.0, 1.0),
+            lcd.right_top() + vec2(-1.0, 1.0),
+            lcd.left_bottom() + vec2(1.0, -1.0),
+            lcd.right_bottom() + vec2(-1.0, -1.0),
+        ] {
+            if red(px(corner)) {
+                failures.push(format!("angle carré du média visible à {dpi} : {corner:?}"));
+            }
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
@@ -1479,12 +2011,24 @@ fn plugin_header_keeps_remove_button_visible_with_long_plugin_ids() {
             settings: serde_json::json!({}),
             state: 0,
         });
-        h.app.plugin_errors.insert("com.geekyeggo.goveecontroller".into(), "Commande plugin expirée sans enregistrement WebSocket".into());
+        h.app.plugin_errors.insert(
+            "com.geekyeggo.goveecontroller".into(),
+            "Commande plugin expirée sans enregistrement WebSocket".into(),
+        );
         let output = h.warm(size);
-        assert!(fully_visible(&output.shapes, "Retirer le plugin"), "bouton hors champ à {size:?}");
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        assert!(
+            fully_visible(&output.shapes, "Retirer le plugin"),
+            "bouton hors champ à {size:?}"
+        );
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             let snapshot = h.warm(size);
-            h.png(size, snapshot, &PathBuf::from(dir).join(format!("plugin-header-{}.png", size.x as u32)));
+            h.png(
+                size,
+                snapshot,
+                &PathBuf::from(dir).join(format!("plugin-header-{}.png", size.x as u32)),
+            );
         }
     }
 }
@@ -1496,24 +2040,55 @@ fn workshop_simple_mode_click_on_nested_block_opens_its_properties() {
     h.app.show_workflow = true;
     h.app.preferences.workshop_advanced = false;
     h.app.config.keys_mut()[0].steps = vec![Step::IfCondition {
-        condition: crate::conditions::Condition::AppRunning { exe: "brave.exe".into() },
-        then_steps: vec![Step::Hotkey { keys: "CTRL+T".into() }],
-        else_steps: vec![Step::Launch { program: "brave.exe".into(), args: vec![], focus_if_running: false }],
+        condition: crate::conditions::Condition::AppRunning {
+            exe: "brave.exe".into(),
+        },
+        then_steps: vec![Step::Hotkey {
+            keys: "CTRL+T".into(),
+        }],
+        else_steps: vec![Step::Launch {
+            program: "brave.exe".into(),
+            args: vec![],
+            focus_if_running: false,
+        }],
     }];
     // Fenêtre compacte : bibliothèque de blocs ouverte, puis assistant ouvert.
     for chat in [false, true] {
-        h.ctx.data_mut(|d| { d.insert_temp(egui::Id::new("workshop_palette_open"), true); d.remove::<Vec<usize>>(egui::Id::new("workshop_path")); });
+        h.ctx.data_mut(|d| {
+            d.insert_temp(egui::Id::new("workshop_palette_open"), true);
+            d.remove::<Vec<usize>>(egui::Id::new("workshop_path"));
+        });
         h.app.workshop_chat.open = chat;
         let output = h.warm(size);
-        let card = text_position(&output.shapes, "Lancer une application").expect("carte imbriquée visible");
+        let card = text_position(&output.shapes, "Lancer une application")
+            .expect("carte imbriquée visible");
         h.click(size, card);
         let output = h.warm(size);
-        assert_eq!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), Some(vec![0, 1, 0]));
-        assert!(text_position(&output.shapes, "Propriétés du bloc").is_some(), "propriétés du bloc imbriqué (assistant {chat})");
-        assert!(text_position(&output.shapes, "Programme").is_some() || text_position(&output.shapes, "brave.exe").is_some(), "champ modifiable");
-        if let (false, Some(dir)) = (chat, std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))) {
+        assert_eq!(
+            h.ctx
+                .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))),
+            Some(vec![0, 1, 0])
+        );
+        assert!(
+            text_position(&output.shapes, "Propriétés du bloc").is_some(),
+            "propriétés du bloc imbriqué (assistant {chat})"
+        );
+        assert!(
+            text_position(&output.shapes, "Programme").is_some()
+                || text_position(&output.shapes, "brave.exe").is_some(),
+            "champ modifiable"
+        );
+        if let (false, Some(dir)) = (
+            chat,
+            std::env::var_os("NOVYDECK_UI_OUTPUT")
+                .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")),
+        ) {
             let snapshot = h.warm(size);
-            h.png(size, snapshot, &PathBuf::from(dir).join("atelier-simple-proprietes.png"));
+            h.png(
+                size,
+                snapshot,
+                &PathBuf::from(dir).join("atelier-simple-proprietes.png"),
+            );
         }
     }
 }
@@ -1525,8 +2100,12 @@ fn workshop_simple_layout_keeps_canvas_visible_at_both_sizes() {
         h.app.show_workflow = true;
         h.app.preferences.workshop_advanced = false;
         h.app.config.keys_mut()[0].steps = vec![Step::Repeat {
-            count: 2, steps: vec![Step::IfVariable {
-                name: "mode".into(), value: "on".into(), then_steps: vec![Step::Delay { ms: 100 }], else_steps: vec![],
+            count: 2,
+            steps: vec![Step::IfVariable {
+                name: "mode".into(),
+                value: "on".into(),
+                then_steps: vec![Step::Delay { ms: 100 }],
+                else_steps: vec![],
             }],
         }];
         let output = h.warm(size);
@@ -1535,26 +2114,62 @@ fn workshop_simple_layout_keeps_canvas_visible_at_both_sizes() {
         assert!(text_position(&output.shapes, "RÉPÉTER").is_some());
         assert!(text_position(&output.shapes, "ALORS").is_some());
         assert!(text_position(&output.shapes, "SINON").is_some());
-        assert_eq!(h.ctx.data(|d| d.get_temp::<(usize, String, usize)>(egui::Id::new("workshop_context"))), Some((0, String::new(), 0)));
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize, 0, 0]));
-        assert_eq!(h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), Some(vec![0, 0, 0]));
+        assert_eq!(
+            h.ctx
+                .data(|d| d.get_temp::<(usize, String, usize)>(egui::Id::new("workshop_context"))),
+            Some((0, String::new(), 0))
+        );
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![0_usize, 0, 0]));
+        assert_eq!(
+            h.ctx
+                .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))),
+            Some(vec![0, 0, 0])
+        );
         // A new egui Window is invisible during its first sizing pass.
         let output = h.warm(size);
-        assert!(text_position(&output.shapes, "Propriétés du bloc").is_some(), "path={:?}, shown={:?}, texts={:?}", h.ctx.data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))), h.app.show_workflow, output.shapes.iter().filter_map(|shape| if let egui::Shape::Text(t) = &shape.shape {Some(t.galley.job.text.clone())} else {None}).collect::<Vec<_>>());
+        assert!(
+            text_position(&output.shapes, "Propriétés du bloc").is_some(),
+            "path={:?}, shown={:?}, texts={:?}",
+            h.ctx
+                .data(|d| d.get_temp::<Vec<usize>>(egui::Id::new("workshop_path"))),
+            h.app.show_workflow,
+            output
+                .shapes
+                .iter()
+                .filter_map(|shape| if let egui::Shape::Text(t) = &shape.shape {
+                    Some(t.galley.job.text.clone())
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>()
+        );
         assert!(text_position(&output.shapes, "Construis ton automatisation").is_some());
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
         let output = h.warm(size);
         assert!(text_position(&output.shapes, "BIBLIOTHÈQUE DE BLOCS").is_some());
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), false));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), false));
         h.app.config.keys_mut()[1].steps.clear();
         h.app.selected = 1;
         let output = h.warm(size);
         assert!(text_position(&output.shapes, "Propriétés du bloc").is_none());
         assert!(text_position(&output.shapes, "Ajoute ton premier bloc").is_some());
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_search"), "aucun-bloc-xyz".to_owned()));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
+        h.ctx.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("workshop_search"),
+                "aucun-bloc-xyz".to_owned(),
+            )
+        });
         let output = h.warm(size);
-        assert!(text_position(&output.shapes, "Aucun bloc trouvé. Essaie un autre mot-clé.").is_some());
+        assert!(text_position(
+            &output.shapes,
+            "Aucun bloc trouvé. Essaie un autre mot-clé."
+        )
+        .is_some());
     }
 }
 
@@ -1568,8 +2183,8 @@ fn workflow_preview_shows_conditional_blocks() {
             Step::SetVariable {
                 name: "mode".into(),
                 value: "travail".into(),
-                    persistent: false,
-                },
+                persistent: false,
+            },
             Step::IfVariable {
                 name: "mode".into(),
                 value: "travail".into(),
@@ -1583,12 +2198,15 @@ fn workflow_preview_shows_conditional_blocks() {
         ..Key::default()
     };
     h.app.show_workflow = true;
-    h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
+    h.ctx
+        .data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
     let output = h.warm(size);
     assert!(text_position(&output.shapes, "Construis ton automatisation").is_some());
     assert!(text_position(&output.shapes, "BIBLIOTHÈQUE DE BLOCS").is_some());
     assert!(text_position(&output.shapes, "Clavier").is_some());
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
         h.png(size, output, &PathBuf::from(dir).join("workflow.png"));
     }
 }
@@ -1628,7 +2246,9 @@ fn gallery_click_retargets_to_current_selected_key() {
         .any(|s| matches!(&s.shape,egui::Shape::Circle(c) if c.radius==8.0 && c.fill==accent())));
     assert!(h.app.icon_notice.contains("appliquée"));
     assert!(h.app.icon_notice.contains("08"));
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
         h.png(
             size,
             output,
@@ -1679,21 +2299,40 @@ fn appearance_inspector_sizes_have_correct_units_and_icon_slider_can_scroll_into
     let mut h = Harness::new();
     h.app.config.keys_mut()[0].title_size = 14;
     h.app.config.keys_mut()[0].icon_scale = 100;
-    h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+    h.ctx
+        .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
     let output = h.warm(size);
-    assert!(text_position(&output.shapes, "14 px").is_some(), "title size is measured in pixels");
+    assert!(
+        text_position(&output.shapes, "14 px").is_some(),
+        "title size is measured in pixels"
+    );
     assert!(text_position(&output.shapes, "Taille du titre").is_some());
     let origin = text_position(&output.shapes, "Titre sur la touche").unwrap();
     let area = pos2(origin.x + 85.0, origin.y + 90.0);
     let mut visible = text_position(&output.shapes, "Taille de l’icône").is_some()
         && text_position(&output.shapes, "100 %").is_some();
     for _ in 0..8 {
-        if visible { break; }
-        let output = h.frame(size, vec![Input::PointerMoved(area), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -90.0), modifiers: Modifiers::NONE }]);
+        if visible {
+            break;
+        }
+        let output = h.frame(
+            size,
+            vec![
+                Input::PointerMoved(area),
+                Input::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, -90.0),
+                    modifiers: Modifiers::NONE,
+                },
+            ],
+        );
         visible = text_position(&output.shapes, "Taille de l’icône").is_some()
             && text_position(&output.shapes, "100 %").is_some();
     }
-    assert!(visible, "icon size control and percentage must be reachable by scrolling the appearance column");
+    assert!(
+        visible,
+        "icon size control and percentage must be reachable by scrolling the appearance column"
+    );
 }
 
 #[test]
@@ -1721,7 +2360,8 @@ fn both_audio_state_previews_are_visible_in_the_compact_inspector() {
             ],
             ..Default::default()
         };
-        h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+        h.ctx
+            .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
         let output = h.warm(size);
         assert!(text_position(&output.shapes, "État 1 · Actif").is_some());
         assert!(text_position(&output.shapes, "État 2").is_some());
@@ -1745,7 +2385,9 @@ fn both_audio_state_previews_are_visible_in_the_compact_inspector() {
             resets, 2,
             "Both states' icon controls must be visible without scrolling"
         );
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             h.png(size, output, &PathBuf::from(dir).join(name));
         }
     }
@@ -1900,7 +2542,11 @@ fn clipboard_crosses_pages_and_profiles_and_undo_redo_tracks_changes() {
     let mut h = Harness::new();
     let source = h.app.config.keys()[0].clone();
     h.app.copy_key();
-    h.app.config.profiles[0].pages.push(crate::model::Page::new("test-page".into(), "Test".into(), false));
+    h.app.config.profiles[0].pages.push(crate::model::Page::new(
+        "test-page".into(),
+        "Test".into(),
+        false,
+    ));
     h.app.config.profiles.push(Profile::new("Second".into()));
     h.app.config.active = 1;
     h.app.config.page.clear();
@@ -1969,22 +2615,47 @@ fn inspector_step_remove_buttons_stay_inside_center_panel_at_both_sizes() {
         for script_first in [true, false] {
             let mut h = Harness::new();
             let script = Step::AutoHotkey {
-                executable: format!("C:\\very-long-folder\\{}\\AutoHotkey64.exe", "deep".repeat(40)),
-                script: "Send \"hello\"\n".repeat(70), args: vec![],
+                executable: format!(
+                    "C:\\very-long-folder\\{}\\AutoHotkey64.exe",
+                    "deep".repeat(40)
+                ),
+                script: "Send \"hello\"\n".repeat(70),
+                args: vec![],
             };
-            let media = Step::Media { command: "play_pause".into() };
-            h.app.config.keys_mut()[0].steps = if script_first { vec![script, media] } else { vec![media, script] };
+            let media = Step::Media {
+                command: "play_pause".into(),
+            };
+            h.app.config.keys_mut()[0].steps = if script_first {
+                vec![script, media]
+            } else {
+                vec![media, script]
+            };
             h.app.selected = 0;
             let output = h.warm(size);
-            let buttons: Vec<_> = output.shapes.iter().filter_map(|clipped| {
-                if let egui::Shape::Text(text) = &clipped.shape {
-                    if text.galley.job.text == "×" && clipped.clip_rect.contains(text.pos + text.galley.size() * 0.5) {
-                        return Some((text.pos.x, text.pos.x + text.galley.size().x, clipped.clip_rect.max.x));
+            let buttons: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|clipped| {
+                    if let egui::Shape::Text(text) = &clipped.shape {
+                        if text.galley.job.text == "×"
+                            && clipped
+                                .clip_rect
+                                .contains(text.pos + text.galley.size() * 0.5)
+                        {
+                            return Some((
+                                text.pos.x,
+                                text.pos.x + text.galley.size().x,
+                                clipped.clip_rect.max.x,
+                            ));
+                        }
                     }
-                }
-                None
-            }).collect();
-            assert!(!buttons.is_empty(), "remove button missing at {size:?}, script_first={script_first}");
+                    None
+                })
+                .collect();
+            assert!(
+                !buttons.is_empty(),
+                "remove button missing at {size:?}, script_first={script_first}"
+            );
             for (left, right, clip_right) in buttons {
                 assert!(left > 240.0 && right <= clip_right && right < size.x - 296.0,
                     "remove button outside inspector: {left}..{right}, clip={clip_right}, size={size:?}");
@@ -1998,14 +2669,22 @@ fn workshop_entry_points_and_idle_viewport_commands() {
     let size = vec2(1380.0, 900.0);
     let mut h = Harness::new();
     h.app.config.keys_mut()[0].steps = vec![Step::AutoHotkey {
-        executable: "AutoHotkey64.exe".into(), script: "Send \"test\"".into(), args: vec![],
+        executable: "AutoHotkey64.exe".into(),
+        script: "Send \"test\"".into(),
+        args: vec![],
     }];
     let output = h.warm(size);
     assert!(text_position(&output.shapes, "Atelier de blocs").is_some());
     assert!(text_position(&output.shapes, "Ouvrir l’Atelier de blocs").is_some());
     for _ in 0..8 {
         let output = h.frame(size, vec![]);
-        assert!(output.viewport_output.values().all(|v| v.commands.is_empty()), "idle frame sent a viewport command");
+        assert!(
+            output
+                .viewport_output
+                .values()
+                .all(|v| v.commands.is_empty()),
+            "idle frame sent a viewport command"
+        );
     }
     h.app.config.keys_mut()[0].steps.clear();
     let output = h.warm(size);
@@ -2014,8 +2693,10 @@ fn workshop_entry_points_and_idle_viewport_commands() {
     let pos = text_position(&output.shapes, "Partir d’un modèle").unwrap();
     h.click(size, pos);
     let output = h.warm(size);
-    assert!(text_position(&output.shapes, "Modèles").is_some(), "model button opens workshop templates");
-
+    assert!(
+        text_position(&output.shapes, "Modèles").is_some(),
+        "model button opens workshop templates"
+    );
 }
 
 #[test]
@@ -2024,22 +2705,51 @@ fn theme_clear_color_is_opaque_and_matches_background() {
     for dark in [true, false] {
         let actual = clear_background(dark);
         assert_eq!(actual[3], 1.0);
-        assert_eq!(actual, if dark { [24.0/255.0,26.0/255.0,31.0/255.0,1.0] } else { [237.0/255.0,240.0/255.0,245.0/255.0,1.0] });
+        assert_eq!(
+            actual,
+            if dark {
+                [24.0 / 255.0, 26.0 / 255.0, 31.0 / 255.0, 1.0]
+            } else {
+                [237.0 / 255.0, 240.0 / 255.0, 245.0 / 255.0, 1.0]
+            }
+        );
     }
-    assert_eq!(eframe::App::clear_color(&h.app, &egui::Visuals::default()), clear_background(h.app.preferences.dark));
+    assert_eq!(
+        eframe::App::clear_color(&h.app, &egui::Visuals::default()),
+        clear_background(h.app.preferences.dark)
+    );
 }
 #[test]
 fn mcp_connect_window_previews_all_clients_without_touching_real_settings() {
-    let mut h=Harness::new();
-    h.app.connect_window=true;
-    let size=vec2(1280.0,850.0);
-    let output=h.warm(size);
-    let text=output.shapes.iter().filter_map(|shape| {
-        if let egui::Shape::Text(t)=&shape.shape {Some(t.galley.job.text.as_str())}else{None}
-    }).collect::<Vec<_>>().join(" ");
-    for client in ["Claude Desktop","Claude Code","Codex CLI","Cursor","ChatGPT"] {assert!(text.contains(client),"Carte manquante : {client}");}
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-        h.png(size,output,&PathBuf::from(dir).join("mcp-connect.png"));
+    let mut h = Harness::new();
+    h.app.connect_window = true;
+    let size = vec2(1280.0, 850.0);
+    let output = h.warm(size);
+    let text = output
+        .shapes
+        .iter()
+        .filter_map(|shape| {
+            if let egui::Shape::Text(t) = &shape.shape {
+                Some(t.galley.job.text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    for client in [
+        "Claude Desktop",
+        "Claude Code",
+        "Codex CLI",
+        "Cursor",
+        "ChatGPT",
+    ] {
+        assert!(text.contains(client), "Carte manquante : {client}");
+    }
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
+        h.png(size, output, &PathBuf::from(dir).join("mcp-connect.png"));
     }
 }
 #[test]
@@ -2048,30 +2758,74 @@ fn plugin_cards_keep_an_import_button_visible_inside_the_library_on_small_window
         let mut h = Harness::new();
         h.app.catalog_tab = 3;
         let plugin = crate::plugins::Plugin {
-            uuid: "test.demo".into(), name: "Un plugin au titre plutôt long pour le panneau".into(),
-            version: "1.0.0".into(), author: "Auteur long aussi".into(), icon: None,
-            folder: PathBuf::from("not-a-real-plugin"), runtime: crate::plugins::Runtime::Exe(PathBuf::from("demo.exe")),
-            actions: vec![], inspector: None, node_version: None, prerequisite: None, applications: vec![],
+            uuid: "test.demo".into(),
+            name: "Un plugin au titre plutôt long pour le panneau".into(),
+            version: "1.0.0".into(),
+            author: "Auteur long aussi".into(),
+            icon: None,
+            folder: PathBuf::from("not-a-real-plugin"),
+            runtime: crate::plugins::Runtime::Exe(PathBuf::from("demo.exe")),
+            actions: vec![],
+            inspector: None,
+            node_version: None,
+            prerequisite: None,
+            applications: vec![],
         };
         h.app.plugin_inventory = Some(std::sync::Arc::new(super::plugin_store_ui::Inventory {
-            available: vec![plugin], ..Default::default()
+            available: vec![plugin],
+            ..Default::default()
         }));
-        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog"));
+        let panel =
+            egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog"));
         let mut out = h.warm(physical);
-        let panel = panel.or_else(|| egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog"))).unwrap().rect;
+        let panel = panel
+            .or_else(|| {
+                egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog"))
+            })
+            .unwrap()
+            .rect;
         let pos = panel.center();
         for _ in 0..16 {
-            if text_position(&out.shapes, "Importer ce plugin").is_some() { break; }
-            out = h.frame(physical, vec![Input::PointerMoved(pos), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -70.0), modifiers: Modifiers::NONE }]);
+            if text_position(&out.shapes, "Importer ce plugin").is_some() {
+                break;
+            }
+            out = h.frame(
+                physical,
+                vec![
+                    Input::PointerMoved(pos),
+                    Input::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -70.0),
+                        modifiers: Modifiers::NONE,
+                    },
+                ],
+            );
         }
-        let button = text_position(&out.shapes, "Importer ce plugin").expect("bouton d'importation atteignable après défilement du catalogue");
-        assert!(panel.contains(button), "bouton importer doit rester dans le panneau : {button:?} / {panel:?}");
-        let title = text_position(&out.shapes, "Un plugin au titre plutôt long pour le panneau")
-            .expect("plugin lisible quand sa carte est visible");
-        assert!(panel.contains(title), "nom hors du panneau : {title:?} / {panel:?}");
-        if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-            let dir=PathBuf::from(dir); std::fs::create_dir_all(&dir).unwrap();
-            h.png(physical,out,&dir.join(format!("plugins-import-{}.png",physical.x as u32)));
+        let button = text_position(&out.shapes, "Importer ce plugin")
+            .expect("bouton d'importation atteignable après défilement du catalogue");
+        assert!(
+            panel.contains(button),
+            "bouton importer doit rester dans le panneau : {button:?} / {panel:?}"
+        );
+        let title = text_position(
+            &out.shapes,
+            "Un plugin au titre plutôt long pour le panneau",
+        )
+        .expect("plugin lisible quand sa carte est visible");
+        assert!(
+            panel.contains(title),
+            "nom hors du panneau : {title:?} / {panel:?}"
+        );
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
+            let dir = PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            h.png(
+                physical,
+                out,
+                &dir.join(format!("plugins-import-{}.png", physical.x as u32)),
+            );
         }
     }
 }
@@ -2080,59 +2834,124 @@ fn plugin_cards_keep_an_import_button_visible_inside_the_library_on_small_window
 fn only_the_inspector_properties_scroll_and_its_preview_stays_fixed() {
     let size = vec2(1380.0, 900.0);
     let mut h = Harness::new();
-    h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
-    for _ in 0..12 { h.frame(size, vec![]); }
+    h.ctx
+        .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+    for _ in 0..12 {
+        h.frame(size, vec![]);
+    }
     let mut out = h.frame(size, vec![]);
     let before = text_position(&out.shapes, "Changer l'icône").unwrap();
     let header_before = text_position(&out.shapes, "Apparence").unwrap();
     for _ in 0..5 {
-        out = h.frame(size, vec![Input::PointerMoved(pos2(before.x, before.y - 40.0)), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -90.0), modifiers: Modifiers::NONE }]);
+        out = h.frame(
+            size,
+            vec![
+                Input::PointerMoved(pos2(before.x, before.y - 40.0)),
+                Input::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, -90.0),
+                    modifiers: Modifiers::NONE,
+                },
+            ],
+        );
     }
-    let after_left = text_position(&out.shapes, "Changer l'icône").expect("aperçu fixe après défilement à gauche");
+    let after_left = text_position(&out.shapes, "Changer l'icône")
+        .expect("aperçu fixe après défilement à gauche");
     let header_after = text_position(&out.shapes, "Apparence").unwrap();
-    assert!(((after_left.y - header_after.y) - (before.y - header_before.y)).abs() < 1.0, "la colonne de gauche ne doit pas défiler {before:?} {after_left:?}");
+    assert!(
+        ((after_left.y - header_after.y) - (before.y - header_before.y)).abs() < 1.0,
+        "la colonne de gauche ne doit pas défiler {before:?} {after_left:?}"
+    );
     for _ in 0..7 {
-        out = h.frame(size, vec![Input::PointerMoved(pos2(before.x + 270.0, before.y - 40.0)), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -90.0), modifiers: Modifiers::NONE }]);
+        out = h.frame(
+            size,
+            vec![
+                Input::PointerMoved(pos2(before.x + 270.0, before.y - 40.0)),
+                Input::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, -90.0),
+                    modifiers: Modifiers::NONE,
+                },
+            ],
+        );
     }
-    assert!(text_position(&out.shapes, "Taille de l’icône").is_some(), "la colonne de droite doit défiler");
-    let after_right = text_position(&out.shapes, "Changer l'icône").expect("aperçu fixe après défilement à droite");
+    assert!(
+        text_position(&out.shapes, "Taille de l’icône").is_some(),
+        "la colonne de droite doit défiler"
+    );
+    let after_right = text_position(&out.shapes, "Changer l'icône")
+        .expect("aperçu fixe après défilement à droite");
     let header_final = text_position(&out.shapes, "Apparence").unwrap();
-    assert!(((after_right.y - header_final.y) - (before.y - header_before.y)).abs() < 1.0, "aperçu ne suit pas le défilement des propriétés");
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-        let dir=PathBuf::from(dir); std::fs::create_dir_all(&dir).unwrap();
-        h.png(size,out,&dir.join("inspector-right-scroll.png"));
+    assert!(
+        ((after_right.y - header_final.y) - (before.y - header_before.y)).abs() < 1.0,
+        "aperçu ne suit pas le défilement des propriétés"
+    );
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        h.png(size, out, &dir.join("inspector-right-scroll.png"));
     }
 }
 
 #[test]
 fn plugin_store_is_rendered_without_a_window() {
-    let mut h=Harness::new();
-    h.app.catalog_tab=3;
-    h.app.plugin_inventory=Some(std::sync::Arc::new(super::plugin_store_ui::Inventory::default()));
+    let mut h = Harness::new();
+    h.app.catalog_tab = 3;
+    h.app.plugin_inventory = Some(std::sync::Arc::new(
+        super::plugin_store_ui::Inventory::default(),
+    ));
     // 0.9.0 : le bouton « Magasin de plugins » précède l'inventaire ; l'onglet défile en dessous.
-    let size=vec2(1180.0,860.0);
-    let output=h.warm(size);
-    let store = text_position(&output.shapes,"Magasin de plugins").expect("Magasin en tête");
-    let installed = text_position(&output.shapes,"Installés dans NovyDeck").expect("liste installée");
+    let size = vec2(1180.0, 860.0);
+    let output = h.warm(size);
+    let store = text_position(&output.shapes, "Magasin de plugins").expect("Magasin en tête");
+    let installed =
+        text_position(&output.shapes, "Installés dans NovyDeck").expect("liste installée");
     assert!(store.y < installed.y);
-    assert!(text_position(&output.shapes,"entrée(s) locales publiables").is_none());
-    assert!(text_position(&output.shapes,"Importer…").is_some());
-    h.click(size,text_position(&output.shapes,"Importer…").unwrap());
-    let menu=h.warm(size);
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") { h.png(size,menu.clone(),&PathBuf::from(dir).join("plugins-import-menu.png")); }
-    for label in ["Depuis FIFINE / StreamDock / Elgato","Fichier .streamDeckPlugin","Dossier .sdPlugin","Actualiser"] {
-        assert!(text_position(&menu.shapes,label).is_some(),"entrée de menu absente : {label}");
+    assert!(text_position(&output.shapes, "entrée(s) locales publiables").is_none());
+    assert!(text_position(&output.shapes, "Importer…").is_some());
+    h.click(size, text_position(&output.shapes, "Importer…").unwrap());
+    let menu = h.warm(size);
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(
+            size,
+            menu.clone(),
+            &PathBuf::from(dir).join("plugins-import-menu.png"),
+        );
     }
-    h.click(size,text_position(&menu.shapes,"Importer…").unwrap());
-    let output=h.warm(size);
-    assert!(text_position(&output.shapes,"Plugins disponibles sur ce PC").is_some());
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-        h.png(size,output,&PathBuf::from(dir).join("plugins-store.png"));
+    for label in [
+        "Depuis FIFINE / StreamDock / Elgato",
+        "Fichier .streamDeckPlugin",
+        "Dossier .sdPlugin",
+        "Actualiser",
+    ] {
+        assert!(
+            text_position(&menu.shapes, label).is_some(),
+            "entrée de menu absente : {label}"
+        );
+    }
+    h.click(size, text_position(&menu.shapes, "Importer…").unwrap());
+    let output = h.warm(size);
+    assert!(text_position(&output.shapes, "Plugins disponibles sur ce PC").is_some());
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
+        h.png(size, output, &PathBuf::from(dir).join("plugins-store.png"));
     }
     // Régression : l'onglet scannait les dossiers de plugins (et lançait reg.exe) à chaque image.
-    let first=h.app.plugin_inventory.clone().expect("inventaire mis en cache");
-    for _ in 0..5 { h.warm(size); }
-    assert!(std::sync::Arc::ptr_eq(&first,h.app.plugin_inventory.as_ref().unwrap()),"l'onglet Plugins ne doit pas relire le disque à chaque image");
+    let first = h
+        .app
+        .plugin_inventory
+        .clone()
+        .expect("inventaire mis en cache");
+    for _ in 0..5 {
+        h.warm(size);
+    }
+    assert!(
+        std::sync::Arc::ptr_eq(&first, h.app.plugin_inventory.as_ref().unwrap()),
+        "l'onglet Plugins ne doit pas relire le disque à chaque image"
+    );
 }
 
 #[test]
@@ -2143,36 +2962,82 @@ fn settings_tabs_fit_a_laptop_screen_and_ai_opens_the_single_assistant_window() 
     for tab in 0..3u8 {
         h.app.settings_tab = tab;
         h.warm(size);
-        let rect = h.ctx.memory(|m| m.area_rect(egui::Id::new("device_settings"))).expect("Réglages affichés");
-        assert!(rect.max.y <= size.y && rect.min.y >= 0.0, "onglet {tab} : la fenêtre dépasse l'écran {rect:?}");
+        let rect = h
+            .ctx
+            .memory(|m| m.area_rect(egui::Id::new("device_settings")))
+            .expect("Réglages affichés");
+        assert!(
+            rect.max.y <= size.y && rect.min.y >= 0.0,
+            "onglet {tab} : la fenêtre dépasse l'écran {rect:?}"
+        );
     }
     h.app.settings_tab = 0;
     let general = h.warm(size);
-    assert!(text_position(&general.shapes, "IA : désactivée").is_some() && !h.app.preferences.local_ai.enabled, "IA locale désactivée par défaut");
+    assert!(
+        text_position(&general.shapes, "IA : désactivée").is_some()
+            && !h.app.preferences.local_ai.enabled,
+        "IA locale désactivée par défaut"
+    );
     let button = text_position(&general.shapes, "Configurer…").expect("entrée Assistant IA");
     h.click(size, button);
-    assert!(h.app.assistant_settings && h.app.assistant_tab == 0, "ouvre l'Assistant IA sur l'onglet IA locale");
+    assert!(
+        h.app.assistant_settings && h.app.assistant_tab == 0,
+        "ouvre l'Assistant IA sur l'onglet IA locale"
+    );
     h.app.settings = false;
     h.app.preferences.local_ai.enabled = true;
     h.app.preferences.local_ai.backend = "ollama".into();
     let open = h.warm(size);
-    for text in ["IA locale (sur ce PC)", "IA connectée (Claude, ChatGPT…)", "Utiliser une IA locale", "Ollama", "Intégré à NovyDeck", "Tester", "IA : locale"] {
+    for text in [
+        "IA locale (sur ce PC)",
+        "IA connectée (Claude, ChatGPT…)",
+        "Utiliser une IA locale",
+        "Ollama",
+        "Intégré à NovyDeck",
+        "Tester",
+        "IA : locale",
+    ] {
         assert!(text_position(&open.shapes, text).is_some(), "{text}");
     }
-    assert!(text_position(&open.shapes, "Connecter une IA").is_none(), "plus de bouton IA en double dans l'en-tête");
-    assert!(text_position(&open.shapes, "Arrêter les macros en cours").is_none() && text_position(&open.shapes, "Arrêter les macros").is_none(), "Arrêter n'apparaît que pendant une exécution");
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+    assert!(
+        text_position(&open.shapes, "Connecter une IA").is_none(),
+        "plus de bouton IA en double dans l'en-tête"
+    );
+    assert!(
+        text_position(&open.shapes, "Arrêter les macros en cours").is_none()
+            && text_position(&open.shapes, "Arrêter les macros").is_none(),
+        "Arrêter n'apparaît que pendant une exécution"
+    );
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
         std::fs::create_dir_all(&dir).unwrap();
-        h.png(size, open, &PathBuf::from(&dir).join("assistant-ia-locale-ollama.png"));
+        h.png(
+            size,
+            open,
+            &PathBuf::from(&dir).join("assistant-ia-locale-ollama.png"),
+        );
         h.app.preferences.local_ai.backend = "integre".into();
         let out = h.warm(size);
-        h.png(size, out, &PathBuf::from(&dir).join("assistant-ia-locale-integre.png"));
+        h.png(
+            size,
+            out,
+            &PathBuf::from(&dir).join("assistant-ia-locale-integre.png"),
+        );
         h.app.assistant_tab = 1;
         let out = h.warm(size);
-        h.png(size, out, &PathBuf::from(&dir).join("assistant-ia-connectee.png"));
+        h.png(
+            size,
+            out,
+            &PathBuf::from(&dir).join("assistant-ia-connectee.png"),
+        );
         h.app.assistant_settings = false;
         h.app.settings = true;
-        for (tab, name) in [(0u8, "reglages-general"), (1, "reglages-peripherique"), (2, "reglages-diagnostic")] {
+        for (tab, name) in [
+            (0u8, "reglages-general"),
+            (1, "reglages-peripherique"),
+            (2, "reglages-diagnostic"),
+        ] {
             h.app.settings_tab = tab;
             let out = h.warm(size);
             h.png(size, out, &PathBuf::from(&dir).join(format!("{name}.png")));
@@ -2186,17 +3051,33 @@ fn rules_preview_offers_the_local_ai_when_it_is_enabled() {
     let mut h = Harness::new();
     h.app.show_workflow = true;
     h.app.workshop_chat.open = true;
-    h.app.workshop_chat_send("colle sans mise en forme".into(), None);
+    h.app
+        .workshop_chat_send("colle sans mise en forme".into(), None);
     let out = h.warm(size);
-    assert!(text_position(&out.shapes, "Pas ça ? Demander plutôt à l'IA locale").is_none(), "IA locale désactivée : pas de bouton");
+    assert!(
+        text_position(&out.shapes, "Pas ça ? Demander plutôt à l'IA locale").is_none(),
+        "IA locale désactivée : pas de bouton"
+    );
     h.app.preferences.local_ai.enabled = true;
     h.app.preferences.local_ai.endpoint = "http://127.0.0.1:9".into();
-    h.app.workshop_chat_send("colle sans mise en forme".into(), None);
-    assert!(h.app.workshop_chat.pending.as_ref().is_some_and(|p| !p.ai && p.proposal.steps.len() == 3), "proposition des règles d'abord");
+    h.app
+        .workshop_chat_send("colle sans mise en forme".into(), None);
+    assert!(
+        h.app
+            .workshop_chat
+            .pending
+            .as_ref()
+            .is_some_and(|p| !p.ai && p.proposal.steps.len() == 3),
+        "proposition des règles d'abord"
+    );
     let out = h.warm(size);
-    let button = text_position(&out.shapes, "Pas ça ? Demander plutôt à l'IA locale").expect("bouton IA locale");
+    let button = text_position(&out.shapes, "Pas ça ? Demander plutôt à l'IA locale")
+        .expect("bouton IA locale");
     h.click(size, button);
-    assert!(h.app.workshop_chat.thinking.is_some() && h.app.workshop_chat.pending.is_none(), "la demande part vers l'IA locale, sans insertion");
+    assert!(
+        h.app.workshop_chat.thinking.is_some() && h.app.workshop_chat.pending.is_none(),
+        "la demande part vers l'IA locale, sans insertion"
+    );
 }
 
 #[test]
@@ -2206,9 +3087,21 @@ fn library_scroll_reuses_cached_interface_icons() {
     let first = h.warm(size);
     let shown = crate::iconset::rasterized(&h.ctx);
     assert!(shown >= 8, "icônes IconPark affichées : {shown}");
-    assert!(text_position(&first.shapes, "Réglages").is_some() && text_position(&first.shapes, "Modèles").is_some());
+    assert!(
+        text_position(&first.shapes, "Réglages").is_some()
+            && text_position(&first.shapes, "Modèles").is_some()
+    );
     let list = egui::pos2(1230.0, 520.0);
-    let wheel = |dy: f32| vec![Input::PointerMoved(list), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, dy), modifiers: Modifiers::NONE }];
+    let wheel = |dy: f32| {
+        vec![
+            Input::PointerMoved(list),
+            Input::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: vec2(0.0, dy),
+                modifiers: Modifiers::NONE,
+            },
+        ]
+    };
     for tab in [0usize, 1] {
         h.app.catalog_tab = tab;
         for dy in [-120.0f32; 25].into_iter().chain([120.0f32; 25]) {
@@ -2224,7 +3117,11 @@ fn library_scroll_reuses_cached_interface_icons() {
         }
     }
     let per_frame = started.elapsed() / 100;
-    assert_eq!(crate::iconset::rasterized(&h.ctx), after_first_pass, "aucune icône n'est rastérisée de nouveau en défilant");
+    assert_eq!(
+        crate::iconset::rasterized(&h.ctx),
+        after_first_pass,
+        "aucune icône n'est rastérisée de nouveau en défilant"
+    );
     eprintln!("ICONSET {after_first_pass} textures, {per_frame:?} par image (debug)");
 }
 
@@ -2235,15 +3132,23 @@ fn startup_intro_page_fade_and_waiting_dot_animate_without_blocking() {
     h.app.preferences.reduce_motion = false;
     let first = h.frame(size, vec![]);
     // Le nom de l'intro est le seul « NovyDeck » en 26 pt (l'en-tête est en 18 pt).
-    let intro = |o: &egui::FullOutput| o.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t)
-        if t.galley.job.text == "NovyDeck" && t.galley.job.sections.first().is_some_and(|f| f.format.font_id.size == 26.0)));
+    let intro = |o: &egui::FullOutput| {
+        o.shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Text(t)
+        if t.galley.job.text == "NovyDeck" && t.galley.job.sections.first().is_some_and(|f| f.format.font_id.size == 26.0)))
+    };
     assert!(intro(&first), "intro visible au démarrage");
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+    if let Some(dir) =
+        std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+    {
         std::fs::create_dir_all(&dir).unwrap();
-        for _ in 0..8 { h.frame(size, vec![]); }
+        for _ in 0..8 {
+            h.frame(size, vec![]);
+        }
         let out = h.frame(size, vec![]);
         h.png(size, out, &PathBuf::from(&dir).join("intro-1.png"));
-        for _ in 0..4 { h.frame(size, vec![]); }
+        for _ in 0..4 {
+            h.frame(size, vec![]);
+        }
         let out = h.frame(size, vec![]);
         h.png(size, out, &PathBuf::from(&dir).join("intro-2.png"));
     }
@@ -2251,7 +3156,9 @@ fn startup_intro_page_fade_and_waiting_dot_animate_without_blocking() {
     let key = h.app.drop_targets[3].0.center();
     h.click(size, key);
     assert_eq!(h.app.selected, 3, "l'intro ne bloque pas les clics");
-    for _ in 0..30 { h.frame(size, vec![]); }
+    for _ in 0..30 {
+        h.frame(size, vec![]);
+    }
     let later = h.frame(size, vec![]);
     assert!(!intro(&later), "l'intro disparaît d'elle-même");
     // Réduire les animations : plus d'intro.
@@ -2269,7 +3176,11 @@ fn factory_example_keys_keep_actions_and_icons_but_use_no_colored_lcd_background
         assert!(!key.steps.is_empty(), "actions conservées");
         assert!(key.image.is_empty(), "icônes par défaut conservées");
         assert!(key.background, "LCD cohérent avec les autres touches");
-        assert_eq!(key.color, Key::default().color, "aucun fond violet ou vert sur {label}");
+        assert_eq!(
+            key.color,
+            Key::default().color,
+            "aucun fond violet ou vert sur {label}"
+        );
     }
 }
 
@@ -2278,45 +3189,109 @@ fn svg_chassis_aligns_the_fifteen_live_keys_and_renders_once() {
     let dir = tempfile::tempdir().unwrap();
     // Contenus variés : image PNG, GIF animé, icône par défaut, titre seul, touche vide.
     let png = dir.path().join("photo.png");
-    image::RgbImage::from_fn(96, 96, |x, y| image::Rgb([(x * 2) as u8, (y * 2) as u8, 180])).save(&png).unwrap();
+    image::RgbImage::from_fn(96, 96, |x, y| {
+        image::Rgb([(x * 2) as u8, (y * 2) as u8, 180])
+    })
+    .save(&png)
+    .unwrap();
     let gif = dir.path().join("anim.gif");
     {
         let mut encoder = image::codecs::gif::GifEncoder::new(std::fs::File::create(&gif).unwrap());
-        encoder.set_repeat(image::codecs::gif::Repeat::Infinite).unwrap();
+        encoder
+            .set_repeat(image::codecs::gif::Repeat::Infinite)
+            .unwrap();
         for c in [40u8, 200] {
             let frame = image::RgbaImage::from_pixel(64, 64, image::Rgba([c, 90, 255 - c, 255]));
-            encoder.encode_frame(image::Frame::from_parts(frame, 0, 0, image::Delay::from_numer_denom_ms(200, 1))).unwrap();
+            encoder
+                .encode_frame(image::Frame::from_parts(
+                    frame,
+                    0,
+                    0,
+                    image::Delay::from_numer_denom_ms(200, 1),
+                ))
+                .unwrap();
         }
     }
-    for (size, scale, name) in [(vec2(1380.0, 900.0), 1.0, "deck-1380"), (vec2(1060.0, 720.0), 1.0, "deck-1060"), (vec2(1920.0, 1080.0) / 1.25, 1.25, "deck-1920-125")] {
+    for (size, scale, name) in [
+        (vec2(1380.0, 900.0), 1.0, "deck-1380"),
+        (vec2(1060.0, 720.0), 1.0, "deck-1060"),
+        (vec2(1920.0, 1080.0) / 1.25, 1.25, "deck-1920-125"),
+    ] {
         let mut h = Harness::new();
         h.ctx.set_pixels_per_point(scale);
         let keys = h.app.config.keys_mut();
         keys[5].image = png.to_string_lossy().into_owned();
         keys[5].label = "Photo".into();
         keys[6].image = gif.to_string_lossy().into_owned();
-        keys[7] = Key { label: "Stop".into(), steps: vec![Step::Media { command: "stop".into() }], ..Default::default() };
-        keys[8] = Key { label: "Page +".into(), steps: vec![Step::PageNext], ..Default::default() };
-        keys[9] = Key { steps: vec![Step::Hotkey { keys: "CTRL+C".into() }], ..Default::default() };
-        keys[10] = Key { label: "Titre seul".into(), ..Default::default() };
+        keys[7] = Key {
+            label: "Stop".into(),
+            steps: vec![Step::Media {
+                command: "stop".into(),
+            }],
+            ..Default::default()
+        };
+        keys[8] = Key {
+            label: "Page +".into(),
+            steps: vec![Step::PageNext],
+            ..Default::default()
+        };
+        keys[9] = Key {
+            steps: vec![Step::Hotkey {
+                keys: "CTRL+C".into(),
+            }],
+            ..Default::default()
+        };
+        keys[10] = Key {
+            label: "Titre seul".into(),
+            ..Default::default()
+        };
         let out = h.warm(size);
-        let rects: Vec<Rect> = (0..15).map(|i| h.app.drop_targets.iter().find(|(_, k)| *k == i).expect("touche présente").0).collect();
+        let rects: Vec<Rect> = (0..15)
+            .map(|i| {
+                h.app
+                    .drop_targets
+                    .iter()
+                    .find(|(_, k)| *k == i)
+                    .expect("touche présente")
+                    .0
+            })
+            .collect();
         let w = rects[0].width();
         for (i, r) in rects.iter().enumerate() {
-            assert!(r.min.x >= 0.0 && r.max.x <= size.x && r.min.y >= 0.0 && r.max.y <= size.y, "{name} : touche {i} visible {r:?}");
-            assert!((r.width() / r.height() - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y).abs() < 0.01, "{name} : face aux proportions du SVG");
+            assert!(
+                r.min.x >= 0.0 && r.max.x <= size.x && r.min.y >= 0.0 && r.max.y <= size.y,
+                "{name} : touche {i} visible {r:?}"
+            );
+            assert!(
+                (r.width() / r.height()
+                    - crate::deck_chassis::FACE_SIZE.x / crate::deck_chassis::FACE_SIZE.y)
+                    .abs()
+                    < 0.01,
+                "{name} : face aux proportions du SVG"
+            );
             let (col, row) = ((i % 5) as f32, (i / 5) as f32);
-            let expected = rects[0].min + vec2(248.0 * col, 232.0 * row) * (w / crate::deck_chassis::FACE_SIZE.x);
-            assert!((r.min - expected).length() < 0.6, "{name} : touche {i} alignée sur son emplacement ({r:?} / {expected:?})");
+            let expected = rects[0].min
+                + vec2(248.0 * col, 232.0 * row) * (w / crate::deck_chassis::FACE_SIZE.x);
+            assert!(
+                (r.min - expected).length() < 0.6,
+                "{name} : touche {i} alignée sur son emplacement ({r:?} / {expected:?})"
+            );
         }
         assert!(w >= 40.0, "{name} : touches assez grandes ({w})");
         let loaded = crate::deck_chassis::textures_loaded(&h.ctx);
-        for _ in 0..20 { h.frame(size, vec![]); }
-        assert!(loaded <= 2 && crate::deck_chassis::textures_loaded(&h.ctx) == loaded, "{name} : châssis jamais rendu de nouveau image après image");
+        for _ in 0..20 {
+            h.frame(size, vec![]);
+        }
+        assert!(
+            loaded <= 2 && crate::deck_chassis::textures_loaded(&h.ctx) == loaded,
+            "{name} : châssis jamais rendu de nouveau image après image"
+        );
         // Clic et sélection inchangés.
         h.click(size, rects[12].center());
         assert_eq!(h.app.selected, 12, "{name} : clic sur la touche 13");
-        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
             std::fs::create_dir_all(&dir).unwrap();
             let out = h.warm(size);
             h.png(size, out, &PathBuf::from(&dir).join(format!("{name}.png")));
@@ -2332,29 +3307,44 @@ fn flicker_ui_start_mouse_transition_stop_writes_real_trace() {
     h.app.settings = true;
     h.app.settings_tab = 2;
     let open = h.warm(size);
-    let button = text_position(&open.shapes, "Démarrer le diagnostic (90 s max)").expect("diagnostic button visible in settings");
+    let button = text_position(&open.shapes, "Démarrer le diagnostic (90 s max)")
+        .expect("diagnostic button visible in settings");
     h.click(size, button);
     let path = h.app.flicker_path.clone().expect("button starts trace");
     h.app.settings = false;
     h.frame(size, vec![]);
     let preview = h.app.diagnostic_deck.expect("preview measured").center();
-    let inspector = h.app.diagnostic_inspector.expect("inspector measured").center();
+    let inspector = h
+        .app
+        .diagnostic_inspector
+        .expect("inspector measured")
+        .center();
     h.frame(size, vec![Input::PointerMoved(preview)]);
     h.frame(size, vec![Input::PointerMoved(inspector)]);
     h.app.flicker.as_ref().unwrap().stop();
-    let deadline=Instant::now()+Duration::from_secs(4);
-    let text=loop {
-        let text=std::fs::read_to_string(&path).unwrap();
-        if text.lines().any(|s|s.contains("\"kind\":\"stop\"")) {break text;}
-        assert!(Instant::now()<deadline,"trace not flushed");
+    let deadline = Instant::now() + Duration::from_secs(4);
+    let text = loop {
+        let text = std::fs::read_to_string(&path).unwrap();
+        if text.lines().any(|s| s.contains("\"kind\":\"stop\"")) {
+            break text;
+        }
+        assert!(Instant::now() < deadline, "trace not flushed");
         std::thread::sleep(Duration::from_millis(20));
     };
-    let entries:Vec<serde_json::Value>=text.lines().map(|s|serde_json::from_str(s).unwrap()).collect();
-    assert!(entries.iter().any(|v|v["zone"]=="preview"));
-    assert!(entries.iter().any(|v|v["zone"]=="inspector"));
-    assert!(entries.iter().any(|v|v["metrics"]["preview_rect"].is_array() && v["metrics"]["inspector_rect"].is_array()));
-    assert!(text.len()<6*1024*1024);
-    if let Some(out)=std::env::var_os("DECKFORGE_FLICKER_TEST_OUTPUT") {std::fs::copy(path,out).unwrap();}
+    let entries: Vec<serde_json::Value> = text
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    assert!(entries.iter().any(|v| v["zone"] == "preview"));
+    assert!(entries.iter().any(|v| v["zone"] == "inspector"));
+    assert!(entries
+        .iter()
+        .any(|v| v["metrics"]["preview_rect"].is_array()
+            && v["metrics"]["inspector_rect"].is_array()));
+    assert!(text.len() < 6 * 1024 * 1024);
+    if let Some(out) = std::env::var_os("DECKFORGE_FLICKER_TEST_OUTPUT") {
+        std::fs::copy(path, out).unwrap();
+    }
 }
 
 #[test]
@@ -2362,8 +3352,14 @@ fn visible_chassis_brand_is_novydeck() {
     let size = vec2(1380.0, 900.0);
     let mut h = Harness::new();
     let out = h.warm(size);
-    assert!(text_position(&out.shapes, "NOVYDECK").is_some(), "marque NOVYDECK visible sur le châssis");
-    assert!(text_position(&out.shapes, "DECKFORGE").is_none(), "ancienne marque DECKFORGE absente du châssis");
+    assert!(
+        text_position(&out.shapes, "NOVYDECK").is_some(),
+        "marque NOVYDECK visible sur le châssis"
+    );
+    assert!(
+        text_position(&out.shapes, "DECKFORGE").is_none(),
+        "ancienne marque DECKFORGE absente du châssis"
+    );
 }
 
 #[test]
@@ -2373,16 +3369,26 @@ fn about_dialog_shows_cargo_version_without_network() {
     h.app.show_about = true;
     let output = h.warm(size);
     assert!(text_position(&output.shapes, "À propos de NovyDeck").is_some());
-    assert!(text_position(&output.shapes, &format!("Version : {}", env!("CARGO_PKG_VERSION"))).is_some());
+    assert!(text_position(
+        &output.shapes,
+        &format!("Version : {}", env!("CARGO_PKG_VERSION"))
+    )
+    .is_some());
     assert!(text_position(&output.shapes, "Vérifier les mises à jour").is_some());
     assert!(h.app.update_rx.is_none());
 }
 
 #[test]
 fn inspector_dpi_keeps_keys_and_primary_actions_visible_without_button_overlap() {
-    for physical in [vec2(1920.0, 1080.0), vec2(1366.0, 768.0), vec2(1060.0, 720.0)] {
+    for physical in [
+        vec2(1920.0, 1080.0),
+        vec2(1366.0, 768.0),
+        vec2(1060.0, 720.0),
+    ] {
         for scale in [1.0_f32, 1.25, 1.5] {
-            if (physical.x < 1300.0) != (scale == 1.0) { continue; }
+            if (physical.x < 1300.0) != (scale == 1.0) {
+                continue;
+            }
             let size = physical / scale;
             let mut h = Harness::new();
             h.ctx.set_pixels_per_point(scale);
@@ -2390,25 +3396,49 @@ fn inspector_dpi_keeps_keys_and_primary_actions_visible_without_button_overlap()
             assert_eq!(h.app.drop_targets.len(), 15, "{physical:?} @ {scale}");
             eprintln!("physical={physical:?} scale={scale} logical={size:?} screen={:?} last={:?} insp={:?} first={:?}", h.ctx.screen_rect(), h.app.drop_targets[14].0, egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("key_inspector")).map(|s| s.rect), h.app.drop_targets[0].0);
             for (r, index) in &h.app.drop_targets {
-                assert!(r.min.x >= 0.0 && r.min.y >= 0.0 && r.max.x <= size.x && r.max.y <= size.y,
-                    "Key {} clipped at {physical:?} @ {scale}: {r:?}", index + 1);
+                assert!(
+                    r.min.x >= 0.0 && r.min.y >= 0.0 && r.max.x <= size.x && r.max.y <= size.y,
+                    "Key {} clipped at {physical:?} @ {scale}: {r:?}",
+                    index + 1
+                );
                 // Faces aux proportions du châssis SVG (202 × 190) : 40 × 38 points minimum (50 × 48 px à 125 %).
-                assert!(r.width() >= 40.0 && r.height() >= 37.5, "{physical:?} @ {scale}: key {index} {r:?}");
+                assert!(
+                    r.width() >= 40.0 && r.height() >= 37.5,
+                    "{physical:?} @ {scale}: key {index} {r:?}"
+                );
             }
             for name in ["Simuler", "Tester pour de vrai", "Atelier de blocs"] {
-                assert!(text_position(&output.shapes, name).is_some(), "{name} hidden at {physical:?} @ {scale}");
+                assert!(
+                    text_position(&output.shapes, name).is_some(),
+                    "{name} hidden at {physical:?} @ {scale}"
+                );
             }
-            let buttons: Vec<Rect> = h.ctx.data(|d| d.get_temp(egui::Id::new("inspector_button_rects"))).unwrap();
+            let buttons: Vec<Rect> = h
+                .ctx
+                .data(|d| d.get_temp(egui::Id::new("inspector_button_rects")))
+                .unwrap();
             assert_eq!(buttons.len(), 3);
-            if let Some(toggle) = h.ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("inspector_press_toggle"))) {
+            if let Some(toggle) = h
+                .ctx
+                .data(|d| d.get_temp::<Rect>(egui::Id::new("inspector_press_toggle")))
+            {
                 for b in &buttons {
-                    assert!(!toggle.intersects(*b), "« Appui court » recouvert à {physical:?} @ {scale}: {toggle:?} {b:?}");
+                    assert!(
+                        !toggle.intersects(*b),
+                        "« Appui court » recouvert à {physical:?} @ {scale}: {toggle:?} {b:?}"
+                    );
                 }
             }
             for (i, a) in buttons.iter().enumerate() {
-                assert!(a.min.x >= 0.0 && a.max.x <= size.x && a.min.y >= 0.0 && a.max.y <= size.y, "button clipped: {a:?}");
+                assert!(
+                    a.min.x >= 0.0 && a.max.x <= size.x && a.min.y >= 0.0 && a.max.y <= size.y,
+                    "button clipped: {a:?}"
+                );
                 for b in buttons.iter().skip(i + 1) {
-                    assert!(!a.intersects(*b), "inspector buttons overlap at {physical:?} @ {scale}: {a:?} {b:?}");
+                    assert!(
+                        !a.intersects(*b),
+                        "inspector buttons overlap at {physical:?} @ {scale}: {a:?} {b:?}"
+                    );
                 }
             }
         }
@@ -2418,11 +3448,18 @@ fn inspector_dpi_keeps_keys_and_primary_actions_visible_without_button_overlap()
 #[test]
 fn inspector_recrop_button_stays_visible_under_the_key_preview() {
     // Retour utilisateur : « Recadrer » était coupé par le bas du panneau sous « Changer l'icône ».
-    fn visible(shapes: &[egui::epaint::ClippedShape], label: &str) -> Option<(egui::Rect, egui::Rect)> {
+    fn visible(
+        shapes: &[egui::epaint::ClippedShape],
+        label: &str,
+    ) -> Option<(egui::Rect, egui::Rect)> {
         fn find(shape: &egui::Shape, label: &str) -> Option<egui::Rect> {
             match shape {
                 egui::Shape::Text(t) if t.galley.job.text == label => {
-                    assert_eq!(t.galley.rows.len(), 1, "{label} ne doit pas passer sur deux lignes");
+                    assert_eq!(
+                        t.galley.rows.len(),
+                        1,
+                        "{label} ne doit pas passer sur deux lignes"
+                    );
                     // Le cadre du bouton dépasse le texte du rembourrage vertical (4 px).
                     Some(egui::Rect::from_min_size(t.pos, t.galley.size()).expand2(vec2(0.0, 4.0)))
                 }
@@ -2430,25 +3467,43 @@ fn inspector_recrop_button_stays_visible_under_the_key_preview() {
                 _ => None,
             }
         }
-        shapes.iter().find_map(|s| find(&s.shape, label).map(|r| (r, s.clip_rect)))
+        shapes
+            .iter()
+            .find_map(|s| find(&s.shape, label).map(|r| (r, s.clip_rect)))
     }
     let mut checked = 0;
     for height in [700.0, 760.0, 820.0, 900.0, 1000.0, 1100.0] {
         let size = vec2(1600.0, height);
         let mut h = demo_harness();
-        h.app.selected = h.app.config.keys().iter().position(|k| k.label == "Photo").expect("touche Photo du profil de démonstration");
-        h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+        h.app.selected = h
+            .app
+            .config
+            .keys()
+            .iter()
+            .position(|k| k.label == "Photo")
+            .expect("touche Photo du profil de démonstration");
+        h.ctx
+            .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
         let out = settle(&mut h, size);
         // Panneau trop bas : l'aperçu seul est affiché, sans boutons (comportement voulu).
-        if visible(&out.shapes, "Changer l'icône").is_none() { continue; }
+        if visible(&out.shapes, "Changer l'icône").is_none() {
+            continue;
+        }
         checked += 1;
         for label in ["Changer l'icône", "Recadrer"] {
             // egui ne peint pas un bouton hors de la zone visible : absent = coupé.
-            let (rect, clip) = visible(&out.shapes, label).unwrap_or_else(|| panic!("{label} invisible (coupé) à la hauteur {height}"));
-            assert!(clip.contains_rect(rect), "{label} coupé à la hauteur {height} : {rect:?} hors de {clip:?}");
+            let (rect, clip) = visible(&out.shapes, label)
+                .unwrap_or_else(|| panic!("{label} invisible (coupé) à la hauteur {height}"));
+            assert!(
+                clip.contains_rect(rect),
+                "{label} coupé à la hauteur {height} : {rect:?} hors de {clip:?}"
+            );
         }
     }
-    assert!(checked >= 2, "les boutons de l'aperçu doivent apparaître pour au moins deux hauteurs de fenêtre");
+    assert!(
+        checked >= 2,
+        "les boutons de l'aperçu doivent apparaître pour au moins deux hauteurs de fenêtre"
+    );
 }
 
 #[test]
@@ -2456,10 +3511,17 @@ fn community_library_waits_for_consent_below_local_plugins() {
     let mut h = Harness::new();
     h.app.catalog_tab = 3;
     let out = h.warm(vec2(1180.0, 800.0));
-    let installed = text_position(&out.shapes, "Installés dans NovyDeck").expect("inventaire local visible");
+    let installed =
+        text_position(&out.shapes, "Installés dans NovyDeck").expect("inventaire local visible");
     let store = text_position(&out.shapes, "Magasin de plugins").expect("bouton magasin présent");
-    assert!(store.y < installed.y, "le magasin doit précéder l'inventaire local");
-    assert!(text_position(&out.shapes, "Se connecter au magasin").is_none(), "aucune connexion avant ouverture du magasin");
+    assert!(
+        store.y < installed.y,
+        "le magasin doit précéder l'inventaire local"
+    );
+    assert!(
+        text_position(&out.shapes, "Se connecter au magasin").is_none(),
+        "aucune connexion avant ouverture du magasin"
+    );
 }
 
 #[test]
@@ -2470,8 +3532,14 @@ fn key_toggle_alternates_faces_without_touching_actions_or_existing_images() {
     key.steps = vec![Step::Delay { ms: 100 }];
     key.state_display = Some(crate::model::StateDisplay {
         toggle: true,
-        off: crate::model::StateFace { image: Some("off.png".into()), ..Default::default() },
-        on: crate::model::StateFace { image: Some("on.png".into()), ..Default::default() },
+        off: crate::model::StateFace {
+            image: Some("off.png".into()),
+            ..Default::default()
+        },
+        on: crate::model::StateFace {
+            image: Some("on.png".into()),
+            ..Default::default()
+        },
         ..Default::default()
     });
     h.app.config.keys_mut()[0] = key.clone();
@@ -2491,55 +3559,104 @@ fn key_toggle_alternates_faces_without_touching_actions_or_existing_images() {
 fn key_toggle_appearance_shows_two_image_controls() {
     let size = vec2(1600.0, 1000.0);
     for (lang, origin_label, mode, on, off, image_control, filename) in [
-        ("fr", "Titre sur la touche", "Interrupteur : change à chaque appui", "Activé", "Désactivé", "Choisir une image…", "key-toggle-fr.png"),
-        ("en", "Label on key", "Switch: change on each press", "On", "Off", "Choose an image…", "key-toggle-en.png"),
+        (
+            "fr",
+            "Titre sur la touche",
+            "Interrupteur : change à chaque appui",
+            "Activé",
+            "Désactivé",
+            "Choisir une image…",
+            "key-toggle-fr.png",
+        ),
+        (
+            "en",
+            "Label on key",
+            "Switch: change on each press",
+            "On",
+            "Off",
+            "Choose an image…",
+            "key-toggle-en.png",
+        ),
     ] {
-    let mut h = Harness::new();
-    crate::i18n::set_language(lang);
-    let on_path = h.dir.path().join("on.png");
-    let off_path = h.dir.path().join("off.png");
-    image::RgbaImage::from_pixel(144, 144, image::Rgba([30, 170, 90, 255])).save(&on_path).unwrap();
-    image::RgbaImage::from_pixel(144, 144, image::Rgba([180, 70, 45, 255])).save(&off_path).unwrap();
-    h.app.config.keys_mut()[0].state_display = Some(crate::model::StateDisplay {
-        toggle: true,
-        on: crate::model::StateFace { image: Some(on_path.to_string_lossy().into_owned()), ..Default::default() },
-        off: crate::model::StateFace { image: Some(off_path.to_string_lossy().into_owned()), ..Default::default() },
-        ..Default::default()
-    });
-    h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
-    let mut output = h.warm(size);
-    let origin = text_position(&output.shapes, origin_label).expect("onglet Apparence ouvert");
-    let cursor = pos2(origin.x + 85.0, origin.y + 90.0);
-    let mut seen_mode = false;
-    let mut seen_on = false;
-    let mut seen_off = false;
-    let mut seen_image_control = false;
-    let mut captured_on = false;
-    for _ in 0..40 {
-        seen_mode |= text_position(&output.shapes, mode).is_some();
-        seen_on |= text_position(&output.shapes, on).is_some();
-        seen_off |= text_position(&output.shapes, off).is_some();
-        seen_image_control |= text_position(&output.shapes, image_control).is_some();
-        if !captured_on && text_position(&output.shapes, on).is_some()
-            && text_position(&output.shapes, image_control).is_some() {
-            if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-                h.app.applied = h.app.config.clone();
-                h.app.toggle_key_face(0);
-                let frame = h.frame(size, vec![]);
-                h.png(size, frame, &PathBuf::from(dir).join(format!("key-toggle-on-{lang}.png")));
-                h.app.toggle_key_face(0);
+        let mut h = Harness::new();
+        crate::i18n::set_language(lang);
+        let on_path = h.dir.path().join("on.png");
+        let off_path = h.dir.path().join("off.png");
+        image::RgbaImage::from_pixel(144, 144, image::Rgba([30, 170, 90, 255]))
+            .save(&on_path)
+            .unwrap();
+        image::RgbaImage::from_pixel(144, 144, image::Rgba([180, 70, 45, 255]))
+            .save(&off_path)
+            .unwrap();
+        h.app.config.keys_mut()[0].state_display = Some(crate::model::StateDisplay {
+            toggle: true,
+            on: crate::model::StateFace {
+                image: Some(on_path.to_string_lossy().into_owned()),
+                ..Default::default()
+            },
+            off: crate::model::StateFace {
+                image: Some(off_path.to_string_lossy().into_owned()),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        h.ctx
+            .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+        let mut output = h.warm(size);
+        let origin = text_position(&output.shapes, origin_label).expect("onglet Apparence ouvert");
+        let cursor = pos2(origin.x + 85.0, origin.y + 90.0);
+        let mut seen_mode = false;
+        let mut seen_on = false;
+        let mut seen_off = false;
+        let mut seen_image_control = false;
+        let mut captured_on = false;
+        for _ in 0..40 {
+            seen_mode |= text_position(&output.shapes, mode).is_some();
+            seen_on |= text_position(&output.shapes, on).is_some();
+            seen_off |= text_position(&output.shapes, off).is_some();
+            seen_image_control |= text_position(&output.shapes, image_control).is_some();
+            if !captured_on
+                && text_position(&output.shapes, on).is_some()
+                && text_position(&output.shapes, image_control).is_some()
+            {
+                if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+                    .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+                {
+                    h.app.applied = h.app.config.clone();
+                    h.app.toggle_key_face(0);
+                    let frame = h.frame(size, vec![]);
+                    h.png(
+                        size,
+                        frame,
+                        &PathBuf::from(dir).join(format!("key-toggle-on-{lang}.png")),
+                    );
+                    h.app.toggle_key_face(0);
+                }
+                captured_on = true;
             }
-            captured_on = true;
+            if seen_mode && seen_on && seen_off && seen_image_control {
+                break;
+            }
+            output = h.frame(
+                size,
+                vec![
+                    Input::PointerMoved(cursor),
+                    Input::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0.0, -90.0),
+                        modifiers: Modifiers::NONE,
+                    },
+                ],
+            );
         }
-        if seen_mode && seen_on && seen_off && seen_image_control { break; }
-        output = h.frame(size, vec![Input::PointerMoved(cursor), Input::MouseWheel { unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, -90.0), modifiers: Modifiers::NONE }]);
-    }
-    assert!(seen_mode && seen_on && seen_off && seen_image_control,
+        assert!(seen_mode && seen_on && seen_off && seen_image_control,
         "mode={seen_mode}, activé={seen_on}, désactivé={seen_off}, image={seen_image_control}; textes visibles: {:?}",
         output.shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = &s.shape { Some(t.galley.job.text.clone()) } else { None }).take(80).collect::<Vec<_>>());
-    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT").or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT")) {
-        h.png(size, output, &PathBuf::from(dir).join(filename));
-    }
+        if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT")
+            .or_else(|| std::env::var_os("DECKFORGE_UI_OUTPUT"))
+        {
+            h.png(size, output, &PathBuf::from(dir).join(filename));
+        }
     }
     crate::i18n::set_language("fr");
 }
@@ -2558,20 +3675,38 @@ fn release_0812_review() {
     h.app.open_hardware_report();
     let report = h.app.hardware_report.as_ref().unwrap();
     let user = std::env::var("USERNAME").unwrap_or_default();
-    assert!(user.len() < 3 || !report.text.to_lowercase().contains(&user.to_lowercase()), "nom d'utilisateur présent dans le rapport");
+    assert!(
+        user.len() < 3 || !report.text.to_lowercase().contains(&user.to_lowercase()),
+        "nom d'utilisateur présent dans le rapport"
+    );
     std::fs::write(dir.join("report-preview.txt"), &report.text).unwrap();
     std::fs::write(dir.join("report-issue-url.txt"), &report.issue_url).unwrap();
     let out = settle(&mut h, size);
     h.png(size, out, &dir.join("report-window.png"));
     let mut h = demo_harness();
-    h.app.selected = h.app.config.keys().iter().position(|k| k.label == "Photo").unwrap();
-    h.ctx.data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
+    h.app.selected = h
+        .app
+        .config
+        .keys()
+        .iter()
+        .position(|k| k.label == "Photo")
+        .unwrap();
+    h.ctx
+        .data_mut(|d| d.insert_persisted(egui::Id::new("inspector_tab"), 1u8));
     let out = settle(&mut h, vec2(1600.0, 820.0));
-    h.png(vec2(1600.0, 820.0), out, &dir.join("inspector-recrop-820.png"));
+    h.png(
+        vec2(1600.0, 820.0),
+        out,
+        &dir.join("inspector-recrop-820.png"),
+    );
     let mut h = Harness::new();
     h.app.catalog_tab = 3;
     let out = h.warm(vec2(1180.0, 2400.0));
-    h.png(vec2(1180.0, 2400.0), out, &dir.join("plugins-community.png"));
+    h.png(
+        vec2(1180.0, 2400.0),
+        out,
+        &dir.join("plugins-community.png"),
+    );
 }
 
 #[test]
@@ -2595,13 +3730,30 @@ fn update_offer_widgets_follow_installation_mode_without_network() {
         assert!(text_position(&output.shapes, "Nouvelle version v0.8.14 disponible").is_some());
         assert!(text_position(&output.shapes, "Voir la mise à jour").is_some());
         assert!(text_position(&output.shapes, "Mettre à jour maintenant").is_none());
-        assert!(text_position(&output.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_none());
+        assert!(text_position(
+            &output.shapes,
+            "Version portable : téléchargez le ZIP depuis la page des nouveautés"
+        )
+        .is_none());
         let pos = text_position(&output.shapes, "Voir la mise à jour").unwrap();
         h.click(size, pos);
-        assert_eq!(h.app.startup_offer.as_ref().map(|l| l.version.as_str()), Some("v0.8.14"));
+        assert_eq!(
+            h.app.startup_offer.as_ref().map(|l| l.version.as_str()),
+            Some("v0.8.14")
+        );
         let offer = h.warm(size);
-        assert_eq!(text_position(&offer.shapes, "Mettre à jour maintenant").is_some(), installed);
-        assert_eq!(text_position(&offer.shapes, "Version portable : téléchargez le ZIP depuis la page des nouveautés").is_some(), !installed);
+        assert_eq!(
+            text_position(&offer.shapes, "Mettre à jour maintenant").is_some(),
+            installed
+        );
+        assert_eq!(
+            text_position(
+                &offer.shapes,
+                "Version portable : téléchargez le ZIP depuis la page des nouveautés"
+            )
+            .is_some(),
+            !installed
+        );
         assert!(h.app.update_rx.is_none());
     }
 }
@@ -2611,17 +3763,34 @@ fn audio_switch_can_be_dropped_before_choosing_its_devices() {
     // Retour utilisateur : « Affectation refusée : Choisis deux périphériques audio différents »
     // en glissant l'action sur une touche, alors que les périphériques se règlent ensuite.
     let mut h = Harness::new();
-    h.app.assign(DragItem::Action(catalog::action(13, "Bureau")), 6);
-    assert!(matches!(&h.app.config.keys()[6].steps[..], [Step::AudioSwitch { first, second, .. }] if first.is_empty() && second.is_empty()),
-        "la touche doit recevoir l'action audio à configurer : {}", h.app.notice);
-    assert!(h.app.notice.contains("Choisis maintenant les deux périphériques audio"), "{}", h.app.notice);
+    h.app
+        .assign(DragItem::Action(catalog::action(13, "Bureau")), 6);
+    assert!(
+        matches!(&h.app.config.keys()[6].steps[..], [Step::AudioSwitch { first, second, .. }] if first.is_empty() && second.is_empty()),
+        "la touche doit recevoir l'action audio à configurer : {}",
+        h.app.notice
+    );
+    assert!(
+        h.app
+            .notice
+            .contains("Choisis maintenant les deux périphériques audio"),
+        "{}",
+        h.app.notice
+    );
     // Les deux mêmes périphériques restent refusés une fois choisis.
     let mut same = catalog::action(13, "Bureau");
-    if let Step::AudioSwitch { first, second, .. } = &mut same.steps[0] { *first = "casque".into(); *second = "casque".into(); }
+    if let Step::AudioSwitch { first, second, .. } = &mut same.steps[0] {
+        *first = "casque".into();
+        *second = "casque".into();
+    }
     let before = h.app.config.keys()[7].clone();
     h.app.assign(DragItem::Action(same), 7);
     assert_eq!(h.app.config.keys()[7].steps, before.steps);
-    assert!(h.app.notice.contains("deux périphériques audio différents"), "{}", h.app.notice);
+    assert!(
+        h.app.notice.contains("deux périphériques audio différents"),
+        "{}",
+        h.app.notice
+    );
 }
 
 #[test]
@@ -2634,8 +3803,14 @@ fn english_main_window_uses_translated_labels() {
         ("Search for an action…", "Rechercher une action…"),
         ("Settings", "Réglages"),
     ] {
-        assert!(text_position(&output.shapes, english).is_some(), "missing {english}");
-        assert!(text_position(&output.shapes, french).is_none(), "still French: {french}");
+        assert!(
+            text_position(&output.shapes, english).is_some(),
+            "missing {english}"
+        );
+        assert!(
+            text_position(&output.shapes, french).is_none(),
+            "still French: {french}"
+        );
     }
 }
 
@@ -2686,7 +3861,10 @@ fn whats_new_is_only_for_existing_installations_with_new_notes() {
     assert!(text_position(&shown.shapes, "Changement après mise à jour").is_some());
     let acknowledge = text_position(&shown.shapes, "C'est parti").unwrap();
     h.click(size, acknowledge);
-    assert_eq!(h.app.preferences.last_seen_version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        h.app.preferences.last_seen_version,
+        env!("CARGO_PKG_VERSION")
+    );
     assert!(!h.app.whats_new);
     assert!(text_position(&h.warm(size).shapes, &title).is_none());
 }
@@ -2695,36 +3873,74 @@ fn whats_new_is_only_for_existing_installations_with_new_notes() {
 fn plugin_action_two_virtual_contexts_execute_and_persist() {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
-    let plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     let action = plugin.actions[0].uuid.clone();
     h.app.config.keys_mut()[0].steps = vec![
-        Step::PluginAction { plugin: plugin.uuid.clone(), action: action.clone(), settings: serde_json::json!({}), label: "Compteur A".into() },
+        Step::PluginAction {
+            plugin: plugin.uuid.clone(),
+            action: action.clone(),
+            settings: serde_json::json!({}),
+            label: "Compteur A".into(),
+        },
         Step::Delay { ms: 100 },
-        Step::PluginAction { plugin: plugin.uuid.clone(), action: action.clone(), settings: serde_json::json!({"count":1}), label: "Compteur B".into() },
+        Step::PluginAction {
+            plugin: plugin.uuid.clone(),
+            action: action.clone(),
+            settings: serde_json::json!({"count":1}),
+            label: "Compteur B".into(),
+        },
     ];
     h.app.applied = h.app.config.clone();
     h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![plugin]));
     h.app.plugins.as_mut().unwrap().sync(&h.app.applied);
-    let identity = crate::engine::identity(&h.app.config.profiles[h.app.config.active].name, &h.app.config.page, 0);
-    assert_eq!(crate::plugin_runtime::virtual_step_path(&h.app.applied, &crate::plugin_runtime::virtual_context(&identity, &[0])), Some((0, vec![0])));
+    let identity = crate::engine::identity(
+        &h.app.config.profiles[h.app.config.active].name,
+        &h.app.config.page,
+        0,
+    );
+    assert_eq!(
+        crate::plugin_runtime::virtual_step_path(
+            &h.app.applied,
+            &crate::plugin_runtime::virtual_context(&identity, &[0])
+        ),
+        Some((0, vec![0]))
+    );
     h.app.start_workshop_run(false);
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         h.app.events();
         h.app.plugin_events();
         let steps = &h.app.config.keys()[0].steps;
-        let counts = [0, 2].map(|i| match &steps[i] { Step::PluginAction { settings, .. } => settings["count"].as_i64(), _ => None });
-        if counts == [Some(1), Some(2)] { break; }
+        let counts = [0, 2].map(|i| match &steps[i] {
+            Step::PluginAction { settings, .. } => settings["count"].as_i64(),
+            _ => None,
+        });
+        if counts == [Some(1), Some(2)] {
+            break;
+        }
         assert!(Instant::now() < deadline, "PluginAction settings timeout: {counts:?}, errors: {:?}, journal: {:?}, error: {:?}, running: {}", h.app.plugin_errors, h.app.workshop_journal.lines.iter().map(|l| &l.message).collect::<Vec<_>>(), h.app.workshop_journal.error, h.app.engine.running.load(std::sync::atomic::Ordering::SeqCst));
         std::thread::sleep(Duration::from_millis(10));
     }
     h.app.flush_plugin_save(Instant::now(), true); // F-01 : sauvegarde regroupée, forcée avant relecture.
     let saved = crate::store::load(&h.dir.path().join("config.json")).unwrap();
     for (i, count) in [(0, 1), (2, 2)] {
-        assert!(matches!(&saved.keys()[0].steps[i], Step::PluginAction { settings, .. } if settings["count"] == count));
+        assert!(
+            matches!(&saved.keys()[0].steps[i], Step::PluginAction { settings, .. } if settings["count"] == count)
+        );
     }
-    let id = crate::engine::identity(&h.app.config.profiles[h.app.config.active].name, &h.app.config.page, 0);
-    assert_ne!(crate::plugin_runtime::virtual_context(&id, &[0]), crate::plugin_runtime::virtual_context(&id, &[2]));
+    let id = crate::engine::identity(
+        &h.app.config.profiles[h.app.config.active].name,
+        &h.app.config.page,
+        0,
+    );
+    assert_ne!(
+        crate::plugin_runtime::virtual_context(&id, &[0]),
+        crate::plugin_runtime::virtual_context(&id, &[2])
+    );
     assert!(h.app.plugin_errors.is_empty(), "{:?}", h.app.plugin_errors);
 }
 
@@ -2737,14 +3953,22 @@ fn startup_offer_shows_notes_and_installation_choice_without_network() {
     h.app.startup_prompts = true;
     h.app.update_installed = true;
     h.app.startup_offer = Some(crate::app_update::Latest {
-        version: "v0.8.16".into(), page: "https://github.com/HatiFlash/NovyDeck".into(),
-        setup_url: "https://github.com/x/setup.exe".into(), setup_size: 100,
+        version: "v0.8.16".into(),
+        page: "https://github.com/HatiFlash/NovyDeck".into(),
+        setup_url: "https://github.com/x/setup.exe".into(),
+        setup_size: 100,
         sha_url: "https://github.com/x/setup.sha256".into(),
         sig_url: "https://github.com/x/setup.sig".into(),
         notes: "## Français\n- Fonction nouvelle injectée".into(),
     });
     let shown = h.warm(size);
-    for label in ["Mise à jour disponible", "Fonction nouvelle injectée", "Mettre à jour maintenant", "Voir sur GitHub", "Plus tard"] {
+    for label in [
+        "Mise à jour disponible",
+        "Fonction nouvelle injectée",
+        "Mettre à jour maintenant",
+        "Voir sur GitHub",
+        "Plus tard",
+    ] {
         assert!(text_position(&shown.shapes, label).is_some(), "{label}");
     }
     assert!(h.app.startup_rx.is_none());
@@ -2753,41 +3977,56 @@ fn startup_offer_shows_notes_and_installation_choice_without_network() {
 #[test]
 fn market_opens_offline_and_displays_localized_detail() {
     use super::plugin_store_ui::community_state;
-    let mut h=Harness::new();
-    h.app.catalog_tab=3;
-    let size=vec2(1366.0,768.0);
+    let mut h = Harness::new();
+    h.app.catalog_tab = 3;
+    let size = vec2(1366.0, 768.0);
     let mut fixture=crate::community_plugins::parse(&serde_json::to_vec(&serde_json::json!({"schema":1,"plugins":[{"id":"com.example.test","uuid":"com.example.test","name":"Plugin témoin","author":"Alice","version":"1.0","description":"English details","description_fr":"Description française","summary":"English summary","summary_fr":"Résumé français","category":"audio","homepage":"https://example.org/","download":"https://example.org/test.zip","sha256":"a".repeat(64),"license":"MIT","tested_decks":[],"min_novydeck":"0.8.12","icon":"https://example.org/icon.png","screenshots":["https://example.org/shot.png"]}]})).unwrap()).unwrap();
-    fixture[0].compatible=true;
-    let first=h.warm(size);
-    let store=text_position(&first.shapes,"Magasin de plugins").unwrap();
-    let installed=text_position(&first.shapes,"Installés dans NovyDeck").unwrap();
-    assert!(store.y<installed.y);
-    h.click(size,store);
-    let waiting=h.warm(size);
-    assert!(text_position(&waiting.shapes,"Se connecter au magasin").is_some());
-    assert!(text_position(&waiting.shapes,"Plugin témoin").is_none());
+    fixture[0].compatible = true;
+    let first = h.warm(size);
+    let store = text_position(&first.shapes, "Magasin de plugins").unwrap();
+    let installed = text_position(&first.shapes, "Installés dans NovyDeck").unwrap();
+    assert!(store.y < installed.y);
+    h.click(size, store);
+    let waiting = h.warm(size);
+    assert!(text_position(&waiting.shapes, "Se connecter au magasin").is_some());
+    assert!(text_position(&waiting.shapes, "Plugin témoin").is_none());
     {
-        let mut state=community_state().lock().unwrap();
-        state.consent=true;
-        state.entries=fixture;
+        let mut state = community_state().lock().unwrap();
+        state.consent = true;
+        state.entries = fixture;
     }
-    super::plugin_market_ui::test_image(&h.ctx,"https://example.org/icon.png");
-    super::plugin_market_ui::test_image(&h.ctx,"https://example.org/shot.png");
-    let grid=h.warm(size);
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") { h.png(size,grid.clone(),&PathBuf::from(dir).join("market-grid.png")); }
-    assert!(text_position(&grid.shapes,"Plugin témoin").is_some());
-    let details=text_position(&grid.shapes,"Voir la fiche").unwrap();
-    h.click(size,details);
-    let detail=h.warm(size);
-    if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") { h.png(size,detail.clone(),&PathBuf::from(dir).join("market-detail.png")); }
-    for text in ["Description française","Installer","Captures"] {assert!(text_position(&detail.shapes,text).is_some(),"{text}");}
+    super::plugin_market_ui::test_image(&h.ctx, "https://example.org/icon.png");
+    super::plugin_market_ui::test_image(&h.ctx, "https://example.org/shot.png");
+    let grid = h.warm(size);
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(
+            size,
+            grid.clone(),
+            &PathBuf::from(dir).join("market-grid.png"),
+        );
+    }
+    assert!(text_position(&grid.shapes, "Plugin témoin").is_some());
+    let details = text_position(&grid.shapes, "Voir la fiche").unwrap();
+    h.click(size, details);
+    let detail = h.warm(size);
+    if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+        h.png(
+            size,
+            detail.clone(),
+            &PathBuf::from(dir).join("market-detail.png"),
+        );
+    }
+    for text in ["Description française", "Installer", "Captures"] {
+        assert!(text_position(&detail.shapes, text).is_some(), "{text}");
+    }
     crate::i18n::set_language("en");
-    let english=h.warm(size);
-    assert!(text_position(&english.shapes,"English details").is_some());
+    let english = h.warm(size);
+    assert!(text_position(&english.shapes, "English details").is_some());
     crate::i18n::set_language("fr");
     {
-        let mut state=community_state().lock().unwrap();
-        state.consent=false;state.entries.clear();
+        let mut state = community_state().lock().unwrap();
+        state.consent = false;
+        state.entries.clear();
     }
     super::plugin_market_ui::test_close();
 }
@@ -2796,29 +4035,66 @@ fn market_opens_offline_and_displays_localized_detail() {
 fn plugin_action_two_installed_plugins_run_in_sequence() {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
-    let first = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let first = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     let mut second = first.clone();
     second.uuid = "org.deckforge.counter.second".into();
     let action = first.actions[0].uuid.clone();
     h.app.config.keys_mut()[0].steps = vec![
-        Step::PluginAction { plugin: first.uuid.clone(), action: action.clone(), settings: serde_json::json!({}), label: "Premier".into() },
+        Step::PluginAction {
+            plugin: first.uuid.clone(),
+            action: action.clone(),
+            settings: serde_json::json!({}),
+            label: "Premier".into(),
+        },
         Step::Delay { ms: 150 },
-        Step::PluginAction { plugin: second.uuid.clone(), action, settings: serde_json::json!({}), label: "Second".into() },
+        Step::PluginAction {
+            plugin: second.uuid.clone(),
+            action,
+            settings: serde_json::json!({}),
+            label: "Second".into(),
+        },
     ];
     h.app.applied = h.app.config.clone();
     h.app.plugins = Some(crate::plugin_runtime::Manager::new(vec![first, second]));
     h.app.plugins.as_mut().unwrap().sync(&h.app.applied);
-    let identity = crate::engine::identity(&h.app.config.profiles[h.app.config.active].name, &h.app.config.page, 0);
-    assert_eq!(crate::plugin_runtime::virtual_step_path(&h.app.applied, &crate::plugin_runtime::virtual_context(&identity, &[0])), Some((0, vec![0])));
+    let identity = crate::engine::identity(
+        &h.app.config.profiles[h.app.config.active].name,
+        &h.app.config.page,
+        0,
+    );
+    assert_eq!(
+        crate::plugin_runtime::virtual_step_path(
+            &h.app.applied,
+            &crate::plugin_runtime::virtual_context(&identity, &[0])
+        ),
+        Some((0, vec![0]))
+    );
     h.app.start_workshop_run(false);
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut first_seen = false;
     loop {
-        h.app.events(); h.app.plugin_events();
-        let counts = [0, 2].map(|i| match &h.app.config.keys()[0].steps[i] { Step::PluginAction { settings, .. } => settings["count"].as_i64(), _ => None });
-        if counts[0] == Some(1) { first_seen = true; }
-        if counts[1] == Some(1) { assert!(first_seen, "second plugin responded before first"); break; }
-        assert!(Instant::now() < deadline, "Two-plugin timeout: {counts:?}, errors: {:?}", h.app.plugin_errors);
+        h.app.events();
+        h.app.plugin_events();
+        let counts = [0, 2].map(|i| match &h.app.config.keys()[0].steps[i] {
+            Step::PluginAction { settings, .. } => settings["count"].as_i64(),
+            _ => None,
+        });
+        if counts[0] == Some(1) {
+            first_seen = true;
+        }
+        if counts[1] == Some(1) {
+            assert!(first_seen, "second plugin responded before first");
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Two-plugin timeout: {counts:?}, errors: {:?}",
+            h.app.plugin_errors
+        );
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(h.app.plugin_errors.is_empty(), "{:?}", h.app.plugin_errors);
@@ -2828,7 +4104,11 @@ fn plugin_action_two_installed_plugins_run_in_sequence() {
 fn workshop_plugin_catalogue_adds_action_card_and_capture() {
     let mut h = Harness::new();
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
-    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let mut plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     plugin.name = "Atelier Témoin".into();
     plugin.actions[0].name = "Incrémenter".into();
     let expected = format!("{} › {}", plugin.display_name(), plugin.actions[0].name);
@@ -2840,59 +4120,107 @@ fn workshop_plugin_catalogue_adds_action_card_and_capture() {
     let category = text_position(&output.shapes, "Plugins").expect("plugin category");
     h.click(size, category);
     let output = h.warm(size);
-    let plugin_pos = text_position(&output.shapes, "Atelier Témoin").expect("installed plugin group");
+    let plugin_pos =
+        text_position(&output.shapes, "Atelier Témoin").expect("installed plugin group");
     h.click(size, plugin_pos);
     let output = h.warm(size);
-    let action_pos = text_position(&output.shapes, "Incrémenter").expect("installed action in palette");
+    let action_pos =
+        text_position(&output.shapes, "Incrémenter").expect("installed action in palette");
     h.click(size, action_pos);
     let output = h.warm(size);
-    assert!(matches!(&h.app.config.keys()[h.app.selected].steps[..], [Step::PluginAction { plugin: id, action, .. }] if id == &plugin.uuid && action == &plugin.actions[0].uuid));
-    assert!(text_position(&output.shapes, &expected).is_some(), "plugin/action card label");
+    assert!(
+        matches!(&h.app.config.keys()[h.app.selected].steps[..], [Step::PluginAction { plugin: id, action, .. }] if id == &plugin.uuid && action == &plugin.actions[0].uuid)
+    );
+    assert!(
+        text_position(&output.shapes, &expected).is_some(),
+        "plugin/action card label"
+    );
     if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
-        h.png(size, output, &PathBuf::from(dir).join("workshop-plugins.png"));
+        h.png(
+            size,
+            output,
+            &PathBuf::from(dir).join("workshop-plugins.png"),
+        );
     }
 }
 
-
 fn navigation_fixture(name: &str, id: &str, count: usize) -> crate::plugins::Plugin {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/counter.sdPlugin");
-    let mut plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+    let mut plugin = crate::plugins::parse(
+        &folder,
+        &std::fs::read(folder.join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     plugin.name = name.into();
     plugin.uuid = id.into();
     plugin.prerequisite = None;
     let action = plugin.actions[0].clone();
-    plugin.actions = (0..count).map(|i| {
-        let mut a = action.clone();
-        a.uuid = format!("{id}.action{i}");
-        a.name = if i == 0 { "Action partagée".into() } else if i + 1 == count { format!("ZZ action finale · {name}") } else { format!("Action {i:03}") };
-        a
-    }).collect();
+    plugin.actions = (0..count)
+        .map(|i| {
+            let mut a = action.clone();
+            a.uuid = format!("{id}.action{i}");
+            a.name = if i == 0 {
+                "Action partagée".into()
+            } else if i + 1 == count {
+                format!("ZZ action finale · {name}")
+            } else {
+                format!("Action {i:03}")
+            };
+            a
+        })
+        .collect();
     plugin
 }
 
-fn navigation_seek(h: &mut Harness, size: egui::Vec2, label: &str, at: egui::Pos2, delta: f32) -> egui::Pos2 {
+fn navigation_seek(
+    h: &mut Harness,
+    size: egui::Vec2,
+    label: &str,
+    at: egui::Pos2,
+    delta: f32,
+) -> egui::Pos2 {
     for _ in 0..80 {
         let output = h.warm(size);
         let mut scroll_delta = delta;
         if let Some(position) = text_position(&output.shapes, label) {
-            if let Some((bounds,clip)) = output.shapes.iter().find_map(|shape| {
+            if let Some((bounds, clip)) = output.shapes.iter().find_map(|shape| {
                 if let egui::Shape::Text(text) = &shape.shape {
                     let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
-                    if text.galley.job.text == label && bounds.center().distance(position) < 1.0 {return Some((bounds,shape.clip_rect));}
+                    if text.galley.job.text == label && bounds.center().distance(position) < 1.0 {
+                        return Some((bounds, shape.clip_rect));
+                    }
                 }
                 None
             }) {
-                if clip.expand(1.0).contains_rect(bounds) {return position;}
-                scroll_delta = if bounds.min.y < clip.min.y {24.0} else {-24.0};
+                if clip.expand(1.0).contains_rect(bounds) {
+                    return position;
+                }
+                scroll_delta = if bounds.min.y < clip.min.y {
+                    24.0
+                } else {
+                    -24.0
+                };
             }
         }
-        h.frame(size, vec![Input::PointerMoved(at), Input::MouseWheel {
-            unit: egui::MouseWheelUnit::Point, delta: vec2(0.0, scroll_delta), modifiers: Modifiers::NONE,
-        }]);
+        h.frame(
+            size,
+            vec![
+                Input::PointerMoved(at),
+                Input::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, scroll_delta),
+                    modifiers: Modifiers::NONE,
+                },
+            ],
+        );
     }
     let output = h.warm(size);
     if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
-        h.png(size, output, &PathBuf::from(out).join("navigation-unreachable.png"));
+        h.png(
+            size,
+            output,
+            &PathBuf::from(out).join("navigation-unreachable.png"),
+        );
     }
     panic!("Contrôle inaccessible après défilement réel : {label}");
 }
@@ -2904,9 +4232,11 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         crate::i18n::set_language("fr");
         h.ctx.set_pixels_per_point(dpi);
         let size = physical / dpi;
-        let mut plugins = vec![navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
+        let mut plugins = vec![
+            navigation_fixture("A · Beaucoup d'actions", "test.navigation.a", 55),
             navigation_fixture("B · Autre plugin", "test.navigation.b", 2),
-            navigation_fixture("Z · Dernier plugin", "test.navigation.z", 55)];
+            navigation_fixture("Z · Dernier plugin", "test.navigation.z", 55),
+        ];
         plugins[2].actions.last_mut().unwrap().name = "ZZ action finale · Z · Dernier plugin · un intitulé suffisamment long pour vérifier la largeur réelle de la palette".into();
         let last = plugins[2].clone();
         let expected_action = last.actions.last().unwrap().uuid.clone();
@@ -2916,16 +4246,32 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         let untouched = serde_json::to_value(&h.app.config.keys()[1]).unwrap();
         h.app.show_workflow = true;
         h.warm(size);
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_palette_open"), true));
         h.warm(size);
-        let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_library")).expect("palette visible").rect;
+        let panel =
+            egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("workshop_library"))
+                .expect("palette visible")
+                .rect;
         let category = navigation_seek(&mut h, size, "Plugins", panel.center(), -90.0);
         h.click(size, category);
-        let first = navigation_seek(&mut h, size, "A · Beaucoup d'actions", panel.center(), -90.0);
+        let first = navigation_seek(
+            &mut h,
+            size,
+            "A · Beaucoup d'actions",
+            panel.center(),
+            -90.0,
+        );
         h.click(size, first);
         let last_header = navigation_seek(&mut h, size, "Z · Dernier plugin", first, -90.0);
         h.click(size, last_header);
-        let action = navigation_seek(&mut h, size, &last.actions.last().unwrap().name, last_header, -90.0);
+        let action = navigation_seek(
+            &mut h,
+            size,
+            &last.actions.last().unwrap().name,
+            last_header,
+            -90.0,
+        );
         let output = h.warm(size);
         for shape in &output.shapes {
             if let egui::Shape::Text(text) = &shape.shape {
@@ -2938,11 +4284,25 @@ fn workshop_plugin_navigation_scrolls_to_last_action_at_hidpi() {
         h.click(size, action);
         let output = h.warm(size);
         if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
-            h.png(size, output, &PathBuf::from(out).join(format!("navigation-last-{}-{}.png", physical.x as u32, (dpi * 100.0) as u32)));
+            h.png(
+                size,
+                output,
+                &PathBuf::from(out).join(format!(
+                    "navigation-last-{}-{}.png",
+                    physical.x as u32,
+                    (dpi * 100.0) as u32
+                )),
+            );
         }
-        assert!(matches!(&h.app.config.keys()[0].steps[..], [Step::PluginAction { plugin, action, settings, .. }]
-            if plugin == &last.uuid && action == &expected_action && settings == &serde_json::json!({})), "la dernière action doit être réellement affectée au bon plugin");
-        assert_eq!(serde_json::to_value(&h.app.config.keys()[1]).unwrap(), untouched);
+        assert!(
+            matches!(&h.app.config.keys()[0].steps[..], [Step::PluginAction { plugin, action, settings, .. }]
+            if plugin == &last.uuid && action == &expected_action && settings == &serde_json::json!({})),
+            "la dernière action doit être réellement affectée au bon plugin"
+        );
+        assert_eq!(
+            serde_json::to_value(&h.app.config.keys()[1]).unwrap(),
+            untouched
+        );
     }
 }
 
@@ -2961,10 +4321,18 @@ fn key_actions_add_menu_scrolls_to_last_action_at_hidpi() {
         let last = crate::automation::NAMES.last().unwrap();
         let at = pos2(add.x + 30.0, (add.y + 110.0).min(size.y - 30.0));
         let last_pos = navigation_seek(&mut h, size, last, at, -80.0);
-        assert!(last_pos.x >= 0.0 && last_pos.y <= size.y, "action hors écran : {last_pos:?}");
+        assert!(
+            last_pos.x >= 0.0 && last_pos.y <= size.y,
+            "action hors écran : {last_pos:?}"
+        );
         h.click(size, last_pos);
-        assert!(matches!(h.app.config.keys()[0].steps.as_slice(), [Step::WindowOp { .. }]),
-            "dernière action du menu Ajouter non ajoutée à {physical:?}/{dpi}");
+        assert!(
+            matches!(
+                h.app.config.keys()[0].steps.as_slice(),
+                [Step::WindowOp { .. }]
+            ),
+            "dernière action du menu Ajouter non ajoutée à {physical:?}/{dpi}"
+        );
     }
 }
 
@@ -2976,96 +4344,186 @@ fn installed_plugin_cards_expand_independently_and_keep_inventory_cache() {
     let first = navigation_fixture("Plugin A", "test.folding.a", 2);
     let second = navigation_fixture("Plugin B", "test.folding.b", 2);
     let cached = std::sync::Arc::new(super::plugin_store_ui::Inventory {
-        installed: vec![first.clone(), second.clone()], ..Default::default()
+        installed: vec![first.clone(), second.clone()],
+        ..Default::default()
     });
     h.app.plugin_inventory = Some(cached.clone());
     h.app.catalog_tab = 3;
     h.warm(size);
-    let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog")).unwrap().rect;
+    let panel = egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("action_catalog"))
+        .unwrap()
+        .rect;
     let a_id = egui::Id::new("installed_plugin_expanded").with(&first.uuid);
     let b_id = egui::Id::new("installed_plugin_expanded").with(&second.uuid);
     for (plugin, id, other) in [(&first, a_id, b_id), (&second, b_id, a_id)] {
         let label = format!("{} · v{}", plugin.display_name(), plugin.version);
         let header = navigation_seek(&mut h, size, &label, panel.center(), -80.0);
         let output = h.warm(size);
-        let button = output.shapes.iter().filter_map(|shape| {
-            if let egui::Shape::Text(text) = &shape.shape {
-                let pos = text.pos + text.galley.size() * 0.5;
-                if text.galley.job.text == "Étendre" && shape.clip_rect.contains(pos) { return Some(pos); }
-            }
-            None
-        }).min_by(|a,b| (a.y-header.y).abs().total_cmp(&(b.y-header.y).abs())).expect("bouton Étendre visible dans sa fiche");
+        let button = output
+            .shapes
+            .iter()
+            .filter_map(|shape| {
+                if let egui::Shape::Text(text) = &shape.shape {
+                    let pos = text.pos + text.galley.size() * 0.5;
+                    if text.galley.job.text == "Étendre" && shape.clip_rect.contains(pos) {
+                        return Some(pos);
+                    }
+                }
+                None
+            })
+            .min_by(|a, b| (a.y - header.y).abs().total_cmp(&(b.y - header.y).abs()))
+            .expect("bouton Étendre visible dans sa fiche");
         h.click(size, button);
         h.warm(size);
         assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(true));
-        assert_ne!(h.ctx.data(|d| d.get_temp::<bool>(other)), Some(true), "l'autre plugin doit rester replié");
-        let action = format!("+ {}", crate::plugin_import::action_name(plugin, &plugin.actions[0]));
+        assert_ne!(
+            h.ctx.data(|d| d.get_temp::<bool>(other)),
+            Some(true),
+            "l'autre plugin doit rester replié"
+        );
+        let action = format!(
+            "+ {}",
+            crate::plugin_import::action_name(plugin, &plugin.actions[0])
+        );
         navigation_seek(&mut h, size, &action, panel.center(), -80.0);
         navigation_seek(&mut h, size, &label, panel.center(), 100.0);
         let output = h.warm(size);
-        let collapse = text_position(&output.shapes, "Replier").expect("bouton Replier atteignable");
+        let collapse =
+            text_position(&output.shapes, "Replier").expect("bouton Replier atteignable");
         h.click(size, collapse);
         let output = h.warm(size);
         assert_eq!(h.ctx.data(|d| d.get_temp::<bool>(id)), Some(false));
-        assert!(text_position(&output.shapes, &action).is_none(), "les actions doivent disparaître au repliage");
-        assert!(std::sync::Arc::ptr_eq(&cached, &h.app.plugin_inventory().clone()));
+        assert!(
+            text_position(&output.shapes, &action).is_none(),
+            "les actions doivent disparaître au repliage"
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            &cached,
+            &h.app.plugin_inventory().clone()
+        ));
     }
     if let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
         let output = h.warm(size);
-        h.png(size, output, &PathBuf::from(out).join("plugins-compact-folded.png"));
+        h.png(
+            size,
+            output,
+            &PathBuf::from(out).join("plugins-compact-folded.png"),
+        );
     }
 }
 
 #[test]
 fn plugin_store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
     struct Reset;
-    impl Drop for Reset { fn drop(&mut self) {
-        super::plugin_market_ui::test_close();
-        *super::plugin_store_ui::community_state().lock().unwrap_or_else(|e|e.into_inner())=Default::default();
-    }}
-    fn inspect(shape:&egui::Shape,clip:egui::Rect,width:f32,checked:&mut usize){
-        match shape {
-            egui::Shape::Vec(children)=>for child in children{inspect(child,clip,width,checked)},
-            egui::Shape::Text(text)=>{
-                let content=text.galley.job.text.as_str();
-                if ["Mettre à jour","Update","Installée :","Disponible :","Installed:","Available:"].iter().any(|s|content.starts_with(s)) {
-                    let bounds=egui::Rect::from_min_size(text.pos,text.galley.size());
-                    if bounds.intersects(clip){
-                        assert!(text.galley.rows.len()<=2 && bounds.height()<=35.0,"badge vertical {content:?}: {bounds:?} rows={}",text.galley.rows.len());
-                        assert!(bounds.right()<=width+1.0 && clip.expand(1.0).contains_rect(bounds),"badge rogné {content:?}: {bounds:?} in {clip:?}");
-                        *checked+=1;
-                    }
-                }
-            },
-            _=>{}
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            super::plugin_market_ui::test_close();
+            *super::plugin_store_ui::community_state()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Default::default();
         }
     }
-    let _reset=Reset;
-    for (physical,dpi) in [(vec2(2614.0,1534.0),1.0),(vec2(1366.0,768.0),1.25)] {
-        for lang in ["fr","en"] {
-            let mut h=Harness::new();crate::i18n::set_language(lang);
-            h.ctx.set_pixels_per_point(dpi);
-            let mut entries=crate::community_plugins::parse(include_bytes!("../tests/fixtures/readme/registry.json")).unwrap();
-            for e in &mut entries {e.compatible=true;e.icon=None;e.screenshots.clear();}
-            for suffix in ["extra-a","extra-b"] {
-                let mut e=entries[0].clone();e.id=format!("com.test.{suffix}");e.uuid=Some(e.id.clone());e.name=format!("Plugin with a long name {suffix}");entries.push(e);
-            }
-            let mut installed=Vec::new();
-            for (i,e) in entries.iter().enumerate() {
-                if i%2==0 {
-                    let mut local=navigation_fixture(&e.name,e.uuid.as_deref().unwrap_or(&e.id),1);
-                    local.version=if i==0 {"0.9.0"}else{"1.0.0"}.into();installed.push(local);
+    fn inspect(shape: &egui::Shape, clip: egui::Rect, width: f32, checked: &mut usize) {
+        match shape {
+            egui::Shape::Vec(children) => {
+                for child in children {
+                    inspect(child, clip, width, checked)
                 }
             }
-            h.app.plugin_inventory=Some(std::sync::Arc::new(super::plugin_store_ui::Inventory{installed,..Default::default()}));
-            {let mut s=super::plugin_store_ui::community_state().lock().unwrap();*s=Default::default();s.consent=true;s.entries=entries;}
+            egui::Shape::Text(text) => {
+                let content = text.galley.job.text.as_str();
+                if [
+                    "Mettre à jour",
+                    "Update",
+                    "Installée :",
+                    "Disponible :",
+                    "Installed:",
+                    "Available:",
+                ]
+                .iter()
+                .any(|s| content.starts_with(s))
+                {
+                    let bounds = egui::Rect::from_min_size(text.pos, text.galley.size());
+                    if bounds.intersects(clip) {
+                        assert!(
+                            text.galley.rows.len() <= 2 && bounds.height() <= 35.0,
+                            "badge vertical {content:?}: {bounds:?} rows={}",
+                            text.galley.rows.len()
+                        );
+                        assert!(
+                            bounds.right() <= width + 1.0 && clip.expand(1.0).contains_rect(bounds),
+                            "badge rogné {content:?}: {bounds:?} in {clip:?}"
+                        );
+                        *checked += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let _reset = Reset;
+    for (physical, dpi) in [(vec2(2614.0, 1534.0), 1.0), (vec2(1366.0, 768.0), 1.25)] {
+        for lang in ["fr", "en"] {
+            let mut h = Harness::new();
+            crate::i18n::set_language(lang);
+            h.ctx.set_pixels_per_point(dpi);
+            let mut entries = crate::community_plugins::parse(include_bytes!(
+                "../tests/fixtures/readme/registry.json"
+            ))
+            .unwrap();
+            for e in &mut entries {
+                e.compatible = true;
+                e.icon = None;
+                e.screenshots.clear();
+            }
+            for suffix in ["extra-a", "extra-b"] {
+                let mut e = entries[0].clone();
+                e.id = format!("com.test.{suffix}");
+                e.uuid = Some(e.id.clone());
+                e.name = format!("Plugin with a long name {suffix}");
+                entries.push(e);
+            }
+            let mut installed = Vec::new();
+            for (i, e) in entries.iter().enumerate() {
+                if i % 2 == 0 {
+                    let mut local =
+                        navigation_fixture(&e.name, e.uuid.as_deref().unwrap_or(&e.id), 1);
+                    local.version = if i == 0 { "0.9.0" } else { "1.0.0" }.into();
+                    installed.push(local);
+                }
+            }
+            h.app.plugin_inventory = Some(std::sync::Arc::new(super::plugin_store_ui::Inventory {
+                installed,
+                ..Default::default()
+            }));
+            {
+                let mut s = super::plugin_store_ui::community_state().lock().unwrap();
+                *s = Default::default();
+                s.consent = true;
+                s.entries = entries;
+            }
             super::plugin_market_ui::test_view(None);
-            let size=physical/dpi;
-            let output=h.warm(size);
-            if let Some(dir)=std::env::var_os("NOVYDECK_UI_OUTPUT") {h.png(size,output.clone(),&PathBuf::from(dir).join(format!("store-grid-{lang}-{}-{}.png",physical.x as u32,(dpi*100.0) as u32)));}
-            let mut checked=0;
-            for shape in &output.shapes {inspect(&shape.shape,shape.clip_rect,size.x,&mut checked);}
-            assert!(checked>=4,"les versions et mises à jour doivent être visibles, {checked}");
+            let size = physical / dpi;
+            let output = h.warm(size);
+            if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
+                h.png(
+                    size,
+                    output.clone(),
+                    &PathBuf::from(dir).join(format!(
+                        "store-grid-{lang}-{}-{}.png",
+                        physical.x as u32,
+                        (dpi * 100.0) as u32
+                    )),
+                );
+            }
+            let mut checked = 0;
+            for shape in &output.shapes {
+                inspect(&shape.shape, shape.clip_rect, size.x, &mut checked);
+            }
+            assert!(
+                checked >= 4,
+                "les versions et mises à jour doivent être visibles, {checked}"
+            );
             super::plugin_market_ui::test_close();
         }
     }
@@ -3075,7 +4533,9 @@ fn plugin_store_grid_cards_keep_badges_horizontal_and_inside_viewport() {
 #[test]
 fn readme_captures_plugin_store_workshop_and_startup() {
     use super::plugin_store_ui::community_state;
-    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else { return; };
+    let Some(out) = std::env::var_os("NOVYDECK_UI_OUTPUT").map(PathBuf::from) else {
+        return;
+    };
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/readme");
     let size = vec2(1600.0, 1000.0);
     for lang in ["fr", "en"] {
@@ -3084,27 +4544,57 @@ fn readme_captures_plugin_store_workshop_and_startup() {
         let mut h = Harness::new();
         crate::i18n::set_language(lang);
         h.app.catalog_tab = 3;
-        let mut entries = crate::community_plugins::parse(&std::fs::read(fixtures.join("registry.json")).unwrap()).unwrap();
-        for entry in &mut entries { entry.compatible = true; }
+        let mut entries = crate::community_plugins::parse(
+            &std::fs::read(fixtures.join("registry.json")).unwrap(),
+        )
+        .unwrap();
+        for entry in &mut entries {
+            entry.compatible = true;
+        }
         for entry in &entries {
             if let Some(icon) = &entry.icon {
-                if let Ok(bytes) = std::fs::read(fixtures.join("icons").join(format!("{}.png", entry.id))) { super::plugin_market_ui::test_image_png(&h.ctx, icon, &bytes); }
+                if let Ok(bytes) =
+                    std::fs::read(fixtures.join("icons").join(format!("{}.png", entry.id)))
+                {
+                    super::plugin_market_ui::test_image_png(&h.ctx, icon, &bytes);
+                }
             }
             for shot in &entry.screenshots {
                 let name = shot.rsplit('/').nth(1).unwrap_or("");
-                if let Ok(bytes) = std::fs::read(fixtures.join("shots").join(format!("{name}.png"))) { super::plugin_market_ui::test_image_png(&h.ctx, shot, &bytes); }
+                if let Ok(bytes) = std::fs::read(fixtures.join("shots").join(format!("{name}.png")))
+                {
+                    super::plugin_market_ui::test_image_png(&h.ctx, shot, &bytes);
+                }
             }
         }
-        let scans = crate::community_plugins::parse_scans(&std::fs::read(fixtures.join("scan-results.json")).unwrap()).unwrap();
-        { let mut state = community_state().lock().unwrap(); state.consent = true; state.entries = entries; state.scans = scans; state.message.clear(); }
+        let scans = crate::community_plugins::parse_scans(
+            &std::fs::read(fixtures.join("scan-results.json")).unwrap(),
+        )
+        .unwrap();
+        {
+            let mut state = community_state().lock().unwrap();
+            state.consent = true;
+            state.entries = entries;
+            state.scans = scans;
+            state.message.clear();
+        }
         super::plugin_market_ui::test_view(None);
         let grid = h.warm(size);
         h.png(size, grid, &out.join(format!("readme-store-{lang}.png")));
         super::plugin_market_ui::test_view(Some("com.novydeck.clock"));
         let detail = h.warm(size);
-        h.png(size, detail, &out.join(format!("readme-store-detail-{lang}.png")));
+        h.png(
+            size,
+            detail,
+            &out.join(format!("readme-store-detail-{lang}.png")),
+        );
         super::plugin_market_ui::test_view(None);
-        { let mut state = community_state().lock().unwrap(); state.consent = false; state.entries.clear(); state.scans.clear(); }
+        {
+            let mut state = community_state().lock().unwrap();
+            state.consent = false;
+            state.entries.clear();
+            state.scans.clear();
+        }
         super::plugin_market_ui::test_close();
         drop(h);
         // 2. Atelier : deux plugins différents enchaînés dans la même macro.
@@ -3115,31 +4605,80 @@ fn readme_captures_plugin_store_workshop_and_startup() {
             let folder = h.dir.path().join(format!("{id}.sdPlugin"));
             std::fs::create_dir_all(folder.join("bin")).unwrap();
             let src = fixtures.join("plugins").join(format!("{id}.sdPlugin"));
-            for entry in walk(&src) { let rel = entry.strip_prefix(&src).unwrap(); let dst = folder.join(rel); std::fs::create_dir_all(dst.parent().unwrap()).unwrap(); std::fs::copy(&entry, &dst).unwrap(); }
+            for entry in walk(&src) {
+                let rel = entry.strip_prefix(&src).unwrap();
+                let dst = folder.join(rel);
+                std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+                std::fs::copy(&entry, &dst).unwrap();
+            }
             let manifest = std::fs::read(folder.join("manifest.json")).unwrap();
             let code: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
-            std::fs::write(folder.join(code["CodePathWin"].as_str().or(code["CodePath"].as_str()).unwrap()), b"").unwrap();
+            std::fs::write(
+                folder.join(
+                    code["CodePathWin"]
+                        .as_str()
+                        .or(code["CodePath"].as_str())
+                        .unwrap(),
+                ),
+                b"",
+            )
+            .unwrap();
             plugins.push(crate::plugins::parse(&folder, &manifest).unwrap());
         }
         let (clock, google) = (plugins[0].clone(), plugins[1].clone());
-        let stopwatch = clock.actions.iter().find(|a| a.uuid.ends_with(".stopwatch")).unwrap().uuid.clone();
-        let phrase = if lang == "fr" { "allume la lumière du salon" } else { "turn on the living room light" };
+        let stopwatch = clock
+            .actions
+            .iter()
+            .find(|a| a.uuid.ends_with(".stopwatch"))
+            .unwrap()
+            .uuid
+            .clone();
+        let phrase = if lang == "fr" {
+            "allume la lumière du salon"
+        } else {
+            "turn on the living room light"
+        };
         h.app.plugins = Some(crate::plugin_runtime::Manager::new(plugins));
         h.app.config.keys_mut()[h.app.selected].steps = vec![
-            Step::PluginAction { plugin: clock.uuid.clone(), action: stopwatch, settings: serde_json::json!({}), label: String::new() },
+            Step::PluginAction {
+                plugin: clock.uuid.clone(),
+                action: stopwatch,
+                settings: serde_json::json!({}),
+                label: String::new(),
+            },
             Step::Delay { ms: 500 },
-            Step::PluginAction { plugin: google.uuid.clone(), action: google.actions[0].uuid.clone(), settings: serde_json::json!({"phrase": phrase, "language": if lang == "fr" {"fr-FR"} else {"en-US"}}), label: String::new() },
+            Step::PluginAction {
+                plugin: google.uuid.clone(),
+                action: google.actions[0].uuid.clone(),
+                settings: serde_json::json!({"phrase": phrase, "language": if lang == "fr" {"fr-FR"} else {"en-US"}}),
+                label: String::new(),
+            },
         ];
         h.app.show_workflow = true;
         let first = h.warm(size);
-        if let Some(category) = text_position(&first.shapes, "Plugins") { h.click(size, category); }
+        if let Some(category) = text_position(&first.shapes, "Plugins") {
+            h.click(size, category);
+        }
         h.warm(size);
         // Sélectionne le bloc Google (3e) pour afficher ses propriétés, sans passer par la palette.
-        h.ctx.data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2usize]));
+        h.ctx
+            .data_mut(|d| d.insert_temp(egui::Id::new("workshop_path"), vec![2usize]));
         let workshop = h.warm(size);
-        assert_eq!(h.app.config.keys()[h.app.selected].steps.len(), 3, "aucun bloc ajouté par la capture");
-        assert!(text_position(&workshop.shapes, "Stopwatch").is_some() && text_position(&workshop.shapes, clock.display_name()).is_some(), "carte nommée du plugin Horloge (titre = action, résumé = plugin)");
-        h.png(size, workshop, &out.join(format!("readme-workshop-plugins-{lang}.png")));
+        assert_eq!(
+            h.app.config.keys()[h.app.selected].steps.len(),
+            3,
+            "aucun bloc ajouté par la capture"
+        );
+        assert!(
+            text_position(&workshop.shapes, "Stopwatch").is_some()
+                && text_position(&workshop.shapes, clock.display_name()).is_some(),
+            "carte nommée du plugin Horloge (titre = action, résumé = plugin)"
+        );
+        h.png(
+            size,
+            workshop,
+            &out.join(format!("readme-workshop-plugins-{lang}.png")),
+        );
         drop(h);
         // 3. Réglages : démarrage avec Windows en mode réduit.
         let mut h = Harness::new();
@@ -3148,12 +4687,23 @@ fn readme_captures_plugin_store_workshop_and_startup() {
         h.app.preferences.start_minimized = true;
         h.app.show_desktop_settings = true;
         let settings = h.warm(vec2(1366.0, 768.0));
-        h.png(vec2(1366.0, 768.0), settings, &out.join(format!("readme-start-minimized-{lang}.png")));
+        h.png(
+            vec2(1366.0, 768.0),
+            settings,
+            &out.join(format!("readme-start-minimized-{lang}.png")),
+        );
     }
     crate::i18n::set_language("fr");
     fn walk(dir: &std::path::Path) -> Vec<PathBuf> {
         let mut files = Vec::new();
-        for entry in std::fs::read_dir(dir).unwrap() { let path = entry.unwrap().path(); if path.is_dir() { files.extend(walk(&path)); } else { files.push(path); } }
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files.extend(walk(&path));
+            } else {
+                files.push(path);
+            }
+        }
         files
     }
 }
@@ -3164,8 +4714,14 @@ fn key_toggle_session_survives_navigation_but_not_app_restart() {
     let mut key = Key::default();
     key.state_display = Some(crate::model::StateDisplay {
         toggle: true,
-        off: crate::model::StateFace { image: Some("off.png".into()), ..Default::default() },
-        on: crate::model::StateFace { image: Some("on.png".into()), ..Default::default() },
+        off: crate::model::StateFace {
+            image: Some("off.png".into()),
+            ..Default::default()
+        },
+        on: crate::model::StateFace {
+            image: Some("on.png".into()),
+            ..Default::default()
+        },
         ..Default::default()
     });
     h.app.config.keys_mut()[0] = key.clone();
@@ -3191,24 +4747,50 @@ fn fixed_windows_resist_title_drag_and_stay_onscreen() {
         for kind in 0..3 {
             let mut h = Harness::new();
             let title = match kind {
-                0 => { h.app.settings = true; "Réglages — FIFINE AmpliGame D6" },
-                1 => { h.app.show_about = true; "À propos de NovyDeck" },
-                _ => { h.app.assistant_settings = true; "Assistant IA" },
+                0 => {
+                    h.app.settings = true;
+                    "Réglages — FIFINE AmpliGame D6"
+                }
+                1 => {
+                    h.app.show_about = true;
+                    "À propos de NovyDeck"
+                }
+                _ => {
+                    h.app.assistant_settings = true;
+                    "Assistant IA"
+                }
             };
             let output = h.warm(size);
-            let id = if kind == 0 { egui::Id::new("device_settings") } else { egui::Id::new(title) };
+            let id = if kind == 0 {
+                egui::Id::new("device_settings")
+            } else {
+                egui::Id::new(title)
+            };
             let before = h.ctx.memory(|m| m.area_rect(id)).expect("fenêtre affichée");
-            assert!(before.left() >= 0.0 && before.right() <= size.x && before.top() >= 0.0 && before.bottom() <= size.y, "{title} {size:?}: {before:?}");
+            assert!(
+                before.left() >= 0.0
+                    && before.right() <= size.x
+                    && before.top() >= 0.0
+                    && before.bottom() <= size.y,
+                "{title} {size:?}: {before:?}"
+            );
             let start = before.left_top() + vec2(50.0, 15.0);
             let finish = start + vec2(140.0, 100.0);
             h.frame(size, vec![Input::PointerMoved(start), button(start, true)]);
             h.frame(size, vec![Input::PointerMoved(finish)]);
             h.frame(size, vec![button(finish, false)]);
-            let after = h.ctx.memory(|m| m.area_rect(id)).expect("fenêtre après glisser");
+            let after = h
+                .ctx
+                .memory(|m| m.area_rect(id))
+                .expect("fenêtre après glisser");
             assert_eq!(before.min, after.min, "{title} dragged at {size:?}");
-            assert!(after.right() <= size.x && after.bottom() <= size.y, "{title} overflow at {size:?}");
+            assert!(
+                after.right() <= size.x && after.bottom() <= size.y,
+                "{title} overflow at {size:?}"
+            );
             if let Some(dir) = std::env::var_os("NOVYDECK_UI_OUTPUT") {
-                let path = PathBuf::from(dir).join(format!("fixed-window-{kind}-{}.png", size.x as u32));
+                let path =
+                    PathBuf::from(dir).join(format!("fixed-window-{kind}-{}.png", size.x as u32));
                 std::fs::create_dir_all(path.parent().unwrap()).unwrap();
                 h.png(size, output, &path);
             }

@@ -104,7 +104,10 @@ fn handle(
         return Err("Requête trop volumineuse".into());
     }
     let v: Value = serde_json::from_slice(&bytes).map_err(|_| "Requête locale invalide")?;
-    if !v["token"].as_str().is_some_and(|value| crate::token_equal::equal(value, token)) {
+    if !v["token"]
+        .as_str()
+        .is_some_and(|value| crate::token_equal::equal(value, token))
+    {
         return Err("Accès local refusé".into());
     }
     if !on.load(Ordering::SeqCst) {

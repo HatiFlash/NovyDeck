@@ -39,7 +39,11 @@ pub fn palette(family: Family) -> ([u8; 3], [[u8; 3]; 4]) {
         // Navigation (pages, dossiers, profils) : bleu NovyDeck.
         Family::Accent | Family::Mono => ([0x3C, 0x80, 0xF6], [0x9E, 0xC6, 0xFF]),
     };
-    let line = [mix(fill[0], 255, 0.70), mix(fill[1], 255, 0.70), mix(fill[2], 255, 0.70)];
+    let line = [
+        mix(fill[0], 255, 0.70),
+        mix(fill[1], 255, 0.70),
+        mix(fill[2], 255, 0.70),
+    ];
     (fill, [line, fill, [255, 255, 255], inner])
 }
 
@@ -54,9 +58,17 @@ fn raster(ico: Ico, px: u32) -> Option<Arc<Vec<u8>>> {
     if let Some(found) = cache.lock().ok()?.get(&(ico, px)) {
         return found.clone();
     }
-    let colors = palette(ico.family()).1.map(|[r, g, b]| eframe::egui::Color32::from_rgb(r, g, b));
+    let colors = palette(ico.family())
+        .1
+        .map(|[r, g, b]| eframe::egui::Color32::from_rgb(r, g, b));
     let pixels = crate::iconset::rasterize(ico, colors, px).map(|image| {
-        Arc::new(image.pixels.iter().flat_map(|c| c.to_array()).collect::<Vec<u8>>())
+        Arc::new(
+            image
+                .pixels
+                .iter()
+                .flat_map(|c| c.to_array())
+                .collect::<Vec<u8>>(),
+        )
     });
     let mut guard = cache.lock().ok()?;
     if guard.len() > 256 {
@@ -73,7 +85,11 @@ fn blend(image: &mut RgbImage, x: i64, y: i64, rgba: [u8; 4], premultiplied: boo
     let target = image.get_pixel_mut(x as u32, y as u32);
     let a = rgba[3] as u32;
     for c in 0..3 {
-        let source = if premultiplied { rgba[c] as u32 * 255 } else { rgba[c] as u32 * a };
+        let source = if premultiplied {
+            rgba[c] as u32 * 255
+        } else {
+            rgba[c] as u32 * a
+        };
         target[c] = ((source + target[c] as u32 * (255 - a) + 127) / 255).min(255) as u8;
     }
 }
@@ -94,18 +110,32 @@ pub fn draw(image: &mut RgbImage, ico: Ico, center: (f32, f32), side: u32, tile:
                 let dy = ((y as f32 + 0.5 - cy).abs() - (half - radius)).max(0.0);
                 let coverage = (radius - (dx * dx + dy * dy).sqrt() + 0.5).clamp(0.0, 1.0);
                 if coverage > 0.0 {
-                    blend(image, x, y, [fill[0], fill[1], fill[2], (coverage * 0.30 * 255.0) as u8], false);
+                    blend(
+                        image,
+                        x,
+                        y,
+                        [fill[0], fill[1], fill[2], (coverage * 0.30 * 255.0) as u8],
+                        false,
+                    );
                 }
             }
         }
     }
-    let Some(pixels) = raster(ico, side) else { return };
+    let Some(pixels) = raster(ico, side) else {
+        return;
+    };
     let x0 = (center.0 - side as f32 / 2.0).round() as i64;
     let y0 = (center.1 - side as f32 / 2.0).round() as i64;
     for y in 0..side {
         for x in 0..side {
             let i = ((y * side + x) * 4) as usize;
-            blend(image, x0 + x as i64, y0 + y as i64, [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]], true);
+            blend(
+                image,
+                x0 + x as i64,
+                y0 + y as i64,
+                [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]],
+                true,
+            );
         }
     }
 }
@@ -127,7 +157,10 @@ mod tests {
     use crate::model::Step;
 
     fn key(steps: Vec<Step>) -> Key {
-        Key { steps, ..Default::default() }
+        Key {
+            steps,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -138,15 +171,45 @@ mod tests {
         assert_eq!(media("volume_up"), Some(Ico::VolumeUp));
         assert_eq!(media("volume_down"), Some(Ico::VolumeDown));
         assert_eq!(media("mute"), Some(Ico::Mute));
-        assert_eq!(for_key(&key(vec![Step::Launch { program: "x.exe".into(), args: vec![], focus_if_running: false }])), Some(Ico::Application));
-        assert_eq!(for_key(&key(vec![Step::Hotkey { keys: "CTRL+C".into() }])), Some(Ico::Keyboard));
+        assert_eq!(
+            for_key(&key(vec![Step::Launch {
+                program: "x.exe".into(),
+                args: vec![],
+                focus_if_running: false
+            }])),
+            Some(Ico::Application)
+        );
+        assert_eq!(
+            for_key(&key(vec![Step::Hotkey {
+                keys: "CTRL+C".into()
+            }])),
+            Some(Ico::Keyboard)
+        );
         assert_eq!(for_key(&key(vec![Step::PageNext])), Some(Ico::PageNext));
-        assert_eq!(for_key(&key(vec![Step::PagePrevious])), Some(Ico::PagePrevious));
-        assert_eq!(for_key(&key(vec![Step::Notify { title: String::new(), message: "x".into() }])), Some(Ico::Notify));
-        assert_eq!(for_key(&key(vec![Step::Delay { ms: 1 }, Step::CloseWindow])), Some(Ico::MultiAction));
-        let mut custom = key(vec![Step::Media { command: "mute".into() }]);
+        assert_eq!(
+            for_key(&key(vec![Step::PagePrevious])),
+            Some(Ico::PagePrevious)
+        );
+        assert_eq!(
+            for_key(&key(vec![Step::Notify {
+                title: String::new(),
+                message: "x".into()
+            }])),
+            Some(Ico::Notify)
+        );
+        assert_eq!(
+            for_key(&key(vec![Step::Delay { ms: 1 }, Step::CloseWindow])),
+            Some(Ico::MultiAction)
+        );
+        let mut custom = key(vec![Step::Media {
+            command: "mute".into(),
+        }]);
         custom.display_kind = Some(11);
-        assert_eq!(for_key(&custom), None, "symbole choisi par l'utilisateur conservé");
+        assert_eq!(
+            for_key(&custom),
+            None,
+            "symbole choisi par l'utilisateur conservé"
+        );
         custom.display_kind = None;
         custom.image = "C:\\\\icone.png".into();
         assert_eq!(for_key(&custom), None, "image personnalisée conservée");
@@ -162,12 +225,29 @@ mod tests {
             let mut image = RgbImage::from_pixel(size, size, image::Rgb([0, 0, 0]));
             let (center, side) = layout(size, 100, false);
             draw(&mut image, Ico::VolumeUp, center, side, true);
-            let lit: Vec<(u32, u32)> = image.enumerate_pixels().filter(|(_, _, p)| p.0.iter().any(|c| *c > 60)).map(|(x, y, _)| (x, y)).collect();
-            let (min_x, max_x) = (lit.iter().map(|p| p.0).min().unwrap(), lit.iter().map(|p| p.0).max().unwrap());
-            let (min_y, max_y) = (lit.iter().map(|p| p.1).min().unwrap(), lit.iter().map(|p| p.1).max().unwrap());
-            assert!((min_x as i64 + max_x as i64 - size as i64 + 1).abs() <= 3 && (min_y as i64 + max_y as i64 - size as i64 + 1).abs() <= 3, "centrée à {size} px");
+            let lit: Vec<(u32, u32)> = image
+                .enumerate_pixels()
+                .filter(|(_, _, p)| p.0.iter().any(|c| *c > 60))
+                .map(|(x, y, _)| (x, y))
+                .collect();
+            let (min_x, max_x) = (
+                lit.iter().map(|p| p.0).min().unwrap(),
+                lit.iter().map(|p| p.0).max().unwrap(),
+            );
+            let (min_y, max_y) = (
+                lit.iter().map(|p| p.1).min().unwrap(),
+                lit.iter().map(|p| p.1).max().unwrap(),
+            );
+            assert!(
+                (min_x as i64 + max_x as i64 - size as i64 + 1).abs() <= 3
+                    && (min_y as i64 + max_y as i64 - size as i64 + 1).abs() <= 3,
+                "centrée à {size} px"
+            );
             assert!(min_x >= 2 && max_x + 2 < size, "marges à {size} px");
-            let colours: std::collections::HashSet<[u8; 3]> = image.pixels().map(|p| [p[0] / 32, p[1] / 32, p[2] / 32]).collect();
+            let colours: std::collections::HashSet<[u8; 3]> = image
+                .pixels()
+                .map(|p| [p[0] / 32, p[1] / 32, p[2] / 32])
+                .collect();
             assert!(colours.len() >= 6, "plusieurs couleurs à {size} px");
         }
         let a = raster(Ico::Play, 40).unwrap();
@@ -181,13 +261,50 @@ mod tests {
     fn key_icons_sheet() {
         let dir = std::env::var_os("DECKFORGE_UI_OUTPUT").expect("DECKFORGE_UI_OUTPUT");
         let samples: Vec<(&str, Vec<Step>)> = vec![
-            ("Lecture", vec![Step::Media { command: "play_pause".into() }]),
-            ("Stop", vec![Step::Media { command: "stop".into() }]),
-            ("Volume +", vec![Step::Media { command: "volume_up".into() }]),
-            ("Volume -", vec![Step::Media { command: "volume_down".into() }]),
-            ("Muet", vec![Step::Media { command: "mute".into() }]),
-            ("Appli", vec![Step::Launch { program: "x.exe".into(), args: vec![], focus_if_running: false }]),
-            ("Raccourci", vec![Step::Hotkey { keys: "CTRL+C".into() }]),
+            (
+                "Lecture",
+                vec![Step::Media {
+                    command: "play_pause".into(),
+                }],
+            ),
+            (
+                "Stop",
+                vec![Step::Media {
+                    command: "stop".into(),
+                }],
+            ),
+            (
+                "Volume +",
+                vec![Step::Media {
+                    command: "volume_up".into(),
+                }],
+            ),
+            (
+                "Volume -",
+                vec![Step::Media {
+                    command: "volume_down".into(),
+                }],
+            ),
+            (
+                "Muet",
+                vec![Step::Media {
+                    command: "mute".into(),
+                }],
+            ),
+            (
+                "Appli",
+                vec![Step::Launch {
+                    program: "x.exe".into(),
+                    args: vec![],
+                    focus_if_running: false,
+                }],
+            ),
+            (
+                "Raccourci",
+                vec![Step::Hotkey {
+                    keys: "CTRL+C".into(),
+                }],
+            ),
             ("Souris", vec![crate::automation::step(27)]),
             ("OBS", vec![crate::automation::step(20)]),
             ("Dossier", vec![Step::Folder { id: "x".into() }]),
@@ -196,18 +313,36 @@ mod tests {
             ("Notif", vec![crate::automation::step(41)]),
             ("Variable", vec![crate::automation::step(16)]),
             ("Si…", vec![crate::automation::step(39)]),
-            ("Site", vec![Step::Url { url: "https://x".into() }]),
+            (
+                "Site",
+                vec![Step::Url {
+                    url: "https://x".into(),
+                }],
+            ),
         ];
         let font = crate::key_render::font().unwrap();
         let size = 126u32;
-        let mut sheet = RgbImage::from_pixel(8 * (size + 8), 2 * (size + 8), image::Rgb([20, 26, 38]));
+        let mut sheet =
+            RgbImage::from_pixel(8 * (size + 8), 2 * (size + 8), image::Rgb([20, 26, 38]));
         for (i, (label, steps)) in samples.into_iter().enumerate() {
-            let key = Key { label: label.into(), steps, ..Default::default() };
+            let key = Key {
+                label: label.into(),
+                steps,
+                ..Default::default()
+            };
             let jpeg = crate::key_render::jpeg(&key, size, &font).unwrap();
             // Le JPEG est dans l'orientation du périphérique (retourné) : remis à l'endroit pour la planche.
-            let tile = image::imageops::rotate180(&image::load_from_memory(&jpeg).unwrap().to_rgb8());
-            image::imageops::overlay(&mut sheet, &tile, (4 + (i % 8) as u32 * (size + 8)) as i64, (4 + (i / 8) as u32 * (size + 8)) as i64);
+            let tile =
+                image::imageops::rotate180(&image::load_from_memory(&jpeg).unwrap().to_rgb8());
+            image::imageops::overlay(
+                &mut sheet,
+                &tile,
+                (4 + (i % 8) as u32 * (size + 8)) as i64,
+                (4 + (i / 8) as u32 * (size + 8)) as i64,
+            );
         }
-        sheet.save(std::path::Path::new(&dir).join("touches-icones.png")).unwrap();
+        sheet
+            .save(std::path::Path::new(&dir).join("touches-icones.png"))
+            .unwrap();
     }
 }

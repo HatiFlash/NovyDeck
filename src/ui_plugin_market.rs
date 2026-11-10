@@ -1,94 +1,244 @@
 //! Fenêtre du magasin communautaire ; aucune requête tant que l'utilisateur n'a pas consenti.
+use super::plugin_store_ui::{community_state, start_community_fetch};
 use super::App;
-use super::plugin_store_ui::{community_state,start_community_fetch};
-use crate::community_plugins::{self,Entry};
-use crate::i18n::{tr,trf};
+use crate::community_plugins::{self, Entry};
+use crate::i18n::{tr, trf};
+use crate::{
+    iconset::{self, Family, Ico},
+    theme,
+};
 use eframe::egui::{self, RichText};
-use crate::{iconset::{self, Ico, Family}, theme};
 use std::collections::HashMap;
-use std::sync::{mpsc::{self,Receiver},Mutex,OnceLock};
+use std::sync::{
+    mpsc::{self, Receiver},
+    Mutex, OnceLock,
+};
 
 #[derive(Default)]
-struct Market { open:bool, search:String, category:String, selected:Option<String>, enlarged:Option<String> }
-fn market()->&'static Mutex<Market> { static STATE:OnceLock<Mutex<Market>>=OnceLock::new(); STATE.get_or_init(||Mutex::new(Market::default())) }
-pub(super) fn open(){market().lock().unwrap_or_else(|e|e.into_inner()).open=true;}
+struct Market {
+    open: bool,
+    search: String,
+    category: String,
+    selected: Option<String>,
+    enlarged: Option<String>,
+}
+fn market() -> &'static Mutex<Market> {
+    static STATE: OnceLock<Mutex<Market>> = OnceLock::new();
+    STATE.get_or_init(|| Mutex::new(Market::default()))
+}
+pub(super) fn open() {
+    market().lock().unwrap_or_else(|e| e.into_inner()).open = true;
+}
 /// Le magasin est une page de l'application (comme l'Atelier), pas une fenêtre flottante.
-pub(super) fn is_open()->bool{market().lock().unwrap_or_else(|e|e.into_inner()).open}
+pub(super) fn is_open() -> bool {
+    market().lock().unwrap_or_else(|e| e.into_inner()).open
+}
 
-enum ImageSlot { Pending(Receiver<Option<egui::ColorImage>>), Ready(egui::TextureHandle), Failed }
-fn images()->&'static Mutex<HashMap<String,ImageSlot>> {static CACHE:OnceLock<Mutex<HashMap<String,ImageSlot>>>=OnceLock::new();CACHE.get_or_init(||Mutex::new(HashMap::new()))}
-#[cfg(test)]
-pub(super) fn test_image_png(ctx:&egui::Context,url:&str,bytes:&[u8]){
- let decoded=image::load_from_memory(bytes).expect("PNG de test").to_rgba8();
- let image=egui::ColorImage::from_rgba_unmultiplied([decoded.width() as usize,decoded.height() as usize],decoded.as_raw());
- images().lock().unwrap().insert(url.into(),ImageSlot::Ready(ctx.load_texture(url,image,egui::TextureOptions::LINEAR)));
+enum ImageSlot {
+    Pending(Receiver<Option<egui::ColorImage>>),
+    Ready(egui::TextureHandle),
+    Failed,
+}
+fn images() -> &'static Mutex<HashMap<String, ImageSlot>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, ImageSlot>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 #[cfg(test)]
-pub(super) fn test_close(){let mut view=market().lock().unwrap();*view=Market::default();}
+pub(super) fn test_image_png(ctx: &egui::Context, url: &str, bytes: &[u8]) {
+    let decoded = image::load_from_memory(bytes)
+        .expect("PNG de test")
+        .to_rgba8();
+    let image = egui::ColorImage::from_rgba_unmultiplied(
+        [decoded.width() as usize, decoded.height() as usize],
+        decoded.as_raw(),
+    );
+    images().lock().unwrap().insert(
+        url.into(),
+        ImageSlot::Ready(ctx.load_texture(url, image, egui::TextureOptions::LINEAR)),
+    );
+}
 #[cfg(test)]
-pub(super) fn test_view(selected:Option<&str>){let mut view=market().lock().unwrap();view.open=true;view.selected=selected.map(str::to_owned);view.search.clear();view.category.clear();}
+pub(super) fn test_close() {
+    let mut view = market().lock().unwrap();
+    *view = Market::default();
+}
 #[cfg(test)]
-pub(super) fn test_image(ctx:&egui::Context,url:&str){
- let image=egui::ColorImage::new([2,2],egui::Color32::WHITE);
- images().lock().unwrap().insert(url.into(),ImageSlot::Ready(ctx.load_texture(url,image,egui::TextureOptions::LINEAR)));
+pub(super) fn test_view(selected: Option<&str>) {
+    let mut view = market().lock().unwrap();
+    view.open = true;
+    view.selected = selected.map(str::to_owned);
+    view.search.clear();
+    view.category.clear();
 }
-fn thumbnail(ui:&mut egui::Ui,url:Option<&str>,icon:bool,size:egui::Vec2) -> bool {
- let texture=url.and_then(|url|{
-  let mut cache=images().lock().unwrap_or_else(|e|e.into_inner());
-  if !cache.contains_key(url){
-   let (tx,rx)=mpsc::channel();let address=url.to_owned();let ctx=ui.ctx().clone();
-   std::thread::spawn(move||{let result=community_plugins::image(&address,icon).ok();let _=tx.send(result);ctx.request_repaint();});
-   cache.insert(url.to_owned(),ImageSlot::Pending(rx));
-  }
-  let slot=cache.get_mut(url).expect("image inscrite");
-  if let ImageSlot::Pending(rx)=slot {if let Ok(result)=rx.try_recv(){*slot=match result {Some(image)=>ImageSlot::Ready(ui.ctx().load_texture(url,image,egui::TextureOptions::LINEAR)),None=>ImageSlot::Failed};}}
-  if let ImageSlot::Ready(texture)=slot {Some(texture.id())}else{None}
- });
- let (rect,response)=ui.allocate_exact_size(size,if icon{egui::Sense::hover()}else{egui::Sense::click()});
- let p=theme::palette(ui.ctx());
- ui.painter().rect_filled(rect,theme::RADIUS_MD,p.card);
- if let Some(texture)=texture {
-  theme::rounded_image(ui.painter(),texture,rect,theme::RADIUS_MD as f32);
- } else if icon {
-  iconset::paint(ui.painter(),rect.center(),size.x.min(size.y)*0.58,Ico::Plugin,Family::Plugin,1.0,25);
- } else {
-  iconset::paint(ui.painter(),rect.center(),42.0,Ico::Picture,Family::Image,0.7,25);
- }
- if !icon {ui.painter().rect_stroke(rect,theme::RADIUS_MD,egui::Stroke::new(1.0,p.border),egui::StrokeKind::Inside);}
- response.clicked()
+#[cfg(test)]
+pub(super) fn test_image(ctx: &egui::Context, url: &str) {
+    let image = egui::ColorImage::new([2, 2], egui::Color32::WHITE);
+    images().lock().unwrap().insert(
+        url.into(),
+        ImageSlot::Ready(ctx.load_texture(url, image, egui::TextureOptions::LINEAR)),
+    );
 }
-fn meta(ui:&mut egui::Ui,text:String){let p=theme::palette(ui.ctx());theme::pill(ui,&text,p.text_secondary);}
-fn badge_pills(ui:&mut egui::Ui,b:community_plugins::Badges,compact:bool){
- let p=theme::palette(ui.ctx());
- if b.official{theme::pill(ui,tr("Officiel"),p.accent);}
- if b.scanned{theme::pill(ui,community_plugins::scan_badge(),p.success);}
- if b.tested{theme::pill(ui,if compact{tr("Testé")}else{tr("Testé par NovyDeck")},p.success);}
- if b.warning{theme::pill(ui,tr("À vérifier"),p.warning);}
+fn thumbnail(ui: &mut egui::Ui, url: Option<&str>, icon: bool, size: egui::Vec2) -> bool {
+    let texture = url.and_then(|url| {
+        let mut cache = images().lock().unwrap_or_else(|e| e.into_inner());
+        if !cache.contains_key(url) {
+            let (tx, rx) = mpsc::channel();
+            let address = url.to_owned();
+            let ctx = ui.ctx().clone();
+            std::thread::spawn(move || {
+                let result = community_plugins::image(&address, icon).ok();
+                let _ = tx.send(result);
+                ctx.request_repaint();
+            });
+            cache.insert(url.to_owned(), ImageSlot::Pending(rx));
+        }
+        let slot = cache.get_mut(url).expect("image inscrite");
+        if let ImageSlot::Pending(rx) = slot {
+            if let Ok(result) = rx.try_recv() {
+                *slot = match result {
+                    Some(image) => ImageSlot::Ready(ui.ctx().load_texture(
+                        url,
+                        image,
+                        egui::TextureOptions::LINEAR,
+                    )),
+                    None => ImageSlot::Failed,
+                };
+            }
+        }
+        if let ImageSlot::Ready(texture) = slot {
+            Some(texture.id())
+        } else {
+            None
+        }
+    });
+    let (rect, response) = ui.allocate_exact_size(
+        size,
+        if icon {
+            egui::Sense::hover()
+        } else {
+            egui::Sense::click()
+        },
+    );
+    let p = theme::palette(ui.ctx());
+    ui.painter().rect_filled(rect, theme::RADIUS_MD, p.card);
+    if let Some(texture) = texture {
+        theme::rounded_image(ui.painter(), texture, rect, theme::RADIUS_MD as f32);
+    } else if icon {
+        iconset::paint(
+            ui.painter(),
+            rect.center(),
+            size.x.min(size.y) * 0.58,
+            Ico::Plugin,
+            Family::Plugin,
+            1.0,
+            25,
+        );
+    } else {
+        iconset::paint(
+            ui.painter(),
+            rect.center(),
+            42.0,
+            Ico::Picture,
+            Family::Image,
+            0.7,
+            25,
+        );
+    }
+    if !icon {
+        ui.painter().rect_stroke(
+            rect,
+            theme::RADIUS_MD,
+            egui::Stroke::new(1.0, p.border),
+            egui::StrokeKind::Inside,
+        );
+    }
+    response.clicked()
 }
-fn excerpt(text:&str,limit:usize)->String {
- let mut chars=text.chars();let short:String=chars.by_ref().take(limit).collect();
- if chars.next().is_some(){format!("{}…",short.trim_end())}else{short}
+fn meta(ui: &mut egui::Ui, text: String) {
+    let p = theme::palette(ui.ctx());
+    theme::pill(ui, &text, p.text_secondary);
 }
-fn localized<'a>(fr:Option<&'a str>,en:&'a str)->&'a str {if crate::i18n::current()=="fr" {fr.unwrap_or(en)}else{en}}
-fn category_name(category:&str)->&'static str {match category {
- "system"=>tr("Système"),"audio"=>tr("Audio"),"streaming"=>tr("Streaming"),"productivity"=>tr("Productivité"),"smart-home"=>tr("Maison connectée"),"communication"=>tr("Communication"),"gaming"=>tr("Jeux"),"utilities"=>tr("Utilitaires"),_=>tr("Autres")
-}}
-fn matching(entry:&Entry,search:&str,category:&str)->bool {
- (category.is_empty() || entry.category.as_deref()==Some(category)) &&
- (search.is_empty() || [&entry.name,&entry.author,&entry.description].into_iter().map(String::as_str)
- .chain(entry.summary.iter().map(String::as_str)).chain(entry.tags.iter().map(String::as_str))
- .any(|v|v.to_lowercase().contains(&search.to_lowercase())))
+fn badge_pills(ui: &mut egui::Ui, b: community_plugins::Badges, compact: bool) {
+    let p = theme::palette(ui.ctx());
+    if b.official {
+        theme::pill(ui, tr("Officiel"), p.accent);
+    }
+    if b.scanned {
+        theme::pill(ui, community_plugins::scan_badge(), p.success);
+    }
+    if b.tested {
+        theme::pill(
+            ui,
+            if compact {
+                tr("Testé")
+            } else {
+                tr("Testé par NovyDeck")
+            },
+            p.success,
+        );
+    }
+    if b.warning {
+        theme::pill(ui, tr("À vérifier"), p.warning);
+    }
+}
+fn excerpt(text: &str, limit: usize) -> String {
+    let mut chars = text.chars();
+    let short: String = chars.by_ref().take(limit).collect();
+    if chars.next().is_some() {
+        format!("{}…", short.trim_end())
+    } else {
+        short
+    }
+}
+fn localized<'a>(fr: Option<&'a str>, en: &'a str) -> &'a str {
+    if crate::i18n::current() == "fr" {
+        fr.unwrap_or(en)
+    } else {
+        en
+    }
+}
+fn category_name(category: &str) -> &'static str {
+    match category {
+        "system" => tr("Système"),
+        "audio" => tr("Audio"),
+        "streaming" => tr("Streaming"),
+        "productivity" => tr("Productivité"),
+        "smart-home" => tr("Maison connectée"),
+        "communication" => tr("Communication"),
+        "gaming" => tr("Jeux"),
+        "utilities" => tr("Utilitaires"),
+        _ => tr("Autres"),
+    }
+}
+fn matching(entry: &Entry, search: &str, category: &str) -> bool {
+    (category.is_empty() || entry.category.as_deref() == Some(category))
+        && (search.is_empty()
+            || [&entry.name, &entry.author, &entry.description]
+                .into_iter()
+                .map(String::as_str)
+                .chain(entry.summary.iter().map(String::as_str))
+                .chain(entry.tags.iter().map(String::as_str))
+                .any(|v| v.to_lowercase().contains(&search.to_lowercase())))
 }
 impl App {
- pub(super) fn plugin_market(&mut self,ctx:&egui::Context){
-  let mut view=market().lock().unwrap_or_else(|e|e.into_inner());
-  if !view.open{return;}
-  let mut open=view.open;
-  // Échap : fiche → grille, grille → retour au deck (sauf saisie en cours).
-  if view.enlarged.is_none() && !ctx.wants_keyboard_input() && ctx.input(|i|i.key_pressed(egui::Key::Escape)) {
-   if view.selected.is_some(){view.selected=None;}else{open=false;}
-  }
-  egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(24,16))).show(ctx,|ui|{
+    pub(super) fn plugin_market(&mut self, ctx: &egui::Context) {
+        let mut view = market().lock().unwrap_or_else(|e| e.into_inner());
+        if !view.open {
+            return;
+        }
+        let mut open = view.open;
+        // Échap : fiche → grille, grille → retour au deck (sauf saisie en cours).
+        if view.enlarged.is_none()
+            && !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            if view.selected.is_some() {
+                view.selected = None;
+            } else {
+                open = false;
+            }
+        }
+        egui::CentralPanel::default().frame(egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(24,16))).show(ctx,|ui|{
     let p=theme::palette(ctx);
     ui.horizontal(|ui|{
      let back=if view.selected.is_some(){tr("← Retour")}else{tr("← Retour au deck")};
@@ -259,7 +409,23 @@ impl App {
     // La confirmation d'installation s'affiche aussi quand le magasin occupe la page.
     self.community_confirmation(ui);
    });
-  view.open=open;
-  if let Some(url)=view.enlarged.clone(){let mut enlarged=true;crate::theme::fixed_window(tr("Capture du plugin")).open(&mut enlarged).collapsible(false).movable(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).default_size(egui::vec2(800.0,480.0)).show(ctx,|ui|{let width=ui.available_width().min(800.0);thumbnail(ui,Some(&url),false,egui::vec2(width,width*9.0/16.0));});if !enlarged{view.enlarged=None;}}
- }
+        view.open = open;
+        if let Some(url) = view.enlarged.clone() {
+            let mut enlarged = true;
+            crate::theme::fixed_window(tr("Capture du plugin"))
+                .open(&mut enlarged)
+                .collapsible(false)
+                .movable(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .default_size(egui::vec2(800.0, 480.0))
+                .show(ctx, |ui| {
+                    let width = ui.available_width().min(800.0);
+                    thumbnail(ui, Some(&url), false, egui::vec2(width, width * 9.0 / 16.0));
+                });
+            if !enlarged {
+                view.enlarged = None;
+            }
+        }
+    }
 }

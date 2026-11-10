@@ -39,13 +39,16 @@ pub fn load_all(path: &Path) -> Result<Vec<Report>> {
         .is_some_and(|e| e.eq_ignore_ascii_case("json"))
     {
         ensure!(data.len() <= 2 * 1024 * 1024, "Manifest trop volumineux");
-        return Ok(vec![convert(HashMap::from([("manifest.json".into(), data)]))?]);
+        return Ok(vec![convert(HashMap::from([(
+            "manifest.json".into(),
+            data,
+        )]))?]);
     }
     load_all_zip_bytes(&data)
 }
 fn load_all_zip_bytes(data: &[u8]) -> Result<Vec<Report>> {
-    let mut archive =
-        zip::ZipArchive::new(Cursor::new(data)).context("Profil ou sauvegarde Elgato ZIP invalide")?;
+    let mut archive = zip::ZipArchive::new(Cursor::new(data))
+        .context("Profil ou sauvegarde Elgato ZIP invalide")?;
     ensure!(archive.len() <= 16384, "Archive contenant trop de fichiers");
     let mut total = 0u64;
     let mut nested_profiles = Vec::new();
@@ -70,7 +73,10 @@ fn load_all_zip_bytes(data: &[u8]) -> Result<Vec<Report>> {
             ensure!(file.size() <= limit, "Profil imbriqué trop volumineux");
             let mut bytes = Vec::new();
             file.take(limit + 1).read_to_end(&mut bytes)?;
-            ensure!(bytes.len() <= limit as usize, "Profil imbriqué décompressé trop volumineux");
+            ensure!(
+                bytes.len() <= limit as usize,
+                "Profil imbriqué décompressé trop volumineux"
+            );
             nested_profiles.push((name, bytes));
             continue;
         }
@@ -90,7 +96,10 @@ fn load_all_zip_bytes(data: &[u8]) -> Result<Vec<Report>> {
         );
         let mut bytes = Vec::new();
         file.take(limit + 1).read_to_end(&mut bytes)?;
-        ensure!(bytes.len() <= limit as usize, "Fichier décompressé trop volumineux");
+        ensure!(
+            bytes.len() <= limit as usize,
+            "Fichier décompressé trop volumineux"
+        );
         ensure!(files.insert(name, bytes).is_none(), "Entrées ZIP en double");
     }
     if !nested_profiles.is_empty() {
@@ -103,7 +112,10 @@ fn load_all_zip_bytes(data: &[u8]) -> Result<Vec<Report>> {
             }
         }
         if reports.is_empty() {
-            bail!("Aucun profil valide parmi les archives imbriquées : {}", errors.join("; "));
+            bail!(
+                "Aucun profil valide parmi les archives imbriquées : {}",
+                errors.join("; ")
+            );
         }
         return Ok(reports);
     }
@@ -129,7 +141,10 @@ fn load_all_zip_bytes(data: &[u8]) -> Result<Vec<Report>> {
             }
         }
         if reports.is_empty() {
-            bail!("Aucun profil valide dans la sauvegarde : {}", errors.join("; "));
+            bail!(
+                "Aucun profil valide dans la sauvegarde : {}",
+                errors.join("; ")
+            );
         }
         return Ok(reports);
     }
@@ -410,8 +425,9 @@ fn convert_action(a: &Value, ids: &HashMap<String, String>, depth: usize) -> Res
                 "Raccourci macOS ou combinaison multiple non convertible"
             );
             let k = active[0];
-            let vk = u16::try_from(k["VKeyCode"].as_u64().unwrap())
-                .map_err(|_| anyhow!("Code de touche Windows hors limites : action non convertie"))?;
+            let vk = u16::try_from(k["VKeyCode"].as_u64().unwrap()).map_err(|_| {
+                anyhow!("Code de touche Windows hors limites : action non convertie")
+            })?;
             if let Some(qt) = k["QTKeyCode"].as_u64().and_then(qt_vk) {
                 ensure!(
                     qt == vk,
@@ -626,16 +642,35 @@ mod tests {
         let root1 = json!({"Name":"Streaming","Pages":{"Pages":["P1"]},"Version":"2.0"});
         let page1 = json!({"Controllers":[{"Type":"Keypad","Actions":{"0,0":hotkey()}}]});
         let root2 = json!({"Name":"Gaming","Pages":{"Pages":["P2"]},"Version":"2.0"});
-        let page2 = json!({"Controllers":[{"Type":"Keypad","Actions":{"0,0":hotkey(),"1,0":hotkey()}}]});
+        let page2 =
+            json!({"Controllers":[{"Type":"Keypad","Actions":{"0,0":hotkey(),"1,0":hotkey()}}]});
         let opts = zip::write::SimpleFileOptions::default();
-        writer.start_file("ProfilesV2/11111111-1111-1111-1111-111111111111.sdProfile/manifest.json", opts).unwrap();
-        writer.write_all(&serde_json::to_vec(&root1).unwrap()).unwrap();
+        writer
+            .start_file(
+                "ProfilesV2/11111111-1111-1111-1111-111111111111.sdProfile/manifest.json",
+                opts,
+            )
+            .unwrap();
+        writer
+            .write_all(&serde_json::to_vec(&root1).unwrap())
+            .unwrap();
         writer.start_file("ProfilesV2/11111111-1111-1111-1111-111111111111.sdProfile/Profiles/P1/manifest.json", opts).unwrap();
-        writer.write_all(&serde_json::to_vec(&page1).unwrap()).unwrap();
-        writer.start_file("ProfilesV2/22222222-2222-2222-2222-222222222222.sdProfile/manifest.json", opts).unwrap();
-        writer.write_all(&serde_json::to_vec(&root2).unwrap()).unwrap();
+        writer
+            .write_all(&serde_json::to_vec(&page1).unwrap())
+            .unwrap();
+        writer
+            .start_file(
+                "ProfilesV2/22222222-2222-2222-2222-222222222222.sdProfile/manifest.json",
+                opts,
+            )
+            .unwrap();
+        writer
+            .write_all(&serde_json::to_vec(&root2).unwrap())
+            .unwrap();
         writer.start_file("ProfilesV2/22222222-2222-2222-2222-222222222222.sdProfile/Profiles/P2/manifest.json", opts).unwrap();
-        writer.write_all(&serde_json::to_vec(&page2).unwrap()).unwrap();
+        writer
+            .write_all(&serde_json::to_vec(&page2).unwrap())
+            .unwrap();
         writer.finish().unwrap();
 
         let reports = load_all(&path).unwrap();
@@ -654,14 +689,16 @@ mod tests {
         let p1_path = d.path().join("p1.streamDeckProfile");
         let mut w1 = zip::ZipWriter::new(std::fs::File::create(&p1_path).unwrap());
         let root1 = json!({"Name":"Music","Actions":{"0,0":hotkey()}});
-        w1.start_file("manifest.json", zip::write::SimpleFileOptions::default()).unwrap();
+        w1.start_file("manifest.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
         w1.write_all(&serde_json::to_vec(&root1).unwrap()).unwrap();
         w1.finish().unwrap();
 
         let p2_path = d.path().join("p2.streamDeckProfile");
         let mut w2 = zip::ZipWriter::new(std::fs::File::create(&p2_path).unwrap());
         let root2 = json!({"Name":"Dev","Actions":{"0,0":hotkey(),"1,0":hotkey()}});
-        w2.start_file("manifest.json", zip::write::SimpleFileOptions::default()).unwrap();
+        w2.start_file("manifest.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
         w2.write_all(&serde_json::to_vec(&root2).unwrap()).unwrap();
         w2.finish().unwrap();
 
@@ -676,7 +713,11 @@ mod tests {
 
         let reports = load_all(&backup_path).unwrap();
         assert_eq!(reports.len(), 2);
-        assert!(reports.iter().any(|r| r.profile.name == "Music" && r.converted == 1));
-        assert!(reports.iter().any(|r| r.profile.name == "Dev" && r.converted == 2));
+        assert!(reports
+            .iter()
+            .any(|r| r.profile.name == "Music" && r.converted == 1));
+        assert!(reports
+            .iter()
+            .any(|r| r.profile.name == "Dev" && r.converted == 2));
     }
 }

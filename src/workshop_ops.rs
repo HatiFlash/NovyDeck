@@ -6,7 +6,11 @@ pub enum Edit {
     Duplicate(Vec<usize>),
     Move(Vec<usize>, usize),  // destination index in the same sibling list
     Insert(Vec<usize>, Step), // insertion path ends in an index, possibly len
-    Drop { from: Vec<usize>, at: Vec<usize>, copy: bool },
+    Drop {
+        from: Vec<usize>,
+        at: Vec<usize>,
+        copy: bool,
+    },
     Toggle(Vec<usize>),
 }
 
@@ -57,10 +61,16 @@ pub fn apply(steps: &mut Vec<Step>, edit: Edit) -> Option<Vec<usize>> {
     if let Edit::Drop { from, at, copy } = edit {
         let (&source, source_parent) = from.split_last()?;
         let (&destination, destination_parent) = at.split_last()?;
-        if !copy && destination_parent.starts_with(&from) { return None; }
+        if !copy && destination_parent.starts_with(&from) {
+            return None;
+        }
         let step = children(steps, source_parent)?.get(source)?.clone();
         let target_len = children(steps, destination_parent)?.len();
-        if destination > target_len || target_len >= 256 && (copy || source_parent != destination_parent) { return None; }
+        if destination > target_len
+            || target_len >= 256 && (copy || source_parent != destination_parent)
+        {
+            return None;
+        }
         let mut next = steps.clone();
         let mut selected = at.clone();
         if !copy {
@@ -68,10 +78,13 @@ pub fn apply(steps: &mut Vec<Step>, edit: Edit) -> Option<Vec<usize>> {
             // Removing a preceding sibling shifts the container's index and insertion slot.
             let mut adjusted_parent = destination_parent.to_vec();
             if source_parent == destination_parent {
-                if destination > source { *selected.last_mut()? -= 1; }
+                if destination > source {
+                    *selected.last_mut()? -= 1;
+                }
             } else if destination_parent.len() > source_parent.len()
                 && destination_parent.starts_with(source_parent)
-                && destination_parent[source_parent.len()] > source {
+                && destination_parent[source_parent.len()] > source
+            {
                 adjusted_parent[source_parent.len()] -= 1;
                 selected = adjusted_parent.clone();
                 selected.push(destination);
@@ -194,15 +207,64 @@ mod tests {
     }
     #[test]
     fn drag_between_branches_and_guard_own_descendants() {
-        let mut tree = vec![delay(1), Step::Repeat { count: 2, steps: vec![delay(2)] }, delay(3)];
-        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0], at: vec![1, 0, 1], copy: false }), Some(vec![0, 0, 1]));
+        let mut tree = vec![
+            delay(1),
+            Step::Repeat {
+                count: 2,
+                steps: vec![delay(2)],
+            },
+            delay(3),
+        ];
+        assert_eq!(
+            apply(
+                &mut tree,
+                Edit::Drop {
+                    from: vec![0],
+                    at: vec![1, 0, 1],
+                    copy: false
+                }
+            ),
+            Some(vec![0, 0, 1])
+        );
         assert_eq!(tree.len(), 2);
-        assert!(matches!(&tree[0], Step::Repeat { steps, .. } if steps == &vec![delay(2), delay(1)]));
-        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0, 0, 1], at: vec![2], copy: true }), Some(vec![2]));
+        assert!(
+            matches!(&tree[0], Step::Repeat { steps, .. } if steps == &vec![delay(2), delay(1)])
+        );
+        assert_eq!(
+            apply(
+                &mut tree,
+                Edit::Drop {
+                    from: vec![0, 0, 1],
+                    at: vec![2],
+                    copy: true
+                }
+            ),
+            Some(vec![2])
+        );
         assert_eq!(tree.len(), 3);
-        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0, 0, 0], at: vec![3], copy: false }), Some(vec![3]));
+        assert_eq!(
+            apply(
+                &mut tree,
+                Edit::Drop {
+                    from: vec![0, 0, 0],
+                    at: vec![3],
+                    copy: false
+                }
+            ),
+            Some(vec![3])
+        );
         let before = tree.clone();
-        assert_eq!(apply(&mut tree, Edit::Drop { from: vec![0], at: vec![0, 0, 0], copy: false }), None);
+        assert_eq!(
+            apply(
+                &mut tree,
+                Edit::Drop {
+                    from: vec![0],
+                    at: vec![0, 0, 0],
+                    copy: false
+                }
+            ),
+            None
+        );
         assert_eq!(tree, before);
     }
     #[test]

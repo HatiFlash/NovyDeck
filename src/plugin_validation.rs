@@ -182,9 +182,11 @@ impl OracleFile {
     }
 }
 pub fn data_root() -> PathBuf {
-    crate::assets::user_data_dir(&std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir()))
+    crate::assets::user_data_dir(
+        &std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir()),
+    )
 }
 pub fn oracle_path(plugin: &Plugin) -> Option<PathBuf> {
     if safe_id(&plugin.uuid) && safe_id(&plugin.version) {
@@ -365,13 +367,22 @@ mod tests {
     #[ignore = "requires pinned OpenAction counter v1.0.1 release archive; starts third-party native process"]
     fn imported_openaction_counter_changes_title_in_virtual_app() {
         use sha2::{Digest, Sha256};
-        let archive = std::path::PathBuf::from(std::env::var_os("DECKFORGE_TEST_OACOUNTER_ZIP").expect("set DECKFORGE_TEST_OACOUNTER_ZIP"));
+        let archive = std::path::PathBuf::from(
+            std::env::var_os("DECKFORGE_TEST_OACOUNTER_ZIP")
+                .expect("set DECKFORGE_TEST_OACOUNTER_ZIP"),
+        );
         let bytes = std::fs::read(&archive).unwrap();
-        assert_eq!(format!("{:x}", Sha256::digest(&bytes)), "f04e0724188468e450633a49d15ee98ab0400faa2197332cfcf80278d0c54e47");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&bytes)),
+            "f04e0724188468e450633a49d15ee98ab0400faa2197332cfcf80278d0c54e47"
+        );
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("plugins");
         assert!(crate::plugin_import::import_archive(&archive, &root).unwrap());
-        let plugin = crate::plugin_import::inventory(&root).into_iter().find(|p| p.uuid == "me.amankhanna.oacounter").expect("imported counter missing");
+        let plugin = crate::plugin_import::inventory(&root)
+            .into_iter()
+            .find(|p| p.uuid == "me.amankhanna.oacounter")
+            .expect("imported counter missing");
         let oracle = ActionOracle {
             action: "me.amankhanna.oacounter.persisted".into(),
             mode: Mode::Simulated,
@@ -390,8 +401,17 @@ mod tests {
     fn external_plugin_folder_resumes_after_restart() {
         let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
         let folder = std::path::PathBuf::from(var("DECKFORGE_TEST_PLUGIN_DIR"));
-        let plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
-        crate::ui::validate_restart_persistence(&plugin, &var("DECKFORGE_TEST_PLUGIN_ACTION"), &var("DECKFORGE_TEST_PLUGIN_SETTING")).unwrap();
+        let plugin = crate::plugins::parse(
+            &folder,
+            &std::fs::read(folder.join("manifest.json")).unwrap(),
+        )
+        .unwrap();
+        crate::ui::validate_restart_persistence(
+            &plugin,
+            &var("DECKFORGE_TEST_PLUGIN_ACTION"),
+            &var("DECKFORGE_TEST_PLUGIN_SETTING"),
+        )
+        .unwrap();
     }
     /// Banc générique pour un plugin tiers déjà extrait (dossier `.sdPlugin`) :
     /// appui virtuel via App, puis titre attendu. Jamais lancé par défaut.
@@ -400,7 +420,11 @@ mod tests {
     fn external_plugin_folder_changes_title_in_virtual_app() {
         let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
         let folder = std::path::PathBuf::from(var("DECKFORGE_TEST_PLUGIN_DIR"));
-        let plugin = crate::plugins::parse(&folder, &std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        let plugin = crate::plugins::parse(
+            &folder,
+            &std::fs::read(folder.join("manifest.json")).unwrap(),
+        )
+        .unwrap();
         let oracle = ActionOracle {
             action: var("DECKFORGE_TEST_PLUGIN_ACTION"),
             mode: Mode::Simulated,
@@ -408,10 +432,15 @@ mod tests {
             expected_effect: "title after one virtual press".into(),
             timeout_ms: 10000,
             requirements: Requirements::default(),
-            observation: Observation::Title { equals: var("DECKFORGE_TEST_PLUGIN_TITLE") },
+            observation: Observation::Title {
+                equals: var("DECKFORGE_TEST_PLUGIN_TITLE"),
+            },
         };
         let report = crate::ui::validate_oracle(&plugin, &oracle.action, &oracle).unwrap();
-        assert!(report.contains("Observation confirmée après appui"), "{report}");
+        assert!(
+            report.contains("Observation confirmée après appui"),
+            "{report}"
+        );
     }
     #[test]
     fn html_oracle_never_starts_unisolated_browser() {
