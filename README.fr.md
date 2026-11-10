@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.2"><img src="https://img.shields.io/badge/Release-v0.19.2-3478F6.svg" alt="Version 0.19.2"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.3"><img src="https://img.shields.io/badge/Release-v0.19.3-3478F6.svg" alt="Version 0.19.2"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,16 @@
 [![Voir le film de présentation NovyDeck](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
+
+## Nouveautés 0.19.3
+
+### Mises à jour et catalogue de plugins signés
+
+- **Mises à jour signées** : avant de télécharger un installeur, NovyDeck vérifie une signature Ed25519 de sa version et de son empreinte SHA-256, faite avec une clé gardée hors de GitHub. Une signature absente ou fausse arrête la mise à jour : rien n'est téléchargé ni lancé.
+- **Catalogue de plugins signé** : le magasin refuse un catalogue dont la signature ne correspond pas (« Catalogue non signé ou modifié : magasin indisponible »).
+- **Qualité du code** : tout le code est formaté avec `cargo fmt`, et la CI vérifie maintenant le formatage et lance Clippy.
+
+Voir les [notes de version 0.19.3](docs/RELEASE-0.19.3.md).
 
 ## Nouveautés 0.19.2
 

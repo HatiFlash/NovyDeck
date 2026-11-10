@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.2"><img src="https://img.shields.io/badge/Release-v0.19.2-3478F6.svg" alt="Release v0.19.2"></a>
+    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.3"><img src="https://img.shields.io/badge/Release-v0.19.3-3478F6.svg" alt="Release v0.19.3"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,16 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.19.3
+
+### Signed updates and plugin catalogue
+
+- **Updates are signed**: before downloading an installer, NovyDeck checks an Ed25519 signature of its version and SHA-256 made with a key kept outside GitHub. A missing or wrong signature stops the update; nothing is downloaded or launched.
+- **The plugin catalogue is signed**: the store refuses a catalogue whose signature does not match ("Unsigned or modified catalogue: store unavailable").
+- **Code quality**: the whole code base is formatted with `cargo fmt`, and CI now checks formatting and runs Clippy.
+
+See the [0.19.3 release notes](docs/RELEASE-0.19.3.md).
 
 ## What's new in 0.19.2
 
