@@ -37,7 +37,7 @@ pub const NAMES: &[&str] = &[
     "Veille du périphérique",
     "Envoyer en UDP",
     "Requête HTTP",
-    "Touche à deux états",
+    "Basculer entre deux actions",
     "Volume d’une application",
     "Volume d’un périphérique",
     "Si… sinon",

@@ -889,6 +889,12 @@ fn simulation_trace(steps: &[Step]) -> Vec<TraceLine> {
     result
 }
 fn new_block(kind: usize, profiles: &[String]) -> Step {
+    if kind == 36 {
+        return Step::Toggle {
+            a: vec![],
+            b: vec![],
+        };
+    }
     catalog::action(
         kind,
         profiles.first().map(String::as_str).unwrap_or("Bureau"),

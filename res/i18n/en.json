@@ -1206,7 +1206,6 @@
     "Touche {key} mise à jour.{hint} Ctrl+Z pour annuler.": "Key {key} updated.{hint} Ctrl+Z to undo.",
     "Touche {key} · page {page} · profil {profile}": "Key {key} · page {page} · profile {profile}",
     "Touche {key} · {label}\nGlisse depuis la bibliothèque pour affecter un raccourci. Glisse une touche sur une autre pour les échanger.": "Key {key} · {label}\nDrag from the library to assign a shortcut. Drag one key onto another to swap them.",
-    "Touche à deux états": "Two-state key",
     "Touches (ex. CTRL+SHIFT+A)": "Keys (e.g. CTRL+SHIFT+A)",
     "Touches : actives": "Keys: running",
     "Touches : en pause": "Keys: paused",
