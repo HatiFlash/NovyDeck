@@ -476,6 +476,7 @@ fn automatic_state_onoff_workshop_autosaves_and_accepts_sensor_edge() {
     ];
     h.app.edited();
     h.app.gate.enabled = true;
+    h.app.wanted = true;
     h.app.last_edit = Instant::now() - Duration::from_secs(2);
     h.frame(vec2(1366.0, 768.0), vec![]);
     assert!(!h.app.gate.dirty, "workshop must allow autosave");
