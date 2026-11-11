@@ -107,21 +107,44 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
 }
 
 #[test]
+fn autosave_validation_failure_is_visible_and_retains_dirty_draft() {
+    let (mut h, _, _) = setup();
+    h.app.config.profiles.clear();
+    h.app.edited();
+    h.app.last_edit = Instant::now() - Duration::from_secs(2);
+    h.app.autosave_if_due();
+    assert!(h.app.gate.dirty);
+    assert!(h.app.error);
+    assert!(
+        h.app.notice.contains("Configuration à corriger"),
+        "{}",
+        h.app.notice
+    );
+}
+
+#[test]
 fn repeated_identical_inspector_settings_do_not_restart_autosave_debounce() {
     let (mut h, plugin, _) = setup();
     h.app.block_inspector_open(vec![0]);
     let context = h.app.block_inspector.as_ref().unwrap().context.clone();
-    let message = serde_json::json!({"event":"setSettings","context":context,"payload":{"mode":"on"}});
+    let message =
+        serde_json::json!({"event":"setSettings","context":context,"payload":{"mode":"on"}});
     h.app.plugin_message(&plugin, &message);
     assert!(h.app.gate.dirty);
     h.app.last_edit = Instant::now() - Duration::from_secs(2);
     let last_real_edit = h.app.last_edit;
     for _ in 0..5 {
         h.app.plugin_message(&plugin, &message);
-        assert_eq!(h.app.last_edit, last_real_edit, "unchanged plugin settings must not refresh last_edit");
+        assert_eq!(
+            h.app.last_edit, last_real_edit,
+            "unchanged plugin settings must not refresh last_edit"
+        );
     }
     h.frame(vec2(1366.0, 768.0), vec![]);
-    assert!(!h.app.gate.dirty, "autosave must complete while inspector is open");
+    assert!(
+        !h.app.gate.dirty,
+        "autosave must complete while inspector is open"
+    );
 }
 
 #[test]

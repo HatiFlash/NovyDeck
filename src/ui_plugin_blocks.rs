@@ -180,6 +180,9 @@ impl App {
                 settings: target, ..
             }) = extras::step_mut(&mut self.config.keys_mut()[key].steps, &path)
             {
+                if *target == settings {
+                    return true;
+                }
                 *target = settings.clone();
                 if let Err(error) = store::save(&self.path, &self.config) {
                     self.config = before;

@@ -470,8 +470,18 @@ fn automatic_state_onoff_workshop_autosaves_and_accepts_sensor_edge() {
             label: "Automatic state".into(),
         },
         Step::Toggle {
-            a: vec![Step::PluginAction { plugin: "com.novydeck.oledsaver".into(), action: "com.novydeck.oledsaver.saver".into(), settings: json!({"mode":"on"}), label: "on".into() }],
-            b: vec![Step::PluginAction { plugin: "com.novydeck.oledsaver".into(), action: "com.novydeck.oledsaver.saver".into(), settings: json!({"mode":"off"}), label: "off".into() }],
+            a: vec![Step::PluginAction {
+                plugin: "com.novydeck.oledsaver".into(),
+                action: "com.novydeck.oledsaver.saver".into(),
+                settings: json!({"mode":"on"}),
+                label: "on".into(),
+            }],
+            b: vec![Step::PluginAction {
+                plugin: "com.novydeck.oledsaver".into(),
+                action: "com.novydeck.oledsaver.saver".into(),
+                settings: json!({"mode":"off"}),
+                label: "off".into(),
+            }],
         },
     ];
     h.app.edited();
@@ -484,8 +494,15 @@ fn automatic_state_onoff_workshop_autosaves_and_accepts_sensor_edge() {
     h.app.applied = applied;
     let identity = crate::engine::identity(&h.app.config.profiles[0].name, &h.app.config.page, 8);
     let context = crate::plugin_runtime::virtual_context(&identity, &[0]);
-    h.app.plugin_message("com.novydeck.homeassistant", &json!({"event":"novydeckTrigger","context":context,"payload":{"edge":"active"}}));
-    assert_eq!(trigger_count(&h, &context), 1, "edge must pass the edit gate");
+    h.app.plugin_message(
+        "com.novydeck.homeassistant",
+        &json!({"event":"novydeckTrigger","context":context,"payload":{"edge":"active"}}),
+    );
+    assert_eq!(
+        trigger_count(&h, &context),
+        1,
+        "edge must pass the edit gate"
+    );
 }
 
 fn trigger_setup() -> (Harness, String) {

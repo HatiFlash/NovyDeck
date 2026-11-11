@@ -1132,6 +1132,22 @@ impl App {
         self.upload(true);
         self.log(tr("Connexion au périphérique…").into());
     }
+    fn autosave_if_due(&mut self) {
+        if !self.gate.dirty
+            || self.gate.invalid
+            || self.last_edit.elapsed() <= Duration::from_millis(800)
+        {
+            return;
+        }
+        if let Err(e) = self.config.validate_structure() {
+            let message = trf("Configuration à corriger : {error}", &[("error", &e)]);
+            if !self.error || self.notice != message {
+                self.fail(message);
+            }
+            return;
+        }
+        self.save();
+    }
     fn save(&mut self) {
         if self.gate.invalid {
             self.fail(tr("Importe une configuration valide avant d’enregistrer.").into());
@@ -3764,6 +3780,8 @@ impl App {
                 "Brouillon · {error} · Les autres touches restent disponibles.",
                 &[("error", &e)],
             )
+        } else if self.error && self.gate.dirty {
+            self.notice.clone()
         } else if self.gate.dirty {
             tr("Sauvegarde automatique…").into()
         } else if self.notice == "Tout est prêt." || self.notice == "All set." {
@@ -6022,13 +6040,7 @@ impl App {
         self.management_modal(ctx);
         self.key_previews.end_frame(ctx);
         self.record_history(history_before, ctx);
-        if self.gate.dirty
-            && !self.gate.invalid
-            && self.last_edit.elapsed() > Duration::from_millis(800)
-            && self.config.validate_structure().is_ok()
-        {
-            self.save();
-        }
+        self.autosave_if_due();
     }
     fn diagnostic_sample(&mut self, ctx: &egui::Context, start: Instant) {
         if self.flicker.as_ref().is_some_and(|s| s.active()) {
@@ -6883,9 +6895,8 @@ impl App {
         if self.gate.dirty
             && !self.gate.invalid
             && self.last_edit.elapsed() > Duration::from_millis(800)
-            && self.config.validate_structure().is_ok()
         {
-            self.save();
+            self.autosave_if_due();
         }
     }
 }
