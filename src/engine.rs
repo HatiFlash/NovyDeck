@@ -34,6 +34,72 @@ pub fn identity(profile: &str, page: &str, index: usize) -> String {
 }
 // Aucun badge « 1/2 » n'est peint sur le périphérique : il apparaissait comme une pastille rouge
 // absente de l'aperçu et imposait un ré-envoi complet du deck (flash du logo par défaut) à chaque appui.
+/// Force the next physical-style toggle execution to a sensor-selected branch.
+pub fn set_toggle_branch(key: &str, path: &[usize], branch: usize) {
+    let id = format!(
+        "{key}\0{}",
+        path.iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(".")
+    );
+    let mut states = toggle_states().lock().unwrap_or_else(|e| e.into_inner());
+    states.insert(id, branch == 1);
+}
+pub fn contains_toggle(steps: &[Step]) -> bool {
+    steps.iter().any(|step| match step {
+        Step::Toggle { .. } => true,
+        Step::Repeat { steps, .. } => contains_toggle(steps),
+        Step::IfWindow {
+            then_steps,
+            else_steps,
+            ..
+        }
+        | Step::IfVariable {
+            then_steps,
+            else_steps,
+            ..
+        }
+        | Step::IfCondition {
+            then_steps,
+            else_steps,
+            ..
+        } => contains_toggle(then_steps) || contains_toggle(else_steps),
+        _ => false,
+    })
+}
+/// Set every toggle in the triggered key, preserving its path and the normal next-press state.
+pub fn select_toggle_branches(steps: &[Step], key: &str, branch: usize) -> bool {
+    fn walk(steps: &[Step], key: &str, path: &[usize], branch: usize) -> bool {
+        let mut found = false;
+        for (i, step) in steps.iter().enumerate() {
+            if step.is_disabled() {
+                continue;
+            }
+            let mut p = path.to_vec();
+            p.push(i);
+            let children: Vec<&[Step]> = match step {
+                Step::Toggle { a, b } => {
+                    set_toggle_branch(key, &p, branch);
+                    found = true;
+                    vec![a, b]
+                }
+                Step::Repeat { steps, .. } => vec![steps],
+                Step::IfWindow { then_steps, else_steps, .. }
+                | Step::IfVariable { then_steps, else_steps, .. }
+                | Step::IfCondition { then_steps, else_steps, .. } => vec![then_steps, else_steps],
+                _ => vec![],
+            };
+            for (index, child) in children.into_iter().enumerate() {
+                let mut nested = p.clone();
+                nested.push(index);
+                found |= walk(child, key, &nested, branch);
+            }
+        }
+        found
+    }
+    walk(steps, key, &[], branch)
+}
 fn next_branch(path: &[usize]) -> usize {
     let id = ACTIVE_KEY.with(|id| id.borrow().clone());
     let id = format!(

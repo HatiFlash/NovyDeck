@@ -4213,7 +4213,7 @@ impl App {
                                         {
                                             let mut show_card = |ui: &mut egui::Ui, choice: u8, steps: &mut Vec<Step>| {
                                                 card_changed |= onoff_branch_card(ui, steps, choice, &mut branch, &mut selected_step,
-                                                    &names[active], &mut removed_step, &mut branch_edit);
+                                                    &names[active], plugin_catalog.unwrap_or(&[]), &mut removed_step, &mut branch_edit);
                                             };
                                         if ui.available_width() >= 360.0 {
                                             ui.columns(2, |columns| {
@@ -4251,7 +4251,6 @@ impl App {
                         }
                     }
                     if long_editor || !(key.steps.len() == 1 && matches!(key.steps[0], Step::Toggle { .. })) {
-                    let has_plugin = key.plugin.is_some();
                     let has_toggle = key.steps.iter().any(|step| matches!(step, Step::Toggle { .. }));
                     let has_navigation = key.steps.iter().any(|step| matches!(step.active(),
                         Step::Page { .. } | Step::Folder { .. } | Step::Back | Step::PageNext |
@@ -4261,7 +4260,7 @@ impl App {
                     ui.horizontal(|ui|{
                         ui.label(RichText::new(trf("Actions · {steps} étape(s)", &[("steps", &steps.len())])).strong());
                         if !long_editor {
-                            if ui.add_enabled(!has_plugin && !has_toggle && !has_navigation, egui::Button::new(tr("Actions ON/OFF")))
+                            if ui.add_enabled(!has_toggle && !has_navigation, egui::Button::new(tr("Actions ON/OFF")))
                                 .on_hover_text(if has_navigation { tr("La navigation ne peut pas être placée dans une action ON/OFF.") } else { tr("Le premier appui lance Action 1 ; le suivant lance Action 2. Les actions existantes deviennent Action 1.") }).clicked() {
                                 enable_onoff = true;
                             }
@@ -4304,12 +4303,27 @@ impl App {
                     if let Some(i)=remove{steps.remove(i);changed=true;removed_step=true;}if let Some((a,b))=movement{steps.swap(a,b);changed=true;}
                     }
                     if enable_onoff {
-                        let original = std::mem::take(&mut key.steps);
-                        key.steps.push(Step::Toggle { a: original, b: Vec::new() });
-                        if let Some(crate::model::PluginStateTarget::Block { path }) = &mut key.plugin_state {
-                            let mut wrapped = vec![0, 0];
-                            wrapped.extend(path.iter().copied());
-                            *path = wrapped;
+                        if let Some(binding) = key.plugin.take() {
+                            key.steps.insert(0, Step::PluginAction {
+                                plugin: binding.plugin,
+                                action: binding.action,
+                                settings: binding.settings,
+                                label: String::new(),
+                            });
+                            if key.plugin_state == Some(crate::model::PluginStateTarget::Direct) {
+                                key.plugin_state = Some(crate::model::PluginStateTarget::Block {
+                                    path: vec![0],
+                                });
+                            }
+                            key.steps.push(Step::Toggle { a: Vec::new(), b: Vec::new() });
+                        } else {
+                            let original = std::mem::take(&mut key.steps);
+                            key.steps.push(Step::Toggle { a: original, b: Vec::new() });
+                            if let Some(crate::model::PluginStateTarget::Block { path }) = &mut key.plugin_state {
+                                let mut wrapped = vec![0, 0];
+                                wrapped.extend(path.iter().copied());
+                                *path = wrapped;
+                            }
                         }
                         changed = true;
                     }
@@ -6318,6 +6332,12 @@ impl App {
     fn plugin_trigger(&mut self, plugin: &str, message: &serde_json::Value) {
         let context = message["context"].as_str().unwrap_or("");
         let action = message["action"].as_str();
+        let edge = match message["payload"]["edge"].as_str() {
+            Some("active") => Some(0),
+            Some("inactive") => Some(1),
+            _ => None,
+        };
+        let mut source_path = None;
         let index = if context.starts_with("novydeck-block-") {
             let Some((index, path)) =
                 crate::plugin_runtime::virtual_step_path(&self.applied, context)
@@ -6335,6 +6355,7 @@ impl App {
             if owner != plugin || action.is_some_and(|a| a != step_action.as_str()) {
                 return self.trigger_refused(plugin, context, "plugin ou action différents");
             }
+            source_path = Some(path);
             index
         } else {
             let Some(v) = self
@@ -6362,10 +6383,12 @@ impl App {
         if index >= self.applied.keys().len() || index >= self.device_keys() {
             return self.trigger_refused(plugin, context, "index hors limites");
         }
+        let sensor_toggle = edge.is_some()
+            && crate::engine::contains_toggle(&self.applied.keys()[index].steps);
         let now = Instant::now();
-        // Anti-boucle : une touche lancée par un novydeckTrigger ne peut pas être redéclenchée tant qu'elle s'exécute (ni 2 s après).
+        // Anti-boucle classique conservée ; les transitions du capteur ne doivent pas attendre 2 s.
         if let Some(at) = self.plugin_trigger_running.get(&index).copied() {
-            if now.duration_since(at) < Duration::from_secs(2)
+            if (now.duration_since(at) < Duration::from_secs(2) && !sensor_toggle)
                 || self.engine.running.load(Ordering::SeqCst)
             {
                 return self.trigger_refused(plugin, context, "boucle détectée");
@@ -6387,13 +6410,32 @@ impl App {
         }
         log.push_back(now);
         self.plugin_trigger_running.insert(index, now);
-        let c = self.config.clone();
+        let c = self.applied.clone();
         let mut key = c.keys()[index].clone();
-        key.runtime_id = Some(crate::engine::identity(
-            &c.profiles[c.active].name,
-            &c.page,
-            index,
-        ));
+        let identity = crate::engine::identity(&c.profiles[c.active].name, &c.page, index);
+        key.runtime_id = Some(identity.clone());
+        if sensor_toggle {
+            if let Some(path) = source_path {
+                if let Some(step) = extras::step_mut(&mut key.steps, &path) {
+                    // The sensor's event is not a manual press of its own action.
+                    *step = Step::Disabled {
+                        step: Box::new(step.clone()),
+                    };
+                }
+            }
+            crate::engine::select_toggle_branches(&key.steps, &identity, edge.unwrap());
+            if c.keys()[index].plugin_state.is_none()
+                && c.keys()[index]
+                    .state_display
+                    .as_ref()
+                    .is_some_and(|display| display.toggle)
+            {
+                let active = edge == Some(0);
+                self.state_values[index] = Some(active);
+                self.toggle_faces.insert(identity.clone(), active);
+                self.send_state_face(index);
+            }
+        }
         self.execute_key(key, false, false, &c);
     }
     /// Journalise un refus de `novydeckTrigger` (au plus une ligne par contexte et par raison toutes les 5 s).
@@ -7229,6 +7271,7 @@ fn onoff_branch_card(
     branch: &mut u8,
     selected: &mut usize,
     profile: &str,
+    plugins: &[crate::plugins::Plugin],
     removed: &mut bool,
     branch_edit: &mut Option<OnOffBranchEdit>,
 ) -> bool {
@@ -7326,6 +7369,13 @@ fn onoff_branch_card(
             for (i, step) in steps.iter().enumerate() {
                 let summary = match step {
                     Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
+                    Step::PluginAction { plugin, action, settings, label } => {
+                        let (_, name) = extras::plugin_names(plugin, action, label, plugins);
+                        match settings["mode"].as_str() {
+                            Some(mode) if !mode.is_empty() => format!("{name} · {mode}"),
+                            _ => name,
+                        }
+                    }
                     _ => tr(step.name()).to_owned(),
                 };
                 if ui

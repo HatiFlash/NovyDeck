@@ -295,6 +295,30 @@ pub fn virtual_context(key: &str, path: &[usize]) -> String {
             .join(".")
     )
 }
+fn sync_virtual_bindings(
+    next: &mut HashMap<String, Visible>,
+    current: &HashMap<String, Visible>,
+    configured: &HashMap<String, Visible>,
+    bindings: HashMap<String, (String, String, Value)>,
+) {
+    for (context, (plugin, action, settings)) in bindings {
+        let mut v = current
+            .get(&context)
+            .filter(|v| v.plugin == plugin && v.action == action)
+            .cloned()
+            .unwrap_or_else(|| Visible {
+                context: context.clone(),
+                plugin,
+                action,
+                index: 0,
+                settings: Value::Null,
+                state: 0,
+            });
+        v.settings = settings;
+        v.state = configured.get(&context).map_or(v.state, |c| c.state);
+        next.insert(context, v);
+    }
+}
 fn virtual_bindings(config: &Config) -> HashMap<String, (String, String, Value)> {
     fn walk(
         steps: &[crate::model::Step],
@@ -839,17 +863,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                 }
             }
             Ok(Request::Sync(mut next, bindings, origin)) => {
-                for (context, (plugin, action, settings)) in bindings {
-                    if let Some(v) = current
-                        .get(&context)
-                        .filter(|v| v.plugin == plugin && v.action == action)
-                    {
-                        let mut v = v.clone();
-                        v.settings = settings;
-                        v.state = configured.get(&context).map_or(v.state, |c| c.state);
-                        next.insert(context, v);
-                    }
-                }
+                sync_virtual_bindings(&mut next, &current, &configured, bindings);
                 for (context, v) in &drafts {
                     next.insert(
                         context.clone(),
@@ -1940,6 +1954,34 @@ ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willApp
                 _ => {}
             }
         }
+    }
+    #[test]
+    fn plugin_block_sync_appears_once_without_prior_context() {
+        use crate::model::Step;
+        let mut config = Config::default();
+        config.keys_mut()[0].steps = vec![Step::Toggle {
+            a: vec![Step::PluginAction {
+                plugin: "fixture".into(),
+                action: "fixture.action".into(),
+                settings: json!({"mode":"on"}),
+                label: String::new(),
+            }],
+            b: vec![],
+        }];
+        let bindings = virtual_bindings(&config);
+        assert_eq!(bindings.len(), 1);
+        let empty = HashMap::new();
+        let mut next = visible(&config);
+        sync_virtual_bindings(&mut next, &empty, &empty, bindings);
+        let (gone, added) = diff(&empty, &next);
+        assert!(gone.is_empty());
+        assert_eq!(added.len(), 1);
+        assert_eq!(event("willAppear", &added[0], &Device::virtual_device())["event"], "willAppear");
+        let mut second = visible(&config);
+        sync_virtual_bindings(&mut second, &next, &empty, virtual_bindings(&config));
+        assert!(diff(&next, &second).1.is_empty(), "no duplicate willAppear");
+        config.keys_mut()[0].steps.clear();
+        assert_eq!(diff(&next, &visible(&config)).0.len(), 1, "willDisappear on removal");
     }
     #[test]
     fn page_diff() {

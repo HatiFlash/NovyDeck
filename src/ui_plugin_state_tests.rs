@@ -477,6 +477,47 @@ fn trigger_setup() -> (Harness, String) {
     let context = crate::plugin_runtime::virtual_context(&identity, &[0]);
     (h, context)
 }
+#[test]
+fn plugin_trigger_edge_selects_on_off_idempotently_and_legacy_alternates() {
+    let (mut h, context) = trigger_setup();
+    h.app.config.keys_mut()[0].steps.push(Step::Toggle {
+        a: vec![Step::Notify { title: "ON".into(), message: "X".into() }],
+        b: vec![Step::Notify { title: "OFF".into(), message: "Y".into() }],
+    });
+    h.app.applied = h.app.config.clone();
+    let mut observed = Vec::new();
+    for (index, edge) in [Some("active"), Some("inactive"), Some("active"), Some("active"), None, None].into_iter().enumerate() {
+        let mut message = json!({"event":"novydeckTrigger", "context":context});
+        if let Some(edge) = edge {
+            message["payload"] = json!({"edge":edge});
+        }
+        // The engine serializes macros; wait for the preceding invocation to finish.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while h.app.engine.running.load(std::sync::atomic::Ordering::SeqCst) {
+            assert!(std::time::Instant::now() < deadline, "macro did not finish");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        h.app.plugin_trigger_log.clear(); // isolate behavior from the 4/s burst limiter
+        if edge.is_none() {
+            h.app.plugin_trigger_running.clear(); // legacy anti-loop window, not a sensor edge
+        }
+        h.app.plugin_message(OWNER, &message);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            for event in h.app.events.try_iter() {
+                if let super::Event::Notification(title, _) = event {
+                    observed.push(title);
+                }
+            }
+            if observed.len() > index {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "no ON/OFF action executed: {observed:?}");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    assert_eq!(observed, ["ON", "OFF", "ON", "ON", "OFF", "ON"]);
+}
 fn trigger_count(h: &Harness, context: &str) -> usize {
     h.app.plugin_trigger_log.get(context).map_or(0, |l| l.len())
 }

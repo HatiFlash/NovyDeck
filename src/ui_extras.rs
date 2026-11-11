@@ -365,7 +365,7 @@ const BLOCK_CATEGORIES: &[(&str, &[usize])] = &[
     ("Fenêtres", &[6, 46]),
     ("Attendre", &[5, 40]),
     ("Notifications", &[41]),
-    ("Logique et répétitions", &[14, 15, 39]),
+    ("Logique et répétitions", &[14, 15, 36, 39]),
     ("Variables", &[16, 17, 42]),
     ("Navigation NovyDeck", &[7, 8, 9, 10, 11]),
     ("Avancé / AutoHotkey", &[18]),
@@ -408,7 +408,7 @@ fn block_name(kind: usize) -> &'static str {
         33 => crate::i18n::tr("Veille du périphérique"),
         34 => crate::i18n::tr("Envoyer en UDP"),
         35 => crate::i18n::tr("Requête HTTP"),
-        36 => crate::i18n::tr("Touche à deux états"),
+        36 => crate::i18n::tr("Basculer entre deux actions"),
         37 => crate::i18n::tr("Volume d’une application"),
         38 => crate::i18n::tr("Volume d’un périphérique"),
         39 => crate::i18n::tr("Si… sinon"),
@@ -3471,6 +3471,11 @@ impl App {
 #[cfg(test)]
 mod workshop_tests {
     use super::*;
+    #[test]
+    fn workshop_library_has_two_empty_toggle_branches() {
+        assert!(BLOCK_CATEGORIES.iter().any(|(_, kinds)| kinds.contains(&36)));
+        assert!(matches!(new_block(36, &[]), Step::Toggle { a, b } if a.is_empty() && b.is_empty()));
+    }
     #[test]
     fn trace_respects_disabled_branches_and_one_iteration_without_actions() {
         let steps = vec![
