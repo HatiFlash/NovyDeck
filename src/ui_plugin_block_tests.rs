@@ -107,6 +107,24 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
 }
 
 #[test]
+fn repeated_identical_inspector_settings_do_not_restart_autosave_debounce() {
+    let (mut h, plugin, _) = setup();
+    h.app.block_inspector_open(vec![0]);
+    let context = h.app.block_inspector.as_ref().unwrap().context.clone();
+    let message = serde_json::json!({"event":"setSettings","context":context,"payload":{"mode":"on"}});
+    h.app.plugin_message(&plugin, &message);
+    assert!(h.app.gate.dirty);
+    h.app.last_edit = Instant::now() - Duration::from_secs(2);
+    let last_real_edit = h.app.last_edit;
+    for _ in 0..5 {
+        h.app.plugin_message(&plugin, &message);
+        assert_eq!(h.app.last_edit, last_real_edit, "unchanged plugin settings must not refresh last_edit");
+    }
+    h.frame(vec2(1366.0, 768.0), vec![]);
+    assert!(!h.app.gate.dirty, "autosave must complete while inspector is open");
+}
+
+#[test]
 fn same_action_different_settings_reorder_and_profile_replacement_invalidate_session() {
     let (mut h, plugin, _) = setup();
     for (index, step) in h.app.config.keys_mut()[0].steps.iter_mut().enumerate() {
