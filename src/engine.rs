@@ -48,6 +48,7 @@ pub fn set_toggle_branch(key: &str, path: &[usize], branch: usize) {
 }
 pub fn contains_toggle(steps: &[Step]) -> bool {
     steps.iter().any(|step| match step {
+        Step::Disabled { .. } => false,
         Step::Toggle { .. } => true,
         Step::Repeat { steps, .. } => contains_toggle(steps),
         Step::IfWindow {
@@ -85,9 +86,21 @@ pub fn select_toggle_branches(steps: &[Step], key: &str, branch: usize) -> bool 
                     vec![a, b]
                 }
                 Step::Repeat { steps, .. } => vec![steps],
-                Step::IfWindow { then_steps, else_steps, .. }
-                | Step::IfVariable { then_steps, else_steps, .. }
-                | Step::IfCondition { then_steps, else_steps, .. } => vec![then_steps, else_steps],
+                Step::IfWindow {
+                    then_steps,
+                    else_steps,
+                    ..
+                }
+                | Step::IfVariable {
+                    then_steps,
+                    else_steps,
+                    ..
+                }
+                | Step::IfCondition {
+                    then_steps,
+                    else_steps,
+                    ..
+                } => vec![then_steps, else_steps],
                 _ => vec![],
             };
             for (index, child) in children.into_iter().enumerate() {

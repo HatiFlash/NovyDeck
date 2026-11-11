@@ -1976,12 +1976,19 @@ ws.addEventListener('message',m=>{let v=JSON.parse(m.data);if(v.event==='willApp
         let (gone, added) = diff(&empty, &next);
         assert!(gone.is_empty());
         assert_eq!(added.len(), 1);
-        assert_eq!(event("willAppear", &added[0], &Device::virtual_device())["event"], "willAppear");
+        assert_eq!(
+            event("willAppear", &added[0], &Device::virtual_device())["event"],
+            "willAppear"
+        );
         let mut second = visible(&config);
         sync_virtual_bindings(&mut second, &next, &empty, virtual_bindings(&config));
         assert!(diff(&next, &second).1.is_empty(), "no duplicate willAppear");
         config.keys_mut()[0].steps.clear();
-        assert_eq!(diff(&next, &visible(&config)).0.len(), 1, "willDisappear on removal");
+        assert_eq!(
+            diff(&next, &visible(&config)).0.len(),
+            1,
+            "willDisappear on removal"
+        );
     }
     #[test]
     fn page_diff() {

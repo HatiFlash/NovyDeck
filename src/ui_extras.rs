@@ -3473,8 +3473,12 @@ mod workshop_tests {
     use super::*;
     #[test]
     fn workshop_library_has_two_empty_toggle_branches() {
-        assert!(BLOCK_CATEGORIES.iter().any(|(_, kinds)| kinds.contains(&36)));
-        assert!(matches!(new_block(36, &[]), Step::Toggle { a, b } if a.is_empty() && b.is_empty()));
+        assert!(BLOCK_CATEGORIES
+            .iter()
+            .any(|(_, kinds)| kinds.contains(&36)));
+        assert!(
+            matches!(new_block(36, &[]), Step::Toggle { a, b } if a.is_empty() && b.is_empty())
+        );
     }
     #[test]
     fn trace_respects_disabled_branches_and_one_iteration_without_actions() {

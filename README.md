@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <a href="https://github.com/HatiFlash/NovyDeck/releases/tag/v0.19.3"><img src="https://img.shields.io/badge/Release-v0.19.3-3478F6.svg" alt="Release v0.19.3"></a>
+    <img src="https://img.shields.io/badge/Development-v0.19.4-3478F6.svg" alt="Development v0.19.4">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -21,6 +21,10 @@ English · [Français](README.fr.md)
 [![Watch the NovyDeck presentation film](docs/media/novydeck-demo-poster.png)](docs/media/novydeck-demo.mp4)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
+
+## What's new in 0.19.4 (development)
+
+Plugin actions in Workshop blocks now start monitoring on the active page. Home Assistant Automatic state can select the ON/OFF action from its sensor edge; the ON/OFF block is available in the Workshop library, and plugin actions have descriptive labels in the ON/OFF editor. See the [0.19.4 release notes](docs/RELEASE-0.19.4.md) for validation and limitations.
 
 ## What's new in 0.19.3
 

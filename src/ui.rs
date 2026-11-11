@@ -6383,8 +6383,8 @@ impl App {
         if index >= self.applied.keys().len() || index >= self.device_keys() {
             return self.trigger_refused(plugin, context, "index hors limites");
         }
-        let sensor_toggle = edge.is_some()
-            && crate::engine::contains_toggle(&self.applied.keys()[index].steps);
+        let sensor_toggle =
+            edge.is_some() && crate::engine::contains_toggle(&self.applied.keys()[index].steps);
         let now = Instant::now();
         // Anti-boucle classique conservée ; les transitions du capteur ne doivent pas attendre 2 s.
         if let Some(at) = self.plugin_trigger_running.get(&index).copied() {
@@ -7369,7 +7369,12 @@ fn onoff_branch_card(
             for (i, step) in steps.iter().enumerate() {
                 let summary = match step {
                     Step::Hotkey { keys } => format!("{} : {}", tr(step.name()), keys),
-                    Step::PluginAction { plugin, action, settings, label } => {
+                    Step::PluginAction {
+                        plugin,
+                        action,
+                        settings,
+                        label,
+                    } => {
                         let (_, name) = extras::plugin_names(plugin, action, label, plugins);
                         match settings["mode"].as_str() {
                             Some(mode) if !mode.is_empty() => format!("{name} · {mode}"),

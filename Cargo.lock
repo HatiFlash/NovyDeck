@@ -2437,7 +2437,7 @@ checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
 name = "novydeck"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "ab_glyph",
  "anyhow",
