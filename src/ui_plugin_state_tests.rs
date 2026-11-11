@@ -457,6 +457,34 @@ fn state_source_picker_and_three_faces_are_visible_in_both_languages_at_hidpi() 
     }
 }
 
+#[test]
+fn automatic_state_onoff_workshop_autosaves_and_accepts_sensor_edge() {
+    let mut h = Harness::new();
+    h.app.show_workflow = true;
+    h.app.selected = 8;
+    h.app.config.keys_mut()[8].steps = vec![
+        Step::PluginAction {
+            plugin: "com.novydeck.homeassistant".into(),
+            action: "com.novydeck.homeassistant.auto".into(),
+            settings: json!({"entity":"binary_sensor.hatim_assis_au_bureau", "op":"eq", "value":"off", "hold_seconds":"10"}),
+            label: "Automatic state".into(),
+        },
+        Step::Toggle {
+            a: vec![Step::PluginAction { plugin: "com.novydeck.oledsaver".into(), action: "com.novydeck.oledsaver.saver".into(), settings: json!({"mode":"on"}), label: "on".into() }],
+            b: vec![Step::PluginAction { plugin: "com.novydeck.oledsaver".into(), action: "com.novydeck.oledsaver.saver".into(), settings: json!({"mode":"off"}), label: "off".into() }],
+        },
+    ];
+    h.app.edited();
+    h.app.gate.enabled = true;
+    h.app.last_edit = Instant::now() - Duration::from_secs(2);
+    h.frame(vec2(1366.0, 768.0), vec![]);
+    assert!(!h.app.gate.dirty, "workshop must allow autosave");
+    let identity = crate::engine::identity(&h.app.config.profiles[0].name, &h.app.config.page, 8);
+    let context = crate::plugin_runtime::virtual_context(&identity, &[0]);
+    h.app.plugin_message("com.novydeck.homeassistant", &json!({"event":"novydeckTrigger","context":context,"payload":{"edge":"active"}}));
+    assert_eq!(trigger_count(&h, &context), 1, "edge must pass the edit gate");
+}
+
 fn trigger_setup() -> (Harness, String) {
     let mut h = Harness::new();
     h.app.config.keys_mut()[0].steps = vec![Step::PluginAction {
