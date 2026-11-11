@@ -479,6 +479,8 @@ fn automatic_state_onoff_workshop_autosaves_and_accepts_sensor_edge() {
     h.app.last_edit = Instant::now() - Duration::from_secs(2);
     h.frame(vec2(1366.0, 768.0), vec![]);
     assert!(!h.app.gate.dirty, "workshop must allow autosave");
+    let (_, applied) = h.app.pending.take().expect("autosave must upload profile");
+    h.app.applied = applied;
     let identity = crate::engine::identity(&h.app.config.profiles[0].name, &h.app.config.page, 8);
     let context = crate::plugin_runtime::virtual_context(&identity, &[0]);
     h.app.plugin_message("com.novydeck.homeassistant", &json!({"event":"novydeckTrigger","context":context,"payload":{"edge":"active"}}));
