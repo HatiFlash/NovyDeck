@@ -269,6 +269,11 @@ pub struct App {
     wanted: bool,
     status: String,
     logs: VecDeque<String>,
+    journal: crate::app_log::Journal,
+    dirty_since: Option<Instant>,
+    dirty_warning: bool,
+    autosave_skip: Option<&'static str>,
+    last_ui_edit: Instant,
     started: Instant,
     last_edit: Instant,
     base_profile: usize,
@@ -668,6 +673,7 @@ impl App {
             }
         }
         let (dialog_tx, dialog_rx) = mpsc::channel();
+        let journal = crate::app_log::Journal::start(&path);
         let mut app = Self {
             applied: config.clone(),
             base_profile: config.active,
@@ -678,7 +684,7 @@ impl App {
             sleep: SleepState::new(Instant::now()),
             show_apps: false,
             pending: None,
-            path,
+            path: path.clone(),
             selected: 0,
             engine,
             device,
@@ -697,6 +703,11 @@ impl App {
             wanted: false,
             status: tr("Aucun périphérique").into(),
             logs: VecDeque::new(),
+            journal,
+            dirty_since: None,
+            dirty_warning: false,
+            autosave_skip: None,
+            last_ui_edit: Instant::now(),
             started: Instant::now(),
             last_edit: Instant::now(),
             show_logs: false,
@@ -745,10 +756,11 @@ impl App {
             plugins: if isolated || smoke {
                 None
             } else {
-                Some(crate::plugin_runtime::Manager::new(
+                Some(crate::plugin_runtime::Manager::new_with_config(
                     crate::plugin_import::installed_root()
                         .map(|root| crate::plugin_import::inventory(&root))
                         .unwrap_or_default(),
+                    Some(path.clone()),
                 ))
             },
             assistant,
@@ -913,6 +925,8 @@ impl App {
         ));
     }
     fn log(&mut self, s: String) {
+        self.journal
+            .record(self.started.elapsed().as_secs_f32(), &s);
         while self.logs.len() >= 300 {
             self.logs.pop_front();
         }
@@ -1000,6 +1014,34 @@ impl App {
             self.send_state_face(index);
         }
     }
+    fn refresh_audio_faces(&mut self) {
+        // Core Audio's default-endpoint notification is not a profile edit. A full
+        // HID Update clears and repaints every key, briefly exposing plugin defaults.
+        if !self.wanted || !self.gate.connected || self.gate.dirty || self.pending.is_some() {
+            return;
+        }
+        for index in 0..self.device_keys().min(self.applied.keys().len()) {
+            let Some(source) = self.config.keys().get(index) else {
+                continue;
+            };
+            if crate::audio::single_switch(&source.steps).is_none() {
+                continue;
+            }
+            let shown = crate::audio::present_key(source, &self.audio);
+            let previous = &self.applied.keys()[index];
+            if previous.image == shown.image
+                && previous.label == shown.label
+                && previous.display_kind == shown.display_kind
+            {
+                continue;
+            }
+            let current = &mut self.applied.keys_mut()[index];
+            current.image = shown.image;
+            current.label = shown.label;
+            current.display_kind = shown.display_kind;
+            self.send_state_face(index);
+        }
+    }
     fn send_state_face(&self, index: usize) {
         if !self.wanted
             || !self.gate.connected
@@ -1068,6 +1110,22 @@ impl App {
         }
     }
     fn edited(&mut self) {
+        self.edited_from("utilisateur/UI");
+    }
+    fn edited_from(&mut self, source: &'static str) {
+        if !self.gate.dirty {
+            self.dirty_since = Some(Instant::now());
+            self.dirty_warning = false;
+            let event = match source {
+                "historique" => "dirty : historique/annuler",
+                _ => "dirty : utilisateur/UI",
+            };
+            self.journal
+                .event(self.started.elapsed().as_secs_f32(), event);
+        }
+        if source == "utilisateur/UI" {
+            self.last_ui_edit = Instant::now();
+        }
         self.plugin_states.retain(&self.config);
         self.send_edited_plugin_face(self.selected);
         self.sync_state_display();
@@ -1132,14 +1190,27 @@ impl App {
         self.upload(true);
         self.log(tr("Connexion au périphérique…").into());
     }
+    fn autosave_skipped(&mut self, reason: &'static str) {
+        if self.autosave_skip != Some(reason) {
+            self.autosave_skip = Some(reason);
+            self.journal
+                .event(self.started.elapsed().as_secs_f32(), reason);
+        }
+    }
     fn autosave_if_due(&mut self) {
-        if !self.gate.dirty
-            || self.gate.invalid
-            || self.last_edit.elapsed() <= Duration::from_millis(800)
-        {
+        if !self.gate.dirty {
+            return;
+        }
+        if self.gate.invalid {
+            self.autosave_skipped("autosave sautée : configuration invalide");
+            return;
+        }
+        if self.last_edit.elapsed() <= Duration::from_millis(800) {
+            self.autosave_skipped("autosave sautée : debounce");
             return;
         }
         if let Err(e) = self.config.validate_structure() {
+            self.autosave_skipped("autosave sautée : structure invalide");
             let message = trf("Configuration à corriger : {error}", &[("error", &e)]);
             if !self.error || self.notice != message {
                 self.fail(message);
@@ -1157,6 +1228,10 @@ impl App {
             Ok(()) => {
                 self.plugin_save_pending = false;
                 self.gate.dirty = false;
+                self.dirty_since = None;
+                self.autosave_skip = None;
+                self.journal
+                    .event(self.started.elapsed().as_secs_f32(), "autosave effectuée");
                 self.refresh_hotkeys();
                 if self.wanted {
                     self.upload(false);
@@ -1170,7 +1245,10 @@ impl App {
                     tr("Brouillons enregistrés. Synchronisation des touches valides…").into()
                 });
             }
-            Err(e) => self.fail(trf("Sauvegarde impossible : {error}", &[("error", &e)])),
+            Err(e) => {
+                self.autosave_skipped("autosave sautée : erreur écriture");
+                self.fail(trf("Sauvegarde impossible : {error}", &[("error", &e)]));
+            }
         }
     }
     fn execute_key(&mut self, mut key: Key, dry: bool, delayed: bool, config: &Config) {
@@ -1374,8 +1452,8 @@ impl App {
                     let changed =
                         self.audio.output != snapshot.output || self.audio.input != snapshot.input;
                     self.audio = snapshot;
-                    if changed && self.wanted && !self.gate.dirty {
-                        self.upload(false);
+                    if changed {
+                        self.refresh_audio_faces();
                     }
                 }
                 Event::Automatic(trigger, at) => {
@@ -1556,6 +1634,9 @@ impl App {
                                 }
                             }
                         }
+                        // An audio notification may have arrived while an apply was
+                        // pending. Correct its face after the HID generation completes.
+                        self.refresh_audio_faces();
                         // A full HID apply overwrites every runtime face; replay even when
                         // there was no pending UI edit (USB reconnect / wake / profile refresh).
                         for index in 0..self.device_keys() {
@@ -3158,7 +3239,7 @@ impl App {
             self.future.push(self.config.clone());
             self.config = previous;
             self.replaying = true;
-            self.edited();
+            self.edited_from("historique");
             self.log(tr("Modification annulée.").into());
         }
     }
@@ -3167,7 +3248,7 @@ impl App {
             self.history.push(self.config.clone());
             self.config = next;
             self.replaying = true;
-            self.edited();
+            self.edited_from("historique");
             self.log(tr("Modification rétablie.").into());
         }
     }
@@ -3891,8 +3972,21 @@ impl App {
                                     .truncate(),
                             )
                             .on_hover_text(last);
-                        } else if ui.small_button(tr("Effacer")).clicked() {
-                            self.logs.clear();
+                        } else {
+                            if ui.small_button(tr("Effacer")).clicked() {
+                                self.logs.clear();
+                            }
+                            if ui
+                                .small_button(tr("Ouvrir le dossier des journaux"))
+                                .clicked()
+                            {
+                                let folder = crate::app_log::directory(&self.path);
+                                if std::fs::create_dir_all(&folder).is_ok() {
+                                    let _ = std::process::Command::new("explorer.exe")
+                                        .arg(folder)
+                                        .spawn();
+                                }
+                            }
                         }
                     });
                     if !self.preferences.activity_collapsed {
@@ -6736,6 +6830,10 @@ impl App {
                         && !self.gate.dirty
                     {
                         if let Some(binding) = self.config.keys_mut()[v.index].plugin.as_mut() {
+                            if binding.settings != json!(settings) {
+                                self.journal
+                                    .plugin_settings(self.started.elapsed().as_secs_f32(), plugin);
+                            }
                             binding.settings = json!(settings);
                         }
                         if let Some(binding) = self.applied.keys_mut()[v.index].plugin.as_mut() {
@@ -6892,6 +6990,19 @@ impl App {
             self.execute_physical(index, true);
         }
         self.assistant_events();
+        if self.gate.dirty
+            && !self.dirty_warning
+            && self
+                .dirty_since
+                .is_some_and(|at| at.elapsed() > Duration::from_secs(30))
+            && self.last_ui_edit.elapsed() > Duration::from_secs(30)
+        {
+            self.dirty_warning = true;
+            self.journal.event(
+                self.started.elapsed().as_secs_f32(),
+                "Avertissement : dirty depuis plus de 30s sans édition UI",
+            );
+        }
         if self.gate.dirty
             && !self.gate.invalid
             && self.last_edit.elapsed() > Duration::from_millis(800)
@@ -8509,6 +8620,38 @@ fn step_summary(step: &Step) -> String {
 #[cfg(test)]
 #[path = "ui_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod disk_journal_tests {
+    use super::*;
+
+    #[test]
+    fn log_trigger_refused_and_dirty_source_reach_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::init(
+            &egui::Context::default(),
+            Some(dir.path().join("config.json")),
+        );
+        app.log("diagnostic utile".into());
+        app.trigger_refused("uuid", "ctx", "édition en cours");
+        app.edited_from("historique");
+        let path = dir.path().join("logs/novydeck.log");
+        for _ in 0..100 {
+            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            if text.contains("diagnostic utile")
+                && text.contains("novydeckTrigger refusé")
+                && text.contains("dirty : historique/annuler")
+            {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        panic!(
+            "journal incomplet : {}",
+            std::fs::read_to_string(path).unwrap_or_default()
+        );
+    }
+}
 
 #[path = "ui_extras.rs"]
 mod extras;

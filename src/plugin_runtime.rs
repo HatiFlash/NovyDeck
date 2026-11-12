@@ -503,12 +503,16 @@ pub struct Manager {
     inventory: std::sync::Arc<Vec<Plugin>>,
 }
 impl Manager {
+    #[cfg(test)]
     pub fn new(plugins: Vec<Plugin>) -> Self {
+        Self::new_with_config(plugins, None)
+    }
+    pub fn new_with_config(plugins: Vec<Plugin>, config_path: Option<std::path::PathBuf>) -> Self {
         let (tx, requests) = mpsc::channel();
         let (reply, rx) = mpsc::channel();
         let catalog = plugins.clone();
         let inventory = std::sync::Arc::new(plugins.clone());
-        thread::spawn(move || run(plugins, requests, reply));
+        thread::spawn(move || run(plugins, requests, reply, config_path));
         if let Ok(mut sender) = virtual_sender().lock() {
             *sender = Some(tx.clone());
         }
@@ -627,7 +631,12 @@ impl Drop for Manager {
         let _ = self.tx.send(Request::Stop);
     }
 }
-fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Reply>) {
+fn run(
+    mut plugins: Vec<Plugin>,
+    requests: Receiver<Request>,
+    reply: Sender<Reply>,
+    config_path: Option<std::path::PathBuf>,
+) {
     let mut hosts: HashMap<String, Host> = HashMap::new();
     let mut current: HashMap<String, Visible> = HashMap::new();
     let mut configured: HashMap<String, Visible> = HashMap::new();
@@ -668,7 +677,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                     paused.remove(&id);
                     if current.values().any(|v| v.plugin == id) {
                         if let Some(p) = plugins.iter().find(|p| p.uuid == id) {
-                            match Host::start(p, &device) {
+                            match Host::start_with_config(p, &device, config_path.as_deref()) {
                                 Ok(h) => {
                                     let _ = h.send(device.event("deviceDidConnect"));
                                     for v in current.values().filter(|v| v.plugin == id) {
@@ -695,7 +704,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                 let mut result = Ok(());
                 if current.values().any(|v| v.plugin == id) {
                     if let Some(p) = plugins.iter().find(|p| p.uuid == id) {
-                        match Host::start(p, &device) {
+                        match Host::start_with_config(p, &device, config_path.as_deref()) {
                             Ok(h) => {
                                 let _ = h.send(device.event("deviceDidConnect"));
                                 for v in current.values().filter(|v| v.plugin == id) {
@@ -789,7 +798,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                     v.state = current.get(&v.context).map_or(v.state, |old| old.state);
                 }
                 if !hosts.contains_key(&v.plugin) {
-                    match Host::start(p, &device) {
+                    match Host::start_with_config(p, &device, config_path.as_deref()) {
                         Ok(h) => {
                             #[cfg(test)]
                             if simulate_inspectors {
@@ -901,7 +910,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                     }
                     if !hosts.contains_key(&v.plugin) {
                         if let Some(p) = plugins.iter().find(|p| p.uuid == v.plugin) {
-                            match Host::start(p, &device) {
+                            match Host::start_with_config(p, &device, config_path.as_deref()) {
                                 Ok(h) => {
                                     let _ = h.send(device.event("deviceDidConnect"));
                                     hosts.insert(v.plugin.clone(), h);
@@ -972,7 +981,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                     continue;
                 };
                 if !hosts.contains_key(&v.plugin) {
-                    match Host::start(p, &device) {
+                    match Host::start_with_config(p, &device, config_path.as_deref()) {
                         Ok(h) => {
                             let _ = h.send(device.event("deviceDidConnect"));
                             hosts.insert(v.plugin.clone(), h);
@@ -1124,7 +1133,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                     .collect::<std::collections::BTreeSet<_>>();
                 for id in waiting {
                     if let Some(p) = plugins.iter().find(|p| p.uuid == id) {
-                        match Host::start(p, &device) {
+                        match Host::start_with_config(p, &device, config_path.as_deref()) {
                             Ok(h) => {
                                 let _ = h.send(device.event("deviceDidConnect"));
                                 for v in current.values().filter(|v| v.plugin == id) {
@@ -1422,7 +1431,7 @@ fn run(mut plugins: Vec<Plugin>, requests: Receiver<Request>, reply: Sender<Repl
                 continue;
             }
             if let Some(p) = plugins.iter().find(|p| p.uuid == id) {
-                match Host::start(p, &device) {
+                match Host::start_with_config(p, &device, config_path.as_deref()) {
                     Ok(host) => {
                         let _ = host.send(device.event("deviceDidConnect"));
                         for v in current.values().filter(|v| v.plugin == id) {

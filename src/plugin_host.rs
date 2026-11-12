@@ -566,7 +566,15 @@ pub struct Host {
     _http: Option<crate::plugin_http::HtmlServer>,
 }
 impl Host {
+    #[cfg(test)]
     pub fn start(plugin: &Plugin, device: &crate::plugin_runtime::Device) -> anyhow::Result<Self> {
+        Self::start_with_config(plugin, device, None)
+    }
+    pub fn start_with_config(
+        plugin: &Plugin,
+        device: &crate::plugin_runtime::Device,
+        log_config: Option<&std::path::Path>,
+    ) -> anyhow::Result<Self> {
         anyhow::ensure!(
             !crate::plugin_runtime::shutting_down(),
             "Session Windows en cours de fermeture : démarrage plugin interdit"
@@ -674,9 +682,18 @@ impl Host {
             .current_dir(working_dir(plugin))
             .stdin(stdin)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .creation_flags(0x08000000)
             .spawn()?;
+        if let Some(mut stderr) = child.stderr.take() {
+            if let Some(config) = log_config {
+                crate::app_log::plugin_stderr(config, &plugin.uuid, stderr);
+            } else {
+                thread::spawn(move || {
+                    let _ = std::io::copy(&mut stderr, &mut std::io::sink());
+                });
+            }
+        }
         #[cfg(windows)]
         if let Err(e) = job.assign(&child) {
             let _ = child.kill();

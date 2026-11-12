@@ -113,7 +113,10 @@ pub(crate) fn validate_witness(plugin: &Plugin, error: Option<&str>) -> Result<(
     }
     app.applied = app.config.clone();
     store::save(&path, &app.config).map_err(|e| e.to_string())?;
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     if error.is_some() {
         return press(&mut app, &tx, 0, "1", 1);
@@ -173,7 +176,10 @@ pub(crate) fn validate_witness(plugin: &Plugin, error: Option<&str>) -> Result<(
     app.config = store::load(&path).map_err(|e| e.to_string())?;
     app.applied = app.config.clone();
     app.plugin_faces.clear();
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     press(&mut app, &tx, 0, "7", 7)?;
     let deadline = Instant::now() + LIMIT;
@@ -264,7 +270,10 @@ pub(crate) fn validate_restart_persistence(
         app.events();
         Ok(())
     };
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(500));
     press(&mut app)?;
@@ -275,7 +284,10 @@ pub(crate) fn validate_restart_persistence(
     app.config = store::load(&path).map_err(|e| e.to_string())?;
     app.applied = app.config.clone();
     app.plugin_faces.clear();
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(500));
     press(&mut app)?;
@@ -354,7 +366,10 @@ pub(crate) fn validate_oracle(
     } else {
         None
     };
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     let now = Instant::now();
     tx.send(Event::Key(0, now)).map_err(|e| e.to_string())?;
@@ -500,7 +515,10 @@ fn real_property_inspector_setting_persists_in_virtual_app() {
     let revision = app.gate.request_apply();
     assert!(app.gate.applied(revision));
     app.plugin_external_effects = Some(Vec::new());
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(700));
     app.plugins.as_ref().unwrap().open_inspector(0);
@@ -574,7 +592,10 @@ fn real_property_inspector_setting_persists_in_virtual_app() {
         json!(product)
     );
     app.plugin_external_effects = Some(Vec::new());
-    app.plugins = Some(Manager::new(vec![plugin.clone()]));
+    app.plugins = Some(Manager::new_with_config(
+        vec![plugin.clone()],
+        Some(app.path.clone()),
+    ));
     app.plugins.as_mut().unwrap().sync(&app.applied);
     std::thread::sleep(Duration::from_millis(700));
     expect_url(&mut app, &tx, "after relaunch");

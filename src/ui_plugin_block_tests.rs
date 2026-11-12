@@ -109,8 +109,8 @@ fn two_draft_blocks_click_properties_route_without_action_and_persist() {
 #[test]
 fn autosave_validation_failure_is_visible_and_retains_dirty_draft() {
     let (mut h, _, _) = setup();
-    h.app.config.profiles.clear();
     h.app.edited();
+    h.app.config.long_press_ms = 10;
     h.app.last_edit = Instant::now() - Duration::from_secs(2);
     h.app.autosave_if_due();
     assert!(h.app.gate.dirty);

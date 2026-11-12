@@ -136,6 +136,64 @@ fn onoff_press_sends_only_the_new_face_and_no_full_reapply() {
 }
 
 #[test]
+fn audio_switch_does_not_reapply_unrelated_plugin_faces() {
+    let (mut h, rx) = setup();
+    h.app.config.keys_mut()[0] = crate::audio::tests::key();
+    for index in [1, 2] {
+        let image = h.dir.path().join(format!("plugin-{index}.png"));
+        image::RgbImage::from_pixel(96, 96, image::Rgb([index as u8 * 70, 40, 180]))
+            .save(&image)
+            .unwrap();
+        h.app.config.keys_mut()[index] = Key {
+            label: format!("plugin-{index}"),
+            image: image.to_string_lossy().into_owned(),
+            plugin: Some(crate::model::PluginBinding {
+                plugin: format!("test.plugin.{index}"),
+                action: "switch".into(),
+                settings: serde_json::json!({}),
+                state: 0,
+            }),
+            ..Key::default()
+        };
+    }
+    h.app.applied = h.app.config.clone();
+    h.app.audio.output = "headset".into();
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    h.app.events = event_rx;
+    let _ = rx.try_iter().count();
+    let mut next = h.app.audio.clone();
+    next.output = "speakers".into();
+    event_tx.send(crate::Event::Audio(next)).unwrap();
+    h.app.events();
+    let sent: Vec<_> = rx.try_iter().collect();
+    assert!(
+        !sent
+            .iter()
+            .any(|command| matches!(command, Command::Update(..) | Command::Connect(..))),
+        "audio feedback must not reapply all keys (including plugin defaults)"
+    );
+    let images: Vec<_> = sent
+        .iter()
+        .filter_map(|command| match command {
+            Command::KeyImage(index, jpeg) => Some((*index, jpeg)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(images.len(), 1, "only the audio key may receive a frame");
+    assert_eq!(images[0].0, 0);
+    let font = crate::key_render::font().unwrap();
+    let expected = crate::key_render::for_plugin(
+        &crate::audio::present_key(&h.app.config.keys()[0], &h.app.audio),
+        h.app.applied.image_size,
+        &font,
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(*images[0].1, expected);
+}
+
+#[test]
 fn plain_toggle_without_state_faces_has_no_device_badge_and_no_full_reapply() {
     let (mut h, rx) = setup();
     h.app.config.keys_mut()[0].state_display = None;
