@@ -6,7 +6,7 @@ English · [Français](README.fr.md)
   <p>Open-source Windows software for stream decks: keys, macros, media and plugins, without the official software. Tested on the FIFINE AmpliGame D6 and the Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Explore the NovyDeck website</a></p>
   <p>
-    <img src="https://img.shields.io/badge/Development-v0.19.4-3478F6.svg" alt="Development v0.19.4">
+    <img src="https://img.shields.io/badge/Development-v0.19.5-3478F6.svg" alt="Development v0.19.5">
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C58B.svg" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -22,7 +22,11 @@ English · [Français](README.fr.md)
 
 A 40-second presentation film in 1920 × 1080 at 60 fps with sound, made with Remotion and three.js. It features a 3D D6 deck, actual interface captures and synthesized music. The published film was produced outside this repository.
 
-## What's new in 0.19.4 (development)
+## What's new in 0.19.5
+
+The Workshop no longer stays stuck on “Autosaving…” when a plugin re-sends identical settings, so triggers and key presses are no longer refused as “editing in progress”. Switching audio output redraws only the audio key: other plugin keys no longer flash. The journal is now also written to `logs/novydeck.log` next to `config.json` (rotation, secrets masked), with bounded plugin error logs and an “Open log folder” button. See the [0.19.5 release notes](docs/RELEASE-0.19.5.md).
+
+## What's new in 0.19.4
 
 Plugin actions in Workshop blocks now start monitoring on the active page. Home Assistant Automatic state can select the ON/OFF action from its sensor edge; the ON/OFF block is available in the Workshop library, and plugin actions have descriptive labels in the ON/OFF editor. See the [0.19.4 release notes](docs/RELEASE-0.19.4.md) for validation and limitations.
 

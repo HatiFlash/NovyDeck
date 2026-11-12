@@ -6,7 +6,7 @@
   <p>Logiciel libre pour Windows qui pilote les stream decks : touches, macros, médias et plugins, sans le logiciel officiel. Testé sur le FIFINE AmpliGame D6 et l'Elgato Stream Deck.</p>
   <p><a href="https://hatiflash.github.io/NovyDeck/">Découvrir le site NovyDeck</a></p>
   <p>
-    <img src="https://img.shields.io/badge/Développement-v0.19.4-3478F6.svg" alt="Développement v0.19.4">
+    <img src="https://img.shields.io/badge/Développement-v0.19.5-3478F6.svg" alt="Développement v0.19.5">
     <a href="LICENSE"><img src="https://img.shields.io/badge/Licence-MIT-22C58B.svg" alt="Licence MIT"></a>
     <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-555.svg" alt="Windows 10/11">
   </p>
@@ -22,7 +22,11 @@
 
 Un film de présentation de 40 s en 1920 × 1080 à 60 i/s, avec son, réalisé avec Remotion et three.js. Il montre le pavé D6 en 3D, de vraies captures de l'interface et une musique synthétisée. Le film publié a été produit hors du dépôt.
 
-## Nouveautés 0.19.4 (en développement)
+## Nouveautés 0.19.5
+
+L'Atelier ne reste plus bloqué sur « Sauvegarde automatique… » quand un plugin renvoie des réglages identiques : les déclencheurs et appuis ne sont plus refusés pour « édition en cours ». Changer de sortie audio ne redessine plus que la touche audio : les autres touches de plugin ne clignotent plus. Le Journal est aussi écrit dans `logs/novydeck.log` à côté de `config.json` (rotation, secrets masqués), avec des journaux d'erreurs des plugins bornés et un bouton « Ouvrir le dossier des journaux ». Voir les [notes de version 0.19.5](docs/RELEASE-0.19.5.md).
+
+## Nouveautés 0.19.4
 
 Les actions de plugin en bloc démarrent leur surveillance sur la page active. L'état automatique Home Assistant peut sélectionner l'action ON/OFF selon le capteur ; le bloc ON/OFF est disponible dans l'Atelier et les cartes ON/OFF identifient les actions de plugin. Voir les [notes de version 0.19.4](docs/RELEASE-0.19.4.md) pour les tests et limites.
 
